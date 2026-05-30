@@ -18693,7 +18693,7 @@ function EventForm({ event, eventTypes, onClose }) {
     fontWeight: 600,
     color: "#374151",
     marginBottom: 6,
-  };
+  } as const;
   const inputStyle = {
     width: "100%",
     boxSizing: "border-box",
@@ -18702,7 +18702,7 @@ function EventForm({ event, eventTypes, onClose }) {
     border: "1px solid #D1D5DB",
     borderRadius: 8,
     marginBottom: 16,
-  };
+  } as const;
 
   return (
     <div style={{ padding: "20px 16px", maxWidth: 480, margin: "0 auto" }}>
