@@ -19995,7 +19995,7 @@ export default function App() {
           a.type === "promo" ||
           notifSettings[a.type as keyof typeof notifSettings]
       );
-  const totalAlertCount = currentAlerts.reduce((s, a) => s + a.count, 0);
+  const totalAlertCount = (currentAlerts as any[]).reduce((s, a) => s + a.count, 0);
 
   const [promoAlert, setPromoAlert] = useState(null);
   const [memberCount, setMemberCount] = useState(0);
