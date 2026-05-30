@@ -11036,6 +11036,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
           </button>
         </div>
       </div>
+      </div>
     );
   };
 
