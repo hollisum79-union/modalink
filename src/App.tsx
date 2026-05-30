@@ -15772,7 +15772,7 @@ function LeaveScreen({ onBack, user }) {
       return;
     }
     if (!user?.employee_number) {
-      showToast("로그인 정보가 없습니다.");
+      alert("로그인 정보가 없습니다.");
       return;
     }
     // 1. 사용 이력 저장
