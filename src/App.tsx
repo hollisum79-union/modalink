@@ -11976,7 +11976,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
       <div
         style={{
           background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "16px 20px 0",
+          padding: "calc(env(safe-area-inset-top) + 16px) 20px 0",
           position: "sticky",
           top: 0,
           zIndex: 10,
