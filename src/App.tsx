@@ -19483,7 +19483,7 @@ function NoticeForm({ item, onClose }) {
     fontWeight: 600,
     color: "#374151",
     marginBottom: 6,
-  };
+  } as const;
   const inp = {
     width: "100%",
     padding: "12px 14px",
@@ -19493,7 +19493,7 @@ function NoticeForm({ item, onClose }) {
     background: "#fff",
     boxSizing: "border-box",
     outline: "none",
-  };
+  } as const;
 
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB" }}>
