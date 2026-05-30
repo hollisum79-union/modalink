@@ -11180,7 +11180,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
 
     return (
       <div
-        style={{ overflow: "hidden", position: "relative" }}
+        style={{ overflow: "hidden", position: "relative", touchAction: "pan-y" }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
