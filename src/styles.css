@@ -2,3 +2,17 @@
   font-family: sans-serif;
   text-align: center;
 }
+/* ===== 모바일 앱 느낌 다듬기 ===== */
+html, body {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, a {
+  -webkit-touch-callout: none;
+}
