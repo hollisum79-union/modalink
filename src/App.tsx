@@ -16326,7 +16326,7 @@ function WorkAdjustScreen({ onBack, user }) {
   const [confirmModal, setConfirmModal] = useState(null);
   const [toast, setToast] = useState(null);
   // 예쁜 알림창 (toast) - alert 대신 사용
-  const showToast = (message, type) => {
+  const showToast = (message, type = "info") => {
     setToast({ message, type: type || "info" });
     setTimeout(() => setToast(null), 2500);
   };
