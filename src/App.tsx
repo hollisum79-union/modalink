@@ -10292,7 +10292,7 @@ function WorkManageScreen() {
 // [교체 위치] App.tsx에서 기존 ScheduleScreen 함수 전체를 이 코드로 교체
 // ============================================================
 
-function ScheduleScreen({ onBack, user }: { onBack: () => void; user: any }) {
+function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; user: any; refreshUser?: () => void }) {
   const [activeTab, setActiveTab] = React.useState<
     "교대" | "교번" | "통상" | "변형통상"
   >(user?.work_type || "교대");
