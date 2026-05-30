@@ -6158,7 +6158,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
   const filteredMembers =
     stationFilter === "전체"
       ? dummyMembers
-      : dummyMembers.filter((m) => m.station === stationFilter);
+      : dummyMembers.filter((m) => (m as any).station === stationFilter);
 
   return (
     <div
