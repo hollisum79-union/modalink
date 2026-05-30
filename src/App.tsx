@@ -10865,36 +10865,313 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
     const dayMemos = memos[dateStr] || [];
     return (
       <div
-        onClick={() => { setEditingDate(null); setNewMemoText(""); }}
         style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          top: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.45)",
-          zIndex: 1000,
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "center",
-        }}
-      >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "100%",
-          maxWidth: 430,
-          maxHeight: "85vh",
-          overflowY: "auto",
+          margin: "0 12px 12px",
           background: "#fff",
-          borderRadius: "20px 20px 0 0",
-          border: "none",
-          boxShadow: "0 -4px 24px rgba(0,0,0,0.2)",
-          paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)",
-          animation: "slideUp 0.28s ease",
+          borderRadius: 14,
+          border: "1.5px solid #DDD6FE",
+          overflow: "hidden",
+          boxShadow: "0 4px 16px rgba(79,70,229,0.12)",
         }}
       >
-        <div style={{ width: 38, height: 4, background: "#D1D5DB", borderRadius: 2, margin: "10px auto 4px" }} />
+        {(() => {
+          const dateObj = new Date(dateStr);
+          const crewsList: ("A" | "B" | "C" | "D")[] = ["A", "B", "C", "D"];
+          const LABEL_MAP: Record<string, string> = {
+            주: "주간",
+            야: "야간",
+            비: "비번",
+            휴: "휴무",
+          };
+          const COLOR_MAP: Record<string, string> = {
+            주: "#3B82F6",
+            야: "#7C3AED",
+            비: "#9CA3AF",
+            휴: "#92400E",
+          };
+          return (
+            <div
+              style={{
+                padding: "10px 14px",
+                borderBottom: "1px solid #EDE9FE",
+                background: "#FAFAFE",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#6B7280",
+                  marginBottom: 6,
+                  fontWeight: 600,
+                }}
+              >
+                4개조 근무
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 6,
+                }}
+              >
+                {crewsList.map((c) => {
+                  const w = getShiftWork(c, dateObj);
+                  const i = w ? workInfo(w) : null;
+                  return (
+                    <div
+                      key={c}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "5px 10px",
+                        background: "#fff",
+                        borderRadius: 6,
+                        fontSize: 12,
+                      }}
+                    >
+                      <span style={{ color: "#374151", fontWeight: 600 }}>
+                        {c}조
+                      </span>
+                      <span
+                        style={{
+                          color: i
+                            ? COLOR_MAP[i.short] || "#6B7280"
+                            : "#D1D5DB",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {i ? LABEL_MAP[i.short] || i.short : "-"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+        <div
+          style={{
+            padding: "12px 14px 8px",
+            background: "#F5F3FF",
+            borderBottom: "1px solid #EDE9FE",
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#4F46E5" }}>
+            📝 {dateStr.slice(5).replace("-", "/")} 메모
+            <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 6 }}>
+              {dayMemos.length}/5
+            </span>
+          </div>
+        </div>
+        <div style={{ padding: "8px 14px" }}>
+          {dayMemos.map((memo, idx) => (
+            <div
+              key={memo.id}
+              style={{
+                padding: "8px 0",
+                borderBottom:
+                  idx < dayMemos.length - 1 ? "1px solid #F3F4F6" : "none",
+              }}
+            >
+              {editingMemoId === memo.id ? (
+                <div>
+                  <textarea
+                    value={editingMemoText}
+                    onChange={(e) => setEditingMemoText(e.target.value)}
+                    rows={2}
+                    style={{
+                      width: "100%",
+                      padding: "6px 8px",
+                      borderRadius: 8,
+                      border: "1.5px solid #A5B4FC",
+                      fontSize: 13,
+                      resize: "none",
+                      boxSizing: "border-box",
+                      fontFamily: "inherit",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <button
+                      onClick={() => updateMemo(memo.id, dateStr)}
+                      disabled={savingMemo}
+                      style={{
+                        flex: 1,
+                        padding: "6px 0",
+                        borderRadius: 7,
+                        background: "#4F46E5",
+                        color: "#fff",
+                        border: "none",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {savingMemo ? "..." : "저장"}
+                    </button>
+                    <button
+                      onClick={() => setEditingMemoId(null)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 7,
+                        background: "#F3F4F6",
+                        color: "#6B7280",
+                        border: "none",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{ display: "flex", alignItems: "flex-start", gap: 8 }}
+                >
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "#9CA3AF",
+                      marginTop: 2,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {idx + 1}.
+                  </span>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: 13,
+                      color: "#374151",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {memo.content}
+                  </span>
+                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                    <button
+                      onClick={() => {
+                        setEditingMemoId(memo.id);
+                        setEditingMemoText(memo.content);
+                      }}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                        background: "#EEF2FF",
+                        color: "#4F46E5",
+                        border: "none",
+                        fontSize: 11,
+                        cursor: "pointer",
+                      }}
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={() => deleteMemo(memo.id, dateStr)}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                        background: "#FEF2F2",
+                        color: "#EF4444",
+                        border: "none",
+                        fontSize: 11,
+                        cursor: "pointer",
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {dayMemos.length < 5 ? (
+            <div style={{ marginTop: dayMemos.length > 0 ? 10 : 0 }}>
+              <textarea
+                value={newMemoText}
+                onChange={(e) => setNewMemoText(e.target.value)}
+                placeholder="메모 추가..."
+                rows={2}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1.5px solid #E5E7EB",
+                  fontSize: 13,
+                  resize: "none",
+                  boxSizing: "border-box",
+                  fontFamily: "inherit",
+                }}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <button
+                  onClick={() => addMemo(dateStr)}
+                  disabled={savingMemo || !newMemoText.trim()}
+                  style={{
+                    flex: 1,
+                    padding: "8px 0",
+                    borderRadius: 8,
+                    background: newMemoText.trim() ? "#4F46E5" : "#E5E7EB",
+                    color: newMemoText.trim() ? "#fff" : "#9CA3AF",
+                    border: "none",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {savingMemo ? "저장 중..." : "추가"}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingDate(null);
+                    setNewMemoText("");
+                  }}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    background: "#F3F4F6",
+                    color: "#6B7280",
+                    border: "none",
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: 8,
+              }}
+            >
+              <button
+                onClick={() => {
+                  setEditingDate(null);
+                  setNewMemoText("");
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 8,
+                  background: "#F3F4F6",
+                  color: "#6B7280",
+                  border: "none",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                닫기
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ── 캐러셀 슬라이드 컨테이너 ──
   const renderSlideCalendar = (crew: "A" | "B" | "C" | "D") => {
     const prev = getPrevMonth(currentYear, currentMonth);
@@ -11035,7 +11312,6 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
             📋 전체 조 보기 (A/B/C/D)
           </button>
         </div>
-      </div>
       </div>
     );
   };
