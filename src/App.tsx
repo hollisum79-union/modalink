@@ -20115,10 +20115,20 @@ export default function App() {
     return <RegisterScreen onBack={() => setScreen("login")} />;
   if (screen === "noticeDetail" && selectedNotice)
     return (
-      <NoticeDetail
-        notice={selectedNotice}
-        onBack={() => setScreen("noticeList")}
-      />
+      <div style={{ padding: "20px 16px", maxWidth: 480, margin: "0 auto" }}>
+        <button
+          onClick={() => setScreen("noticeList")}
+          style={{ marginBottom: 16, padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}
+        >
+          ← 목록으로
+        </button>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>
+          {(selectedNotice as any)?.title || "공지"}
+        </h2>
+        <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+          {(selectedNotice as any)?.content || "내용 준비 중입니다."}
+        </div>
+      </div>
     );
   if (screen === "noticeList")
     return (
