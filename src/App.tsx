@@ -13161,7 +13161,7 @@ function MySettingsScreen({
                     </div>
                     <select
                       value={editPayStep}
-                      onChange={(e) => setEditPayStep(e.target.value)}
+                      onChange={(e) => setEditPayStep(Number(e.target.value))}
                       style={{
                         width: "100%",
                         padding: "10px 12px",
