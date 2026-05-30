@@ -16,3 +16,13 @@ html, body {
 button, a {
   -webkit-touch-callout: none;
 }
+/* ===== 가로 출렁임 방지 ===== */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+#root {
+  overflow-x: hidden;
+}
