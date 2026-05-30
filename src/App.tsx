@@ -1,20 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import React, { useState, useEffect } from "react";
 
-// Supabase 더미 클라이언트 (에러 방지용 - 나중에 실제 연동 시 교체)
-// Supabase 더미 (실제 DB 연동 전 임시)
-const makeQuery = () => {
-  const q = {
-    data: [],
-    error: null,
-    order: () => q,
-    eq: () => q,
-    single: () => Promise.resolve({ data: null, error: null }),
-    then: (fn) => Promise.resolve({ data: [], error: null }).then(fn),
-    catch: (fn) => Promise.resolve({ data: [], error: null }),
-  };
-  return q;
-};
+
 const supabaseUrl = "https://svbvawioldgundtpogkc.supabase.co";
 const supabaseKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2YnZhd2lvbGRndW5kdHBvZ2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTAzODQsImV4cCI6MjA5NDQ2NjM4NH0.7PrmWSX-BxZTy7IImfI_ujS07dmOlrklQUm3AM0B2II";
