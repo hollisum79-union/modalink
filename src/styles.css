@@ -26,3 +26,8 @@ html, body {
 #root {
   overflow-x: hidden;
 }
+/* ===== 세로 고무줄 출렁임 방지 ===== */
+html, body {
+  height: 100%;
+  overscroll-behavior-y: none;
+}
