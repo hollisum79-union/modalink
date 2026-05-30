@@ -7521,24 +7521,7 @@ function MemberManageScreen() {
         }
       });
   };
-  <button
-    onClick={() => handleResetPw(m)}
-    style={{
-      width: "100%",
-      marginTop: 6,
-      padding: "7px",
-      borderRadius: 6,
-      border: "1px solid #FCD34D",
-      background: "#FFFBEB",
-      color: "#B45309",
-      fontSize: 12,
-      fontWeight: 700,
-      cursor: "pointer",
-      fontFamily: "inherit",
-    }}
-  >
-    🔑 비밀번호 초기화 (union0000)
-  </button>;
+  
 
   return (
     <div>
