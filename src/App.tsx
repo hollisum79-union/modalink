@@ -7231,7 +7231,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                   }}
                 >
                   <span
-                    style={{ fontSize: 12, fontWeight: 700, color: "#1F2937" }}
+                                        style={{ fontSize: 12, fontWeight: 700, color: "#1F2937", paddingLeft: 38 }}
                   >
                     이름
                   </span>
@@ -7534,19 +7534,19 @@ function MemberManageScreen() {
         <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
           사업소인원 (현원 {members.filter((m) => !(m.name || "").includes("결원")).length}명 / 결원 {members.filter((m) => (m.name || "").includes("결원")).length}명)
         </div>
-        <button
+               <button
           onClick={() =>
             setForm({
               name: "",
               employee_number: "",
               phone: "",
               role: "조합원",
-              is_union: true,
+              is_union: false,
             })
           }
           style={{
-            background: "#EEF0FF",
-            color: "#4F46E5",
+            background: "#F3F4F6",
+            color: "#6B7280",
             border: "none",
             borderRadius: 8,
             padding: "6px 12px",
@@ -7556,8 +7556,10 @@ function MemberManageScreen() {
             fontFamily: "inherit",
           }}
         >
-          + 조합원 추가
+          + 사업소 인원추가
         </button>
+
+      
       </div>
 
       <input
@@ -7587,7 +7589,7 @@ function MemberManageScreen() {
   <div onClick={() => setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원")} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>비조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#9CA3AF" }}>
-      {members.filter((m) => m.is_union !== true).length}명
+            {members.filter((m) => m.is_union !== true && !(m.name || "").includes("결원")).length}명
     </div>
   </div>
 </div>
