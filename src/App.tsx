@@ -5478,12 +5478,14 @@ const archiveCategories = [
   },
 ];
 
-function ArchiveScreen({ onBack }) {
+function ArchiveScreen({ onBack, user }) {
+  const isAdmin = user?.is_admin;
   const [selectedCat, setSelectedCat] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [dbFiles, setDbFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const currentCat = archiveCategories.find((c) => c.id === selectedCat);
 
   // Supabase에서 파일 목록 로드
@@ -5529,12 +5531,52 @@ function ArchiveScreen({ onBack }) {
         })
       : [];
 
-  const handleFileOpen = async (file) => {
+ const handleFileOpen = async (file) => {
     if (file.url) {
       window.open(file.url, "_blank");
     } else if (file.path) {
       const { data } = supabase.storage.from("archive").getPublicUrl(file.path);
       if (data?.publicUrl) window.open(data.publicUrl, "_blank");
+    }
+  };
+
+  // 업로드 입력값
+  const [upFile, setUpFile] = useState(null);
+  const [upName, setUpName] = useState("");
+  const [upCat, setUpCat] = useState("agreement");
+  const [upDesc, setUpDesc] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  // 파일 업로드 처리
+  const handleUpload = async () => {
+    if (!upFile) { alert("PDF 파일을 선택해주세요."); return; }
+    if (!upName.trim()) { alert("자료 제목을 입력해주세요."); return; }
+    setUploading(true);
+    try {
+      const safeName = Date.now() + "_" + upFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const path = upCat + "/" + safeName;
+      const { error: upErr } = await supabase.storage.from("archive").upload(path, upFile);
+      if (upErr) throw upErr;
+      const catLabel = archiveCategories.find((c) => c.id === upCat)?.label || "";
+      const sizeMB = (upFile.size / 1024 / 1024).toFixed(1) + "MB";
+      const { error: dbErr } = await supabase.from("archive_files").insert({
+        name: upName.trim(),
+        category_id: upCat,
+        category_label: catLabel,
+        path: path,
+        size: sizeMB,
+        description: upDesc.trim() || null,
+      });
+      if (dbErr) throw dbErr;
+      alert("자료가 등록되었습니다.");
+      const { data } = await supabase.from("archive_files").select("*").order("created_at", { ascending: false });
+      if (data) setDbFiles(data);
+      setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
+      setShowUpload(false);
+    } catch (err) {
+      alert("업로드 실패: " + err.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -5615,7 +5657,25 @@ function ArchiveScreen({ onBack }) {
             </div>
           </div>
         </div>
-
+{isAdmin && !selectedCat && (
+          <button
+            onClick={() => setShowUpload(true)}
+            style={{
+              width: "100%",
+              marginBottom: 12,
+              padding: "10px 0",
+              background: "rgba(255,255,255,0.2)",
+              border: "1px solid rgba(255,255,255,0.4)",
+              borderRadius: 10,
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            + 자료 올리기
+          </button>
+        )}
         {/* 검색창 */}
         <div style={{ position: "relative" }}>
           <div
@@ -5962,8 +6022,146 @@ function ArchiveScreen({ onBack }) {
                 💡 파일은 PDF 형식으로만 제공됩니다. 클릭하면 바로 열립니다.
               </div>
             </>
-          ))}
+         ))}
       </div>
+
+      {showUpload && (
+        <div
+          onClick={() => !uploading && setShowUpload(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: 20,
+              width: "100%",
+              maxWidth: 360,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: "#1F2937" }}>
+              자료 올리기 📄
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
+              PDF 파일
+            </div>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => setUpFile(e.target.files?.[0] || null)}
+              style={{ width: "100%", marginBottom: 14, fontSize: 13 }}
+            />
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
+              제목
+            </div>
+            <input
+              value={upName}
+              onChange={(e) => setUpName(e.target.value)}
+              placeholder="예: 2024년 단체협약서"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px 12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                fontSize: 14,
+                marginBottom: 14,
+              }}
+            />
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
+              분류
+            </div>
+            <select
+              value={upCat}
+              onChange={(e) => setUpCat(e.target.value)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px 12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                fontSize: 14,
+                marginBottom: 14,
+                background: "#fff",
+              }}
+            >
+              {archiveCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
+              설명 (선택)
+            </div>
+            <input
+              value={upDesc}
+              onChange={(e) => setUpDesc(e.target.value)}
+              placeholder="간단한 설명 (검색에 사용돼요)"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px 12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                fontSize: 14,
+                marginBottom: 18,
+              }}
+            />
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setShowUpload(false)}
+                disabled={uploading}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "#F3F4F6",
+                  color: "#6B7280",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleUpload}
+                disabled={uploading}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: uploading ? "#A5B4FC" : "#4F46E5",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {uploading ? "올리는 중..." : "올리기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -20158,7 +20356,7 @@ export default function App() {
       />
     );
   if (screen === "archive")
-    return <ArchiveScreen onBack={() => setScreen("home")} />;
+    return <ArchiveScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "about")
     return (
       <AboutScreen
