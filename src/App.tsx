@@ -6089,7 +6089,6 @@ function ArchiveScreen({ onBack, user }) {
                     color="#4F46E5"
                     size={20}
                   />
-                  {isAdmin && file.id && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
