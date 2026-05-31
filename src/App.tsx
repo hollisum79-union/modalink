@@ -5573,10 +5573,27 @@ function ArchiveScreen({ onBack, user }) {
       if (data) setDbFiles(data);
       setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
       setShowUpload(false);
-    } catch (err) {
+   } catch (err) {
       alert("업로드 실패: " + err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  // 파일 삭제 처리
+  const handleDelete = async (file) => {
+    if (!window.confirm('"' + file.name + '" 자료를 삭제하시겠습니까?')) return;
+    try {
+      if (file.path) {
+        await supabase.storage.from("archive").remove([file.path]);
+      }
+      const { error } = await supabase.from("archive_files").delete().eq("id", file.id);
+      if (error) throw error;
+      const { data } = await supabase.from("archive_files").select("*").order("created_at", { ascending: false });
+      setDbFiles(data || []);
+      alert("삭제되었습니다.");
+    } catch (err) {
+      alert("삭제 실패: " + err.message);
     }
   };
 
@@ -6001,11 +6018,32 @@ function ArchiveScreen({ onBack, user }) {
                       {file.size} · {file.date || file.created_at?.slice(0, 10)}
                     </div>
                   </div>
-                  <Icon
+                 <Icon
                     path="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     color="#4F46E5"
                     size={20}
                   />
+                  {isAdmin && file.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(file);
+                      }}
+                      style={{
+                        background: "#FEE2E2",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        color: "#EF4444",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                      }}
+                    >
+                      삭제
+                    </button>
+                  )}
                 </div>
               ))}
               <div
