@@ -19692,17 +19692,16 @@ export default function App() {
       console.log("refreshUser 예외:", e);
     }
   }, [user?.employee_number]);
-  // 공지사항 불러오기 (notices 테이블)
+ // 공지사항 불러오기 (notices 테이블)
+  const loadNotices = async () => {
+    const { data } = await supabase
+      .from("notices")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+    setNotices(data || []);
+  };
   React.useEffect(() => {
-    const loadNotices = async () => {
-      const { data } = await supabase
-        .from("notices")
-        .select("*")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-      console.log("공지 데이터:", data);
-      setNotices(data || []);
-    };
     loadNotices();
   }, []);
   // 앱 접속 포인트
@@ -19931,16 +19930,6 @@ export default function App() {
         if (count !== null) setAppUserCount(count);
       });
   }, []);
-  useEffect(() => {
-    supabase
-      .from("notices")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        if (data) setNotices(data);
-      });
-  }, []);
-
   // 호봉 승급 알림 체크 (로그인 시 & 홈 진입 시)
   useEffect(() => {
     if (user?.join_date && screen === "home") {
@@ -20192,7 +20181,7 @@ export default function App() {
   if (screen === "events-admin")
     return <EventsAdminPage onBack={() => setScreen("home")} />;
   if (screen === "notice-admin")
-    return <NoticeAdminPage onBack={() => setScreen("home")} />;
+    return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("home"); }} />;
   if (screen === "workAdjust")
     return <WorkAdjustScreen onBack={() => setScreen("home")} user={user} />;
 
