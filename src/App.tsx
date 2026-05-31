@@ -21388,7 +21388,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   const todayMenu = currentMealKey
     ? dummyCanteen["대공원"][currentMealKey]
     : null;
-  const activeVote = dummyVotes.find((v) => v.status === "진행중");
 
   return (
     <div
