@@ -7245,7 +7245,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                       padding: "1px 8px",
                     }}
                   >
-                    {members.length}명
+                    {members.filter((m) => m.is_union === true).length}명
                   </span>
                 </div>
                 <div
@@ -20033,6 +20033,7 @@ export default function App() {
     supabase
       .from("members")
       .select("*", { count: "exact", head: true })
+      .eq("is_union", true)
       .then(({ count }) => {
         if (count !== null) setMemberCount(count);
       });
