@@ -5875,10 +5875,7 @@ function ArchiveScreen({ onBack, user }) {
         {!searchQuery.trim() &&
           (!selectedCat ? (
             archiveCategories.map((cat) => {
-              const fileCount =
-                dbFiles.length > 0
-                  ? dbFiles.filter((f) => f.category_id === cat.id).length
-                  : cat.files.length;
+              const fileCount = dbFiles.filter((f) => f.category_id === cat.id).length;
               return (
                 <div
                   key={cat.id}
@@ -5948,10 +5945,7 @@ function ArchiveScreen({ onBack, user }) {
                 }
                 개의 PDF 파일
               </div>
-              {(dbFiles.length > 0
-                ? dbFiles.filter((f) => f.category_id === selectedCat)
-                : currentCat?.files ?? []
-              ).map((file, i) => (
+              {dbFiles.filter((f) => f.category_id === selectedCat).map((file, i) => (
                 <div
                   key={i}
                   onClick={() => handleFileOpen(file)}
