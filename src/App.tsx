@@ -1234,6 +1234,7 @@ function BoardList({ onBack, onSelect, onWrite, user }) {
 }
 
 // ── 식당메뉴 ──
+function toNum(d) { if (!d) return -1; const p = String(d).split("/"); return (Number(p[0]) || 0) * 100 + (Number(p[1]) || 0); }
 function CanteenScreen({ onBack, user }) {
   const today = new Date();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
@@ -1247,6 +1248,10 @@ function CanteenScreen({ onBack, user }) {
     supabase.from("canteen").select("*").eq("station", station).then((res) => setMenus(res.data || []));
   }, [station]);
   const todayKey = (today.getMonth() + 1) + "/" + today.getDate();
+  const [pickedDate, setPickedDate] = useState(null);
+  const [showDates, setShowDates] = useState(false);
+  const allDates = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean))).sort((a, b) => toNum(a) - toNum(b));
+  const viewDate = pickedDate || todayKey;
     const isAdmin = user?.is_admin;
   const [uploading, setUploading] = useState(false);
   const [reviewData, setReviewData] = useState(null);
@@ -1357,6 +1362,7 @@ function CanteenScreen({ onBack, user }) {
           />
           <span style={{ fontSize: 14, color: "#fff", fontWeight: 600 }}>
             {dateStr}
+            {viewDate === todayKey ? dateStr : ("2026년 " + viewDate.replace("/", "월 ") + "일")}
           </span>
         </div>
       </div>
@@ -1407,6 +1413,15 @@ function CanteenScreen({ onBack, user }) {
             ))}
           </div>
         </div>
+      {showDates && allDates.length > 0 && (
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16, paddingBottom: 4 }}>
+            {allDates.map((d) => (
+              <button key={d} onClick={() => { setPickedDate(d); setShowDates(false); }} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 12, border: "2px solid", borderColor: viewDate === d ? "#4F46E5" : "#E5E7EB", background: viewDate === d ? "#4F46E5" : "#fff", color: viewDate === d ? "#fff" : "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                {d}{d === todayKey ? " ·오늘" : ""}
+              </button>
+            ))}
+          </div>
+        )}
         {meals.map((meal) => {
           const menuData = dummyCanteen[station][meal.key];
           return (
@@ -1477,7 +1492,10 @@ function CanteenScreen({ onBack, user }) {
                 }}
               >
                 {(() => {
-                  const row = menus.find((m) => m.meal_type === meal.key && m.menu_date === todayKey);
+                  const sameMeal = menus.filter((m) => m.meal_type === meal.key && m.menu_date);
+              const pastOrToday = sameMeal.filter((m) => toNum(m.menu_date) <= toNum(todayKey));
+              const pool = pastOrToday.length ? pastOrToday : sameMeal;
+              const row = pool.slice().sort((a, b) => toNum(b.menu_date) - toNum(a.menu_date))[0];
                   const list = row && row.items && row.items[0] ? String(row.items[0]).split(",").map((x) => x.trim()).filter(Boolean) : [];
                   if (list.length === 0) return (<div style={{ padding: "16px 18px", color: "#9CA3AF", fontSize: 13 }}>오늘 등록된 메뉴가 없습니다.</div>);
                   return list.map((name, i) => (
@@ -8759,7 +8777,8 @@ function AdminScreen({ onBack, user, onNavigate }) {
         <button onClick={async () => {
           setCanteenLoading(true);
           try {
-            await supabase.from("canteen").delete().eq("station", canteenStation);
+            const _dates = canteenResult.map((d) => d.date || d.day).filter(Boolean);
+await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_date", _dates);
             const rows = [];
             canteenResult.forEach((day) => {
               [["breakfast", "아침"], ["lunch", "점심"], ["dinner", "저녁"]].forEach(([k, label]) => {
