@@ -16968,6 +16968,8 @@ function WorkAdjustScreen({ onBack, user }) {
                     color: "#1F2937",
                     background: "#fff",
                     maxWidth: "100%",
+                    WebkitAppearance: "none",
+appearance: "none",
                   }}
                 />
               </div>
