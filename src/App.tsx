@@ -8675,7 +8675,6 @@ function AdminScreen({ onBack, user, onNavigate }) {
               </div>
             </div>
           ))}
-                {activeMenu === "vote" &&
                   {activeMenu === "canteen" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>식단표 사진 등록</div>
