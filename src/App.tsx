@@ -6107,6 +6107,7 @@ function ArchiveScreen({ onBack, user }) {
                   >
                     {favorites.includes(String(file.id)) ? "⭐" : "☆"}
                   </button>
+                  {isAdmin && file.id && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
