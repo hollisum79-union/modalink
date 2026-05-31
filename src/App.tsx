@@ -11890,11 +11890,10 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
       {/* 헤더 */}
       <div
         style={{
-          background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "calc(env(safe-area-inset-top) + 16px) 20px 0",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
+         background:
+            "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
+          padding: "calc(env(safe-area-inset-top) + 52px) 20px 24px",
+          borderRadius: 28,
         }}
       >
         <div
@@ -11908,16 +11907,18 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
           <button
             onClick={onBack}
             style={{
-              background: "rgba(255,255,255,0.2)",
-              border: "none",
-              borderRadius: 10,
-              padding: "6px 10px",
-              color: "#fff",
-              cursor: "pointer",
-              fontSize: 18,
+              background: "rgba(255,255,255,0.15)",
+                border: "none",
+                borderRadius: "50%",
+                width: 36,
+                height: 36,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
             }}
           >
-            ←
+          <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
           </button>
           <div
             style={{
