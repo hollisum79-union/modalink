@@ -7579,7 +7579,22 @@ function MemberManageScreen() {
         }}
       />
 
-      {filtered.map((m) => (
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+  <div style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+    <div style={{ fontSize: 11, color: "#6B7280" }}>조합원</div>
+    <div style={{ fontSize: 18, fontWeight: 800, color: "#4F46E5" }}>
+      {members.filter((m) => m.is_union === true).length}명
+    </div>
+  </div>
+  <div style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+    <div style={{ fontSize: 11, color: "#6B7280" }}>비조합원</div>
+    <div style={{ fontSize: 18, fontWeight: 800, color: "#9CA3AF" }}>
+      {members.filter((m) => m.is_union !== true).length}명
+    </div>
+  </div>
+</div>
+
+{filtered.map((m) => (
         <div
           key={m.id}
           style={{
