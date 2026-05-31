@@ -987,9 +987,9 @@ function BoardDetail({ post, onBack, user }) {
 }
 
 // ── 자유게시판 목록 ──
-function BoardList({ onBack, onSelect, onWrite, user }) {
+function BoardList({ onBack, onSelect, onWrite, user, initialFilter = "전체" }) {
   const [posts, setPosts] = useState([]);
-  const [filter, setFilter] = useState("전체");
+  const [filter, setFilter] = useState(initialFilter);
 
   const categoryColor = {
     자유: { color: "#4F46E5", bg: "#EEF0FF" },
@@ -5503,17 +5503,7 @@ function ArchiveScreen({ onBack, user }) {
   }, []);
 
   // 전체 파일 목록 (DB + 더미)
-  const allFiles =
-    dbFiles.length > 0
-      ? dbFiles
-      : archiveCategories.flatMap((cat) =>
-          cat.files.map((f) => ({
-            ...f,
-            category_id: cat.id,
-            category_label: cat.label,
-            cat,
-          }))
-        );
+  const allFiles = dbFiles;
 
   // 띄어쓰기 제거 후 비교하는 검색 헬퍼
   const normalize = (str) => (str || "").toLowerCase().replace(/\s+/g, "");
@@ -19828,6 +19818,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [notices, setNotices] = useState([]);
+  const [boardTab, setBoardTab] = useState("전체");
   const [selectedNotice, setSelectedNotice] = useState(null);
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
@@ -20281,6 +20272,7 @@ export default function App() {
     return (
       <BoardList
         onBack={() => setScreen("home")}
+        initialFilter={boardTab}
         onSelect={(p) => {
           setSelectedPost(p);
           setScreen("boardDetail");
@@ -21382,7 +21374,7 @@ export default function App() {
           urgentNotice={urgentNotice}
           carouselNotices={carouselNotices}
           onUrgentClick={() => setScreen("noticeList")}
-          onCondolenceClick={() => setScreen("noticeList")}
+          onCondolenceClick={() => { setBoardTab("경조사"); setScreen("board"); }}
         />
         <div
           style={{
@@ -21594,7 +21586,7 @@ export default function App() {
                 onClick={() => {
                   if (item.id === "notice") setScreen("noticeList");
                   if (item.id === "canteen") setScreen("canteen");
-                  if (item.id === "board") setScreen("board");
+                  if (item.id === "board") { setBoardTab("전체"); setScreen("board"); }
                   if (item.id === "inquiry") setScreen("inquiry");
                   if (item.id === "welfare") setScreen("welfare");
                   if (item.id === "vote") setScreen("vote");
