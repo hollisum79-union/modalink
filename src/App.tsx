@@ -5868,7 +5868,26 @@ function ArchiveScreen({ onBack, user }) {
   const [loading, setLoading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [favorites, setFavorites] = useState([]);
+const [showAddCat, setShowAddCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
 
+  // 새 분류 추가
+  const handleAddCategory = async () => {
+    if (!newCatName.trim()) { alert("분류 이름을 입력해주세요."); return; }
+    const newCat = {
+      id: "cat_" + Date.now(),
+      label: newCatName.trim(),
+      icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
+      color: "#7C3AED",
+      bg: "#EDE9FE",
+    };
+    const { error } = await supabase.from("archive_categories").insert(newCat);
+    if (error) { alert("추가 실패: " + error.message); return; }
+    setExtraCats((prev) => [...prev, newCat]);
+    setNewCatName("");
+    setShowAddCat(false);
+    alert("분류가 추가되었습니다.");
+  };
   // 내 즐겨찾기 목록 불러오기
   const loadFavorites = async () => {
     if (!user?.employee_number) return;
@@ -5882,7 +5901,23 @@ function ArchiveScreen({ onBack, user }) {
   useEffect(() => {
     loadFavorites();
   }, []);
-  const currentCat = archiveCategories.find((c) => c.id === selectedCat);
+  const [extraCats, setExtraCats] = useState([]);
+
+  // 관리자가 추가한 분류 불러오기
+  useEffect(() => {
+    supabase
+      .from("archive_categories")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        if (data) setExtraCats(data);
+      });
+  }, []);
+
+  // 코드 6개 + DB 추가분 합치기
+  const allCats = [...archiveCategories, ...extraCats];
+
+  const currentCat = allCats.find((c) => c.id === selectedCat);
 
   // Supabase에서 파일 목록 로드
   useEffect(() => {
@@ -6094,6 +6129,25 @@ function ArchiveScreen({ onBack, user }) {
             }}
           >
             + 자료 올리기
+          </button>
+        )}
+        {isAdmin && !selectedCat && (
+          <button
+            onClick={() => setShowAddCat(true)}
+            style={{
+              width: "100%",
+              marginBottom: 12,
+              padding: "10px 0",
+              background: "rgba(255,255,255,0.2)",
+              border: "1px solid rgba(255,255,255,0.4)",
+              borderRadius: 10,
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            + 분류 추가
           </button>
         )}
         {/* 검색창 */}
@@ -6659,6 +6713,89 @@ function ArchiveScreen({ onBack, user }) {
                 }}
               >
                 {uploading ? "올리는 중..." : "올리기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddCat && (
+        <div
+          onClick={() => setShowAddCat(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: 20,
+              width: "100%",
+              maxWidth: 340,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+              새 분류 추가 📁
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16 }}>
+              분류 이름을 입력하세요. (예: 복지자료, 교육자료)
+            </div>
+            <input
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              placeholder="분류 이름"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 10,
+                fontSize: 14,
+                marginBottom: 18,
+                fontFamily: "inherit",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setShowAddCat(false)}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "#F3F4F6",
+                  color: "#6B7280",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleAddCategory}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                추가
               </button>
             </div>
           </div>
@@ -9424,7 +9561,7 @@ function AdminScreen({ onBack, user, onNavigate }) {
         ))}
       </div>
     </div>
-    <label style={{ display: "block", padding: 16, border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+    <label style={{ display: "block", padding: "60px 16px", border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
       {canteenPhoto ? "사진 다시 선택" : "📷 식단표 사진 선택"}
       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
         const f = e.target.files && e.target.files[0];
