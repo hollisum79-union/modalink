@@ -11892,7 +11892,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
         style={{
          background:
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
-          padding: "calc(env(safe-area-inset-top) + 28px) 20px 18px",
+          padding: "calc(env(safe-area-inset-top) + 14px) 20px 18px",
           borderRadius: 28,
         }}
       >
@@ -18822,12 +18822,11 @@ function EventsAdminPage({ onBack }) {
     <div style={{ minHeight: "100vh", background: "#F9FAFB" }}>
       <div
         style={{
-          background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "20px 16px",
+          background:
+            "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
+          padding: "52px 20px 24px",
+          borderRadius: 28,
           color: "#fff",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
         }}
       >
         <div
@@ -18840,18 +18839,20 @@ function EventsAdminPage({ onBack }) {
           <button
             onClick={onBack}
             style={{
-              background: "rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.15)",
               border: "none",
-              color: "#fff",
-              padding: "8px 12px",
-              borderRadius: 8,
+              borderRadius: "50%",
+              width: 36,
+              height: 36,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               cursor: "pointer",
-              fontSize: 14,
             }}
           >
-            ← 뒤로
+            <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
           </button>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>🎀 경조사 관리</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>🎀 경조사 관리</div>
           <button
             onClick={handleAdd}
             style={{
@@ -19117,12 +19118,11 @@ function NoticeAdminPage({ onBack }) {
     <div style={{ minHeight: "100vh", background: "#F9FAFB" }}>
       <div
         style={{
-          background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "20px 16px",
+          background:
+            "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
+          padding: "52px 20px 24px",
+          borderRadius: 28,
           color: "#fff",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
         }}
       >
         <div
@@ -19132,21 +19132,23 @@ function NoticeAdminPage({ onBack }) {
             justifyContent: "space-between",
           }}
         >
-          <button
+         <button
             onClick={onBack}
             style={{
-              background: "rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.15)",
               border: "none",
-              color: "#fff",
-              padding: "8px 12px",
-              borderRadius: 8,
+              borderRadius: "50%",
+              width: 36,
+              height: 36,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               cursor: "pointer",
-              fontSize: 14,
             }}
           >
-            ← 뒤로
+            <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
           </button>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>🔔 공지 관리</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>🔔 공지 관리</div>
           <button
             onClick={() => {
               setEditItem(null);
