@@ -14906,6 +14906,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button
               onClick={onBack}
+              style={{
               background: "rgba(255,255,255,0.15)",
                 border: "none",
                 borderRadius: "50%",
