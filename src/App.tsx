@@ -1368,9 +1368,7 @@ function CanteenScreen({ onBack, user }) {
           >
             사업소 선택
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {["대공원", "도봉", "신풍"].map((s) => (
-                {isAdmin && (
+                    {isAdmin && (
             <button
               onClick={() => alert("사진 올리기 (다음 단계에서 연결)")}
               style={{
@@ -1390,6 +1388,8 @@ function CanteenScreen({ onBack, user }) {
               📷 식단표 사진 올리기
             </button>
           )}
+          <div style={{ display: "flex", gap: 8 }}>
+            {["대공원", "도봉", "신풍"].map((s) => (
               <button
                 key={s}
                 onClick={() => setStation(s)}
