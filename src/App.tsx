@@ -20055,7 +20055,22 @@ export default function App() {
     vote: false,
     anonymous: false,
   });
-
+// 로그인하면 저장된 알림 설정 불러오기
+  useEffect(() => {
+    if (user?.notif_settings) {
+      setNotifSettings((prev) => ({ ...prev, ...user.notif_settings }));
+    }
+  }, [user]);
+  // 알림 설정이 바뀌면 자동 저장
+  useEffect(() => {
+    if (user?.employee_number) {
+      supabase
+        .from("members")
+        .update({ notif_settings: notifSettings })
+        .eq("employee_number", user.employee_number)
+        .then(() => {});
+    }
+  }, [notifSettings]);
   // 1:1문의 미답변 건수 (status가 대기중인 것)
   const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
 const [unreadPostCount, setUnreadPostCount] = useState(0);
