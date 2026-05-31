@@ -20448,8 +20448,18 @@ export default function App() {
   const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
 const [unreadPostCount, setUnreadPostCount] = useState(0);
 const [unreadReportCount, setUnreadReportCount] = useState(0);
-const [myNotifCount, setMyNotifCount] = useState(0);
-
+  const [activeVote, setActiveVote] = useState(null);
+  useEffect(() => {
+    supabase
+      .from("votes")
+      .select("*")
+      .eq("status", "진행중")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        setActiveVote(data && data[0] ? data[0] : null);
+      });
+  }, []);
   useEffect(() => {
     if (!user?.employee_number) return;
     supabase
