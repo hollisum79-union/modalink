@@ -8033,6 +8033,11 @@ function AdminScreen({ onBack, user, onNavigate }) {
     { category: "후식", name: "" },
   ]);
   const [canteenDone, setCanteenDone] = useState(false);
+  const [canteenPhoto, setCanteenPhoto] = useState(null);
+  const [canteenLoading, setCanteenLoading] = useState(false);
+  const [canteenResult, setCanteenResult] = useState(null);
+  const [canteenError, setCanteenError] = useState("");
+
 
   // 투표/설문 만들기
   const [voteType, setVoteType] = useState("투표");
