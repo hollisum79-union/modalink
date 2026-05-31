@@ -1476,7 +1476,6 @@ function CanteenScreen({ onBack, user }) {
                   border: meal.isCurrent ? "2px solid #EEF0FF" : "none",
                 }}
               >
-                {menuData.items.map((item, i) => (
                 {(() => {
                   const row = menus.find((m) => m.meal_type === meal.key && m.menu_date === todayKey);
                   const list = row && row.items && row.items[0] ? String(row.items[0]).split(",").map((x) => x.trim()).filter(Boolean) : [];
