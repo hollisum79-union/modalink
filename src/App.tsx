@@ -7409,6 +7409,7 @@ const dummyPendingMembers = [
 function MemberManageScreen() {
   const [members, setMembers] = useState([]);
   const [search, setSearch] = useState("");
+  const [unionFilter, setUnionFilter] = useState("전체");
   const [form, setForm] = useState(null);
 
   const loadMembers = () => {
@@ -7430,6 +7431,12 @@ function MemberManageScreen() {
       !search.trim() ||
       m.name.includes(search.trim()) ||
       (m.employee_number || "").includes(search.trim())
+  ).filter((m) =>
+    unionFilter === "전체"
+      ? true
+      : unionFilter === "조합원"
+      ? m.is_union === true
+      : m.is_union !== true
   );
 
   const handleSave = () => {
@@ -7582,13 +7589,13 @@ function MemberManageScreen() {
       />
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-  <div style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+  <div onClick={() => setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원")} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#4F46E5" }}>
       {members.filter((m) => m.is_union === true).length}명
     </div>
   </div>
-  <div style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+  <div onClick={() => setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원")} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>비조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#9CA3AF" }}>
       {members.filter((m) => m.is_union !== true).length}명
