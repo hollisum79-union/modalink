@@ -11892,7 +11892,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
         style={{
          background:
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
-          padding: "calc(env(safe-area-inset-top) + 52px) 20px 24px",
+          padding: "calc(env(safe-area-inset-top) + 28px) 20px 18px",
           borderRadius: 28,
         }}
       >
@@ -11901,7 +11901,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
             display: "flex",
             alignItems: "center",
             gap: 12,
-            marginBottom: 14,
+            marginBottom: 10,
           }}
         >
           <button
@@ -15828,8 +15828,10 @@ function LeaveScreen({ onBack, user }) {
       {/* 헤더 */}
       <div
         style={{
-          background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "16px",
+          background:
+            "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
+          padding: "52px 20px 24px",
+          borderRadius: 28,
           display: "flex",
           alignItems: "center",
           gap: 12,
@@ -15839,17 +15841,17 @@ function LeaveScreen({ onBack, user }) {
         <button
           onClick={onBack}
           style={{
-            background: "rgba(255,255,255,0.2)",
+           background: "rgba(255,255,255,0.15)",
             border: "none",
+            borderRadius: "50%",
             width: 36,
             height: 36,
-            borderRadius: "50%",
-            color: "#fff",
-            fontSize: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             cursor: "pointer",
-          }}
         >
-          ←
+        <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
         </button>
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
