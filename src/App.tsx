@@ -7532,7 +7532,7 @@ function MemberManageScreen() {
         }}
       >
         <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
-          전직원수(실제 {members.filter((m) => !(m.employee_number || "").startsWith("SCHED")).length}명 / 결원 {members.filter((m) => (m.employee_number || "").startsWith("SCHED")).length}명)
+          사업소인원 (현원 {members.filter((m) => !(m.name || "").includes("결원")).length}명 / 결원 {members.filter((m) => (m.name || "").includes("결원")).length}명)
         </div>
         <button
           onClick={() =>
