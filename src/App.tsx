@@ -8675,241 +8675,90 @@ function AdminScreen({ onBack, user, onNavigate }) {
               </div>
             </div>
           ))}
-        {activeMenu === "canteen" &&
-          (canteenDone ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "60px 20px",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: "50%",
-                  background: "#D1FAE5",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 20,
-                }}
-              >
-                <Icon
-                  path="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  color="#10B981"
-                  size={40}
-                />
+                {activeMenu === "vote" &&
+                  {activeMenu === "canteen" && (
+  <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+    <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>식단표 사진 등록</div>
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>사업소</div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {["대공원", "도봉", "신풍"].map((s) => (
+          <button key={s} onClick={() => setCanteenStation(s)} style={{ flex: 1, padding: 10, borderRadius: 10, border: "1.5px solid", borderColor: canteenStation === s ? "#4F46E5" : "#E5E7EB", background: canteenStation === s ? "#EEF0FF" : "#fff", color: canteenStation === s ? "#4F46E5" : "#6B7280", fontWeight: canteenStation === s ? 700 : 400, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{s}</button>
+        ))}
+      </div>
+    </div>
+    <label style={{ display: "block", padding: 16, border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+      {canteenPhoto ? "사진 다시 선택" : "📷 식단표 사진 선택"}
+      <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => { setCanteenPhoto(String(reader.result)); setCanteenResult(null); setCanteenError(""); };
+        reader.readAsDataURL(f);
+      }} />
+    </label>
+    {canteenPhoto && (
+      <img src={canteenPhoto} alt="미리보기" style={{ width: "100%", borderRadius: 12, marginBottom: 12 }} />
+    )}
+    {canteenPhoto && !canteenResult && (
+      <button disabled={canteenLoading} onClick={async () => {
+        setCanteenLoading(true); setCanteenError("");
+        try {
+          const comma = canteenPhoto.indexOf(",");
+          const meta = canteenPhoto.slice(5, canteenPhoto.indexOf(";"));
+          const b64 = canteenPhoto.slice(comma + 1);
+          const r = await fetch("/.netlify/functions/read-menu", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
+          const d = await r.json();
+          if (d.error) throw new Error(d.error);
+          const txt = (d.text || "").replace(/```json|```/g, "").trim();
+          const parsed = JSON.parse(txt);
+          setCanteenResult(parsed.days || []);
+        } catch (err) {
+          setCanteenError("읽기 실패: " + String(err));
+        }
+        setCanteenLoading(false);
+      }} style={{ width: "100%", padding: 14, background: canteenLoading ? "#9CA3AF" : "linear-gradient(135deg,#4F46E5,#6366F1)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        {canteenLoading ? "AI가 읽는 중..." : "AI로 메뉴 읽기"}
+      </button>
+    )}
+    {canteenError && <div style={{ color: "#DC2626", fontSize: 13, marginTop: 10 }}>{canteenError}</div>}
+    {canteenResult && (
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>읽은 결과 (수정 가능)</div>
+        {canteenResult.map((day, di) => (
+          <div key={di} style={{ marginBottom: 12, border: "1px solid #E5E7EB", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>{day.day} {day.date}</div>
+            {["breakfast", "lunch", "dinner"].map((mk) => (
+              <div key={mk} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ width: 36, fontSize: 11, color: "#9CA3AF" }}>{mk === "breakfast" ? "아침" : mk === "lunch" ? "점심" : "저녁"}</span>
+                <input value={day[mk] || ""} onChange={(e) => { const c = [...canteenResult]; c[di] = { ...c[di], [mk]: e.target.value }; setCanteenResult(c); }} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", color: "#1F2937" }} />
               </div>
-              <div
-                style={{
-                  fontSize: 18,
-                  fontWeight: 800,
-                  color: "#1F2937",
-                  marginBottom: 8,
-                }}
-              >
-                메뉴가 등록되었습니다!
-              </div>
-              <div style={{ fontSize: 13, color: "#9CA3AF" }}>
-                {canteenStation} · {canteenMeal}
-              </div>
-              <button
-                onClick={() => {
-                  setCanteenDone(false);
-                  setCanteenItems(
-                    canteenItems.map((i) => ({ ...i, name: "" }))
-                  );
-                }}
-                style={{
-                  marginTop: 20,
-                  padding: "12px 32px",
-                  background: "linear-gradient(135deg, #10B981, #059669)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 12,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                다시 입력
-              </button>
-            </div>
-          ) : (
-            <div>
-              <div
-                style={{
-                  background: "#fff",
-                  borderRadius: 20,
-                  padding: "20px",
-                  boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 800,
-                    color: "#1F2937",
-                    marginBottom: 16,
-                  }}
-                >
-                  식당메뉴 입력
-                </div>
-                <div style={{ marginBottom: 14 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "#9CA3AF",
-                      fontWeight: 600,
-                      marginBottom: 8,
-                    }}
-                  >
-                    사업소
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {["대공원", "도봉", "신풍"].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setCanteenStation(s)}
-                        style={{
-                          flex: 1,
-                          padding: "10px",
-                          borderRadius: 10,
-                          border: "1.5px solid",
-                          borderColor:
-                            canteenStation === s ? "#4F46E5" : "#E5E7EB",
-                          background: canteenStation === s ? "#EEF0FF" : "#fff",
-                          color: canteenStation === s ? "#4F46E5" : "#6B7280",
-                          fontWeight: canteenStation === s ? 700 : 400,
-                          fontSize: 13,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "#9CA3AF",
-                      fontWeight: 600,
-                      marginBottom: 8,
-                    }}
-                  >
-                    식사 구분
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {["아침", "점심", "저녁"].map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setCanteenMeal(m)}
-                        style={{
-                          flex: 1,
-                          padding: "10px",
-                          borderRadius: 10,
-                          border: "1.5px solid",
-                          borderColor:
-                            canteenMeal === m ? "#4F46E5" : "#E5E7EB",
-                          background: canteenMeal === m ? "#EEF0FF" : "#fff",
-                          color: canteenMeal === m ? "#4F46E5" : "#6B7280",
-                          fontWeight: canteenMeal === m ? 700 : 400,
-                          fontSize: 13,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {canteenItems.map((item, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 44,
-                        height: 28,
-                        borderRadius: 8,
-                        background: "#EEF0FF",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#4F46E5",
-                        }}
-                      >
-                        {item.category}
-                      </span>
-                    </div>
-                    <input
-                      value={item.name}
-                      onChange={(e) => {
-                        const updated = [...canteenItems];
-                        updated[i] = { ...updated[i], name: e.target.value };
-                        setCanteenItems(updated);
-                      }}
-                      placeholder={`${item.category} 메뉴 입력`}
-                      style={{
-                        flex: 1,
-                        padding: "10px 14px",
-                        borderRadius: 10,
-                        border: "1.5px solid #E5E7EB",
-                        fontSize: 14,
-                        outline: "none",
-                        fontFamily: "inherit",
-                        color: "#1F2937",
-                      }}
-                    />
-                  </div>
-                ))}
-                <button
-                  onClick={() => {
-                    if (canteenItems.some((i) => i.name)) setCanteenDone(true);
-                  }}
-                  style={{
-                    width: "100%",
-                    marginTop: 8,
-                    padding: "14px",
-                    background: "linear-gradient(135deg, #10B981, #059669)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 12,
-                    fontSize: 15,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  메뉴 등록
-                </button>
-              </div>
-            </div>
-          ))}
-        {activeMenu === "vote" &&
+            ))}
+          </div>
+        ))}
+        <button onClick={async () => {
+          setCanteenLoading(true);
+          try {
+            await supabase.from("canteen").delete().eq("station", canteenStation);
+            const rows = [];
+            canteenResult.forEach((day) => {
+              [["breakfast", "아침"], ["lunch", "점심"], ["dinner", "저녁"]].forEach(([k, label]) => {
+                if (day[k]) rows.push({ station: canteenStation, meal_type: label, items: [day[k]], menu_date: day.date || day.day });
+              });
+            });
+            if (rows.length) await supabase.from("canteen").insert(rows);
+            setCanteenDone(true); setCanteenPhoto(null); setCanteenResult(null);
+          } catch (err) { setCanteenError("저장 실패: " + String(err)); }
+          setCanteenLoading(false);
+        }} style={{ width: "100%", marginTop: 8, padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          이대로 저장
+        </button>
+      </div>
+    )}
+  </div>
+)}
+{activeMenu === "vote" &&
+
           (voteDone ? (
             <div
               style={{
