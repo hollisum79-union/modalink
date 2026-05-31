@@ -1007,6 +1007,14 @@ function BoardList({ onBack, onSelect, onWrite, user, initialFilter = "전체" }
       .then(({ data }) => {
         if (data) setPosts(data);
       });
+    // 관리자가 게시판을 열면 모든 글을 '읽음'으로 처리 (알림 사라짐)
+    if (user?.is_admin) {
+      supabase
+        .from("posts")
+        .update({ admin_read: true })
+        .eq("admin_read", false)
+        .then(() => {});
+    }
   }, []);
 
   const filteredPosts =
@@ -20050,7 +20058,17 @@ export default function App() {
 
   // 1:1문의 미답변 건수 (status가 대기중인 것)
   const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
+const [unreadPostCount, setUnreadPostCount] = useState(0);
 
+  useEffect(() => {
+    supabase
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("admin_read", false)
+      .then(({ count }) => {
+        if (count !== null) setUnreadPostCount(count);
+      });
+  }, [screen]);
   useEffect(() => {
     supabase
       .from("inquiries")
@@ -20077,7 +20095,7 @@ export default function App() {
       label: "자유게시판",
       icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
       color: "#4F46E5",
-      count: 0,
+      count: unreadPostCount,
       screen: "board",
     },
     {
