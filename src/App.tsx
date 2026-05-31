@@ -5288,6 +5288,25 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
 function AnonymousReportList({ onBack, onWrite, user }) {
   const isAdmin = user?.is_admin;
 
+  const [reports, setReports] = useState([]);
+
+  // DB에서 익명제보 목록 불러오기
+  useEffect(() => {
+    supabase
+      .from("anonymous_reports")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (data)
+          setReports(
+            data.map((r) => ({
+              ...r,
+              date: r.created_at?.slice(0, 10).replace(/-/g, "."),
+            }))
+          );
+      });
+  }, []);
+
   // 관리자가 아니면 작성 화면으로 바로
   if (!isAdmin) {
     return <AnonymousReportWrite onBack={onBack} onSubmit={() => {}} />;
@@ -5372,13 +5391,13 @@ function AnonymousReportList({ onBack, onWrite, user }) {
       </div>
 
       <div style={{ background: "#fff", marginTop: 8 }}>
-        {dummyReports.map((report, i) => (
+        {reports.map((report, i) => (
           <div
             key={report.id}
             style={{
               padding: "16px 20px",
               borderBottom:
-                i < dummyReports.length - 1 ? "1px solid #F3F4F6" : "none",
+                i < reports.length - 1 ? "1px solid #F3F4F6" : "none",
             }}
           >
             <div
