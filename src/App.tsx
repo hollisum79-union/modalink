@@ -4974,7 +4974,20 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
   const [content, setContent] = useState("");
   const [done, setDone] = useState(false);
   const [accessCode, setAccessCode] = useState("");
+const [showCheck, setShowCheck] = useState(false);
+  const [checkCode, setCheckCode] = useState("");
+  const [checkResult, setCheckResult] = useState(null);
 
+  // 비밀번호로 내 제보 + 답변 확인하기
+  const handleCheck = async () => {
+    if (!checkCode.trim()) return;
+    const { data } = await supabase
+      .from("anonymous_reports")
+      .select("*")
+      .eq("access_code", checkCode.trim())
+      .maybeSingle();
+    setCheckResult(data || "notfound");
+  };
   const handleSubmit = async () => {
     if (!category || !title.trim() || !content.trim()) return;
     // 본인 확인용 6자리 비밀번호 생성
@@ -5155,11 +5168,33 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
             fontFamily: "inherit",
           }}
         >
-          제보하기
+         제보하기
         </button>
       </div>
 
       <div style={{ padding: "20px 16px" }}>
+        <button
+          onClick={() => {
+            setShowCheck(true);
+            setCheckCode("");
+            setCheckResult(null);
+          }}
+          style={{
+            width: "100%",
+            padding: "14px",
+            marginBottom: 16,
+            background: "#fff",
+            border: "2px solid #4F46E5",
+            borderRadius: 14,
+            color: "#4F46E5",
+            fontSize: 15,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          🔑 내 제보 답변 확인하기
+        </button>
         <div
           style={{
             background: "#EEF0FF",
@@ -5281,6 +5316,122 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
           />
         </div>
       </div>
+      {showCheck && (
+        <div
+          onClick={() => setShowCheck(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: 20,
+              width: "100%",
+              maxWidth: 360,
+              maxHeight: "80vh",
+              overflowY: "auto",
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+              🔑 내 제보 답변 확인
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16, lineHeight: 1.6 }}>
+              제보할 때 받은 6자리 비밀번호를 입력하세요.
+            </div>
+            <input
+              value={checkCode}
+              onChange={(e) => setCheckCode(e.target.value)}
+              placeholder="예: 482917"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 10,
+                fontSize: 16,
+                textAlign: "center",
+                letterSpacing: 4,
+                marginBottom: 12,
+                fontFamily: "inherit",
+              }}
+            />
+            <button
+              onClick={handleCheck}
+              style={{
+                width: "100%",
+                padding: "12px 0",
+                background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+                marginBottom: 16,
+              }}
+            >
+              확인하기
+            </button>
+            {checkResult === "notfound" && (
+              <div style={{ fontSize: 13, color: "#EF4444", textAlign: "center", padding: "12px 0" }}>
+                해당 번호의 제보를 찾을 수 없어요. 번호를 다시 확인해주세요.
+              </div>
+            )}
+            {checkResult && checkResult !== "notfound" && (
+              <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
+                  {checkResult.category} · {checkResult.status}
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 8 }}>
+                  {checkResult.title}
+                </div>
+                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, background: "#F9FAFB", borderRadius: 10, padding: "12px", marginBottom: 14, whiteSpace: "pre-wrap" }}>
+                  {checkResult.content}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>
+                  💬 관리자 답변
+                </div>
+                {checkResult.admin_reply ? (
+                  <div style={{ fontSize: 14, color: "#1F2937", lineHeight: 1.7, background: "#EEF0FF", borderRadius: 10, padding: "12px", whiteSpace: "pre-wrap" }}>
+                    {checkResult.admin_reply}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "8px 0" }}>
+                    아직 답변이 등록되지 않았어요. 조금만 기다려 주세요.
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => setShowCheck(false)}
+              style={{
+                width: "100%",
+                padding: "12px 0",
+                background: "#F3F4F6",
+                color: "#6B7280",
+                border: "none",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+                marginTop: 16,
+              }}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
