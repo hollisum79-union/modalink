@@ -11967,6 +11967,35 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
           </div>
           <div style={{ width: 44 }} />
         </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            paddingBottom: 4,
+          }}
+        >
+          <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>
+            {selectedCrew}조 근무표
+          </div>
+          <button
+            onClick={() => setSelectedCrew(null)}
+            style={{
+              background: "rgba(255,255,255,0.18)",
+              border: "0.5px solid rgba(255,255,255,0.25)",
+              color: "#fff",
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: "pointer",
+              padding: "4px 10px",
+              borderRadius: 100,
+              fontFamily: "inherit",
+            }}
+          >
+            조 변경
+          </button>
+        </div>
       </div>
 
       <div style={{ background: "#fff", minHeight: "80vh" }}>
@@ -11981,42 +12010,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
             )}
             {crewLoaded && !selectedCrew && renderCrewSelect()}
             {crewLoaded && selectedCrew && shiftViewMode === "crew" && (
-              <>
-                <div
-                  style={{
-                    padding: "10px 16px",
-                    background: "#4F46E5",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    position: "sticky",
-                    top: 56,
-                  }}
-                >
-                  <button
-                    onClick={() => setSelectedCrew(null)}
-                    style={{
-                      background: "rgba(255,255,255,0.18)",
-                      border: "0.5px solid rgba(255,255,255,0.25)",
-                      color: "#fff",
-                      fontSize: 12,
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      padding: "6px 12px",
-                      borderRadius: 100,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    <span style={{ fontSize: 14 }}>←</span>조 변경
-                  </button>
-                  <div style={{ color: "#fff", fontWeight: 800, fontSize: 16 }}>
-                    {selectedCrew}조 근무표
-                  </div>
-                  <div style={{ width: 60 }} />
-                </div>
+              <>     
                 {renderSlideCalendar(selectedCrew)}
               </>
             )}
