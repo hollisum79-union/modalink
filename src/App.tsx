@@ -7235,18 +7235,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                   >
                     이름
                   </span>
-                  <span
-                    style={{
-                      background: "#4F46E5",
-                      color: "#fff",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      borderRadius: 20,
-                      padding: "1px 8px",
-                    }}
-                  >
-                    {members.filter((m) => m.is_union === true).length}명
-                  </span>
+                
                 </div>
                 <div
                   style={{
