@@ -1234,7 +1234,7 @@ function BoardList({ onBack, onSelect, onWrite, user }) {
 }
 
 // ── 식당메뉴 ──
-function CanteenScreen({ onBack }) {
+function CanteenScreen({ onBack, user }) {
   const today = new Date();
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   const dateStr = `${today.getFullYear()}년 ${
@@ -1242,6 +1242,9 @@ function CanteenScreen({ onBack }) {
   }월 ${today.getDate()}일 (${days[today.getDay()]})`;
   const hour = today.getHours();
   const [station, setStation] = useState("대공원");
+    const isAdmin = user?.is_admin;
+  const [uploading, setUploading] = useState(false);
+  const [reviewData, setReviewData] = useState(null);
   const stationColor = { 대공원: "#4F46E5", 도봉: "#0EA5E9", 신풍: "#10B981" };
   const stationPrice = { 대공원: "4,000원", 도봉: "3,500원", 신풍: "3,500원" };
   const categoryColor = {
@@ -1367,6 +1370,26 @@ function CanteenScreen({ onBack }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {["대공원", "도봉", "신풍"].map((s) => (
+                {isAdmin && (
+            <button
+              onClick={() => alert("사진 올리기 (다음 단계에서 연결)")}
+              style={{
+                width: "100%",
+                marginBottom: 12,
+                padding: "12px",
+                borderRadius: 12,
+                border: "none",
+                background: "#4F46E5",
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              📷 식단표 사진 올리기
+            </button>
+          )}
               <button
                 key={s}
                 onClick={() => setStation(s)}
@@ -20159,7 +20182,7 @@ export default function App() {
       />
     );
   if (screen === "canteen")
-    return <CanteenScreen onBack={() => setScreen("home")} />;
+        return <CanteenScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "board")
     return (
       <BoardList
