@@ -19939,16 +19939,13 @@ export default function App() {
     }
   }, [user, screen]);
 
-  const displayNotices =
-    notices.length > 0
-      ? notices.map((n) => ({
-          ...n,
-          tag: n.tag,
-          tagColor: n.tag === "긴급" ? "#EF4444" : "#4F46E5",
-          tagBg: n.tag === "긴급" ? "#FEE2E2" : "#EEF0FF",
-          date: n.created_at?.slice(0, 10),
-        }))
-      : dummyNotices;
+  const displayNotices = notices.map((n) => ({
+    ...n,
+    tag: n.tag,
+    tagColor: n.tag === "긴급" ? "#EF4444" : "#4F46E5",
+    tagBg: n.tag === "긴급" ? "#FEE2E2" : "#EEF0FF",
+    date: n.created_at?.slice(0, 10),
+  }));
 
   const urgentNotice = displayNotices.find((n) => n.tag === "긴급");
   const carouselNotices = [...displayNotices]
