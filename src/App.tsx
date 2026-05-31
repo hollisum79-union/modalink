@@ -4973,9 +4973,20 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [done, setDone] = useState(false);
+  const [accessCode, setAccessCode] = useState("");
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!category || !title.trim() || !content.trim()) return;
+    // 본인 확인용 6자리 비밀번호 생성
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    setAccessCode(code);
+    // DB에 저장 (작성자 정보 없이 = 완전 익명)
+    await supabase.from("anonymous_reports").insert({
+      category,
+      title: title.trim(),
+      content: content.trim(),
+      access_code: code,
+    });
     onSubmit({ category, title, content });
     setDone(true);
   };
@@ -5033,9 +5044,9 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
             marginBottom: 8,
           }}
         >
-          제보 내용은 관리자만 확인할 수 있으며
+          작성자의 이름·사번 등 어떤 정보도 저장되지 않으며,
           <br />
-          철저한 익명이 보장됩니다.
+          관리자도 누가 작성했는지 알 수 없습니다. 🔒
         </div>
         <div
           style={{
@@ -5046,6 +5057,30 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
           }}
         >
           검토 후 필요시 조치하겠습니다 🙏
+        </div>
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 320,
+            background: "#fff",
+            border: "2px dashed #4F46E5",
+            borderRadius: 16,
+            padding: "20px",
+            marginBottom: 24,
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 8 }}>
+            🔑 나중에 답변을 확인할 비밀번호
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 900, color: "#4F46E5", letterSpacing: 4 }}>
+            {accessCode}
+          </div>
+          <div style={{ fontSize: 12, color: "#EF4444", marginTop: 10, lineHeight: 1.6 }}>
+            이 번호를 꼭 메모해 두세요!
+            <br />
+            번호가 없으면 답변을 확인할 수 없어요.
+          </div>
         </div>
         <button
           onClick={onBack}
@@ -5154,7 +5189,7 @@ function AnonymousReportWrite({ onBack, onSubmit }) {
               완전한 익명이 보장됩니다
             </div>
             <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.6 }}>
-              제보자 정보는 수집되지 않으며 관리자만 내용을 확인할 수 있습니다.
+              제보자의 이름·사번 등은 일절 저장되지 않습니다. 관리자도 누가 작성했는지 알 수 없으니 안심하고 작성하세요.
             </div>
           </div>
         </div>
