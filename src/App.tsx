@@ -1242,6 +1242,11 @@ function CanteenScreen({ onBack, user }) {
   }월 ${today.getDate()}일 (${days[today.getDay()]})`;
   const hour = today.getHours();
   const [station, setStation] = useState("대공원");
+  const [menus, setMenus] = useState([]);
+  useEffect(() => {
+    supabase.from("canteen").select("*").eq("station", station).then((res) => setMenus(res.data || []));
+  }, [station]);
+  const todayKey = (today.getMonth() + 1) + "/" + today.getDate();
     const isAdmin = user?.is_admin;
   const [uploading, setUploading] = useState(false);
   const [reviewData, setReviewData] = useState(null);
@@ -1456,7 +1461,7 @@ function CanteenScreen({ onBack, user }) {
                     )}
                   </div>
                   <div style={{ fontSize: 11, color: "#9CA3AF" }}>
-                    {menuData.time}
+                    {meal.time}
                   </div>
                 </div>
               </div>
@@ -1472,6 +1477,18 @@ function CanteenScreen({ onBack, user }) {
                 }}
               >
                 {menuData.items.map((item, i) => (
+                {(() => {
+                  const row = menus.find((m) => m.meal_type === meal.key && m.menu_date === todayKey);
+                  const list = row && row.items && row.items[0] ? String(row.items[0]).split(",").map((x) => x.trim()).filter(Boolean) : [];
+                  if (list.length === 0) return (<div style={{ padding: "16px 18px", color: "#9CA3AF", fontSize: 13 }}>오늘 등록된 메뉴가 없습니다.</div>);
+                  return list.map((name, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 18px", borderBottom: i < list.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                      <span style={{ fontSize: 14, color: "#1F2937", flex: 1 }}>{name}</span>
+                    </div>
+                  ));
+                })()}
+                {false && menuData.items.map((item, i) => (
+
                   <div
                     key={i}
                     style={{
