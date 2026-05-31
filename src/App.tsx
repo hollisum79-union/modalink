@@ -5486,6 +5486,21 @@ function ArchiveScreen({ onBack, user }) {
   const [dbFiles, setDbFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [favorites, setFavorites] = useState([]);
+
+  // 내 즐겨찾기 목록 불러오기
+  const loadFavorites = async () => {
+    if (!user?.employee_number) return;
+    const { data } = await supabase
+      .from("archive_favorites")
+      .select("file_id")
+      .eq("employee_number", user.employee_number);
+    if (data) setFavorites(data.map((f) => f.file_id));
+  };
+
+  useEffect(() => {
+    loadFavorites();
+  }, []);
   const currentCat = archiveCategories.find((c) => c.id === selectedCat);
 
   // Supabase에서 파일 목록 로드
@@ -5504,6 +5519,23 @@ function ArchiveScreen({ onBack, user }) {
 
   // 전체 파일 목록 (DB + 더미)
   const allFiles = dbFiles;
+  // 즐겨찾기 켜기/끄기
+  const toggleFavorite = async (file) => {
+    const fid = String(file.id);
+    if (favorites.includes(fid)) {
+      setFavorites(favorites.filter((x) => x !== fid));
+      await supabase
+        .from("archive_favorites")
+        .delete()
+        .eq("employee_number", user.employee_number)
+        .eq("file_id", fid);
+    } else {
+      setFavorites([...favorites, fid]);
+      await supabase
+        .from("archive_favorites")
+        .insert({ employee_number: user.employee_number, file_id: fid });
+    }
+  };
 
   // 띄어쓰기 제거 후 비교하는 검색 헬퍼
   const normalize = (str) => (str || "").toLowerCase().replace(/\s+/g, "");
@@ -5872,6 +5904,56 @@ function ArchiveScreen({ onBack, user }) {
         )}
 
         {/* 카테고리 목록 또는 파일 목록 */}
+        {/* ⭐ 즐겨찾기 모아보기 */}
+        {!searchQuery.trim() && !selectedCat && favorites.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", marginBottom: 10 }}>
+              ⭐ 즐겨찾기 · {favorites.length}개
+            </div>
+            {dbFiles
+              .filter((f) => favorites.includes(String(f.id)))
+              .map((file, i) => {
+                const cat = archiveCategories.find((c) => c.id === file.category_id);
+                return (
+                  <div
+                    key={"fav" + i}
+                    onClick={() => handleFileOpen(file)}
+                    style={{
+                      background: "#fff",
+                      borderRadius: 16,
+                      padding: "14px 18px",
+                      marginBottom: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+                      cursor: "pointer",
+                      border: "1.5px solid #FDE68A",
+                    }}
+                  >
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>⭐</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {file.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
+                        {cat?.label} · {file.size}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(file);
+                      }}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, padding: 0, flexShrink: 0, lineHeight: 1 }}
+                    >
+                      ⭐
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        )}
         {!searchQuery.trim() &&
           (!selectedCat ? (
             archiveCategories.map((cat) => {
@@ -6008,6 +6090,23 @@ function ArchiveScreen({ onBack, user }) {
                     size={20}
                   />
                   {isAdmin && file.id && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(file);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 22,
+                      padding: 0,
+                      flexShrink: 0,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {favorites.includes(String(file.id)) ? "⭐" : "☆"}
+                  </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
