@@ -20449,6 +20449,7 @@ export default function App() {
 const [unreadPostCount, setUnreadPostCount] = useState(0);
 const [unreadReportCount, setUnreadReportCount] = useState(0);
   const [activeVote, setActiveVote] = useState(null);
+  const [myNotifCount, setMyNotifCount] = useState(0);
   useEffect(() => {
     supabase
       .from("votes")
