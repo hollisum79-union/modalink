@@ -21378,18 +21378,7 @@ const [myNotifCount, setMyNotifCount] = useState(0);
   const todayMenu = currentMealKey
     ? dummyCanteen["대공원"][currentMealKey]
     : null;
-  const [activeVote, setActiveVote] = useState(null);
-  useEffect(() => {
-    supabase
-      .from("votes")
-      .select("*")
-      .eq("status", "진행중")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        setActiveVote(data && data[0] ? data[0] : null);
-      });
-  }, []);
+  const activeVote = dummyVotes.find((v) => v.status === "진행중");
 
   return (
     <div
