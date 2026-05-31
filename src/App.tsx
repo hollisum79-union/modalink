@@ -7442,6 +7442,7 @@ function MemberManageScreen() {
       employee_number: form.employee_number.trim(),
       phone: form.phone,
       role: form.role || "조합원",
+      is_union: form.is_union === true,
     };
     if (form.id) {
       supabase
@@ -7544,6 +7545,7 @@ function MemberManageScreen() {
               employee_number: "",
               phone: "",
               role: "조합원",
+              is_union: true,
             })
           }
           style={{
@@ -7849,6 +7851,15 @@ function MemberManageScreen() {
                 marginBottom: 20,
               }}
             />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, cursor: "pointer" }}>
+  <input
+    type="checkbox"
+    checked={form.is_union === true}
+    onChange={(e) => setForm({ ...form, is_union: e.target.checked })}
+    style={{ width: 18, height: 18 }}
+  />
+  <span style={{ fontSize: 14, color: "#1F2937" }}>조합원 (체크 해제 시 비조합원)</span>
+</label>
             <div style={{ display: "flex", gap: 10 }}>
               <button
                 onClick={() => setForm(null)}
