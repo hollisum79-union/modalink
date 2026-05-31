@@ -646,7 +646,18 @@ function BoardDetail({ post, onBack, user }) {
       supabase
         .from("post_likes")
         .insert([{ post_id: post.id, emp_id: myEmpId }])
-        .then(() => {});
+        .then(() => {
+          // 글 주인에게 좋아요 알림 (내 글에 내가 좋아요 누른 건 제외)
+          if (post.author_emp && post.author_emp !== myEmpId) {
+            supabase.from("notifications").insert({
+              recipient_emp: post.author_emp,
+              type: "like",
+              post_id: String(post.id),
+              post_title: post.title,
+              actor_name: user?.name,
+            });
+          }
+        });
     }
   };
 
@@ -655,6 +666,7 @@ function BoardDetail({ post, onBack, user }) {
     const payload = {
       post_id: post.id,
       author: user?.name,
+      author_emp: user?.employee_number,
       content: newComment,
     };
     supabase
@@ -665,6 +677,16 @@ function BoardDetail({ post, onBack, user }) {
         if (data && data[0]) {
           setComments([...comments, data[0]]);
           setNewComment("");
+          // 글 주인에게 알림 보내기 (내 글에 내가 댓글 단 건 제외)
+          if (post.author_emp && post.author_emp !== user?.employee_number) {
+            supabase.from("notifications").insert({
+              recipient_emp: post.author_emp,
+              type: "comment",
+              post_id: String(post.id),
+              post_title: post.title,
+              actor_name: user?.name,
+            });
+          }
         }
       });
   };
@@ -1007,6 +1029,15 @@ function BoardList({ onBack, onSelect, onWrite, user, initialFilter = "전체" }
       .then(({ data }) => {
         if (data) setPosts(data);
       });
+    // 조합원이 게시판을 열면 내 알림(댓글·좋아요) 읽음 처리
+    if (user?.employee_number) {
+      supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("recipient_emp", user.employee_number)
+        .eq("is_read", false)
+        .then(() => {});
+    }
     // 관리자가 게시판을 열면 모든 글을 '읽음'으로 처리 (알림 사라짐)
     if (user?.is_admin) {
       supabase
@@ -20417,7 +20448,19 @@ export default function App() {
   const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
 const [unreadPostCount, setUnreadPostCount] = useState(0);
 const [unreadReportCount, setUnreadReportCount] = useState(0);
+const [myNotifCount, setMyNotifCount] = useState(0);
 
+  useEffect(() => {
+    if (!user?.employee_number) return;
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("recipient_emp", user.employee_number)
+      .eq("is_read", false)
+      .then(({ count }) => {
+        if (count !== null) setMyNotifCount(count);
+      });
+  }, [screen, user]);
   useEffect(() => {
     supabase
       .from("anonymous_reports")
@@ -20580,7 +20623,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       label: "자유게시판",
       icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
       color: "#0EA5E9",
-      count: getAlertCount(3, 0),
+      count: myNotifCount,
       screen: "board",
     },
     {
@@ -20778,6 +20821,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             content: post.content,
             category: post.category,
             author: user?.name,
+            author_emp: user?.employee_number,
             is_anonymous: false,
             views: 0,
           };
