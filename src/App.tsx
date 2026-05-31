@@ -14890,11 +14890,10 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       {/* 헤더 */}
       <div
         style={{
-          background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "16px 20px 20px",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
+          background:
+            "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
+          padding: "52px 20px 24px",
+          borderRadius: 28,
         }}
       >
         <div
@@ -14907,17 +14906,18 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button
               onClick={onBack}
-              style={{
-                background: "rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.15)",
                 border: "none",
-                borderRadius: 10,
-                padding: "6px 10px",
-                color: "#fff",
+                borderRadius: "50%",
+                width: 36,
+                height: 36,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
                 cursor: "pointer",
-                fontSize: 18,
               }}
             >
-              ←
+            <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
             </button>
             <div>
               <div style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>
@@ -16370,7 +16370,7 @@ function WorkAdjustScreen({ onBack, user }) {
     if (data) setRecords(data);
   };
 
-  // 휴무충당 신청 (holiday_fill_request)
+  // 휴무충당가능 (holiday_fill_request)
   const handleRequestSubmit = async () => {
     if (!user?.employee_number) {
       alert("로그인 정보가 없습니다.");
