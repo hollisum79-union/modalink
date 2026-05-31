@@ -5289,7 +5289,27 @@ function AnonymousReportList({ onBack, onWrite, user }) {
   const isAdmin = user?.is_admin;
 
   const [reports, setReports] = useState([]);
+const [selectedReport, setSelectedReport] = useState(null);
+  const [replyText, setReplyText] = useState("");
 
+  // 관리자 답변 저장
+  const saveReply = async () => {
+    if (!selectedReport) return;
+    await supabase
+      .from("anonymous_reports")
+      .update({ admin_reply: replyText, status: "답변완료" })
+      .eq("id", selectedReport.id);
+    setReports((prev) =>
+      prev.map((r) =>
+        r.id === selectedReport.id
+          ? { ...r, admin_reply: replyText, status: "답변완료" }
+          : r
+      )
+    );
+    setSelectedReport(null);
+    setReplyText("");
+    alert("답변이 저장되었습니다.");
+  };
   // DB에서 익명제보 목록 불러오기
   useEffect(() => {
     supabase
@@ -5394,6 +5414,10 @@ function AnonymousReportList({ onBack, onWrite, user }) {
         {reports.map((report, i) => (
           <div
             key={report.id}
+            onClick={() => {
+              setSelectedReport(report);
+              setReplyText(report.admin_reply || "");
+            }}
             style={{
               padding: "16px 20px",
               borderBottom:
@@ -5463,6 +5487,111 @@ function AnonymousReportList({ onBack, onWrite, user }) {
             </div>
           </div>
         ))}
+        {selectedReport && (
+          <div
+            onClick={() => setSelectedReport(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: "#fff",
+                borderRadius: 16,
+                padding: 20,
+                width: "100%",
+                maxWidth: 380,
+                maxHeight: "80vh",
+                overflowY: "auto",
+              }}
+            >
+              <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 6 }}>
+                {selectedReport.category} · {selectedReport.date}
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>
+                {selectedReport.title}
+              </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  color: "#374151",
+                  lineHeight: 1.7,
+                  background: "#F9FAFB",
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                  marginBottom: 18,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {selectedReport.content}
+              </div>
+
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#4F46E5", marginBottom: 8 }}>
+                관리자 답변
+              </div>
+              <textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="제보자가 비밀번호로 확인할 답변을 작성하세요"
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  minHeight: 100,
+                  padding: "12px",
+                  border: "1px solid #E5E7EB",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  resize: "vertical",
+                  marginBottom: 16,
+                }}
+              />
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setSelectedReport(null)}
+                  style={{
+                    flex: 1,
+                    padding: "12px 0",
+                    background: "#F3F4F6",
+                    color: "#6B7280",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  닫기
+                </button>
+                <button
+                  onClick={saveReply}
+                  style={{
+                    flex: 1,
+                    padding: "12px 0",
+                    background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  답변 저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
