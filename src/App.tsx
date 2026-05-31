@@ -5325,6 +5325,14 @@ const [selectedReport, setSelectedReport] = useState(null);
             }))
           );
       });
+    // 관리자가 제보 목록을 열면 모두 '읽음' 처리 (알림 사라짐)
+    if (user?.is_admin) {
+      supabase
+        .from("anonymous_reports")
+        .update({ admin_read: true })
+        .eq("admin_read", false)
+        .then(() => {});
+    }
   }, []);
 
   // 관리자가 아니면 작성 화면으로 바로
@@ -20257,7 +20265,17 @@ export default function App() {
   // 1:1문의 미답변 건수 (status가 대기중인 것)
   const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
 const [unreadPostCount, setUnreadPostCount] = useState(0);
+const [unreadReportCount, setUnreadReportCount] = useState(0);
 
+  useEffect(() => {
+    supabase
+      .from("anonymous_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("admin_read", false)
+      .then(({ count }) => {
+        if (count !== null) setUnreadReportCount(count);
+      });
+  }, [screen]);
   useEffect(() => {
     supabase
       .from("posts")
@@ -20284,7 +20302,7 @@ const [unreadPostCount, setUnreadPostCount] = useState(0);
       label: "익명제보",
       icon: "M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z",
       color: "#EF4444",
-      count: 0,
+      count: unreadReportCount,
       screen: "anonymous",
     },
     {
