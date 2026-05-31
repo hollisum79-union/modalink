@@ -15850,6 +15850,7 @@ function LeaveScreen({ onBack, user }) {
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
+            }}
         >
         <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
         </button>
