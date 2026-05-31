@@ -16706,6 +16706,7 @@ function WorkAdjustScreen({ onBack, user }) {
                     fontFamily: "inherit",
                     color: "#1F2937",
                     background: "#fff",
+                    maxWidth: "100%",
                   }}
                 />
               </div>
@@ -16966,6 +16967,7 @@ function WorkAdjustScreen({ onBack, user }) {
                     fontFamily: "inherit",
                     color: "#1F2937",
                     background: "#fff",
+                    maxWidth: "100%",
                   }}
                 />
               </div>
