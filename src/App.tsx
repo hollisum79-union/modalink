@@ -7543,7 +7543,7 @@ function MemberManageScreen() {
         }}
       >
         <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
-          조합원 명단 ({members.length}명)
+          전직원수(실제 {members.filter((m) => !(m.employee_number || "").startsWith("SCHED")).length}명 / 결원 {members.filter((m) => (m.employee_number || "").startsWith("SCHED")).length}명)
         </div>
         <button
           onClick={() =>
