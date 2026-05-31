@@ -7271,7 +7271,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                   입사일
                 </div>
               </div>
-              {members.map((m, i) => (
+              {members.filter((m) => m.is_union === true).map((m, i) => (
                 <div
                   key={m.id}
                   style={{
@@ -7279,7 +7279,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                     alignItems: "center",
                     padding: "12px 16px",
                     borderBottom:
-                      i < members.length - 1 ? "1px solid #F3F4F6" : "none",
+                      i < members.filter((mm) => mm.is_union === true).length - 1 ? "1px solid #F3F4F6" : "none",
                   }}
                 >
                   <div
