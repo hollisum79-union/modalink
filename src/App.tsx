@@ -6051,7 +6051,8 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
       .then(({ data }) => {
         if (data) {
           setMembers(data);
-          setMemberCount(data.length);
+          setMemberCount(data.filter((m) => m.is_union === true).length);
+
         }
       });
   }, []);
