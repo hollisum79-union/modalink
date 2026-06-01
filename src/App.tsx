@@ -11466,6 +11466,9 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   const [selectedMember, setSelectedMember] = React.useState<any>(null);
   const [members, setMembers] = React.useState<any[]>([]);
   const [rotationData, setRotationData] = React.useState<any[]>([]);
+    const [holidays, setHolidays] = React.useState<string[]>([]);
+  const [diaTable, setDiaTable] = React.useState<any[]>([]);
+
   const [loadingMembers, setLoadingMembers] = React.useState(false);
   const [memberSearch, setMemberSearch] = React.useState("");
   const [favorites, setFavorites] = React.useState<any[]>([]);
@@ -11583,6 +11586,30 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   // ============================================================
   // [추가 위치 2] 교번 순환표 useEffect 바로 아래에 추가
   // ============================================================
+  // 공휴일 불러오기 (한국천문연구원 API)
+  React.useEffect(() => {
+    const fetchHolidays = async () => {
+      try {
+        const res = await fetch(
+          "/.netlify/functions/read-holidays?year=" + currentYear
+        );
+        const json = await res.json();
+        if (json.holidays) setHolidays(json.holidays);
+      } catch (e) {
+        console.log("공휴일 불러오기 실패", e);
+      }
+    };
+    fetchHolidays();
+  }, [currentYear]);
+
+  // 교번 다이아 시간표 전체 불러오기
+  React.useEffect(() => {
+    const fetchDia = async () => {
+      const { data } = await supabase.from("kyobun_dia").select("*");
+      if (data) setDiaTable(data);
+    };
+    fetchDia();
+  }, []);
 
   // 즐겨찾기 불러오기
   React.useEffect(() => {
