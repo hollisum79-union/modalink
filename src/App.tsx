@@ -9784,9 +9784,9 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
     )}
   </div>
 )}
-{activeMenu === "vote" &&
-</div>
-)}
+9786  )}
+      {activeMenu === "kyobundia" && (        ← 식단표 다음 바로 다이아
+9791    <div style={{ background: "#fff"...
 {activeMenu === "kyobundia" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록</div>
