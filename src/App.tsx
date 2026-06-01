@@ -12793,6 +12793,9 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
               const date = new Date(currentYear, currentMonth - 1, day);
               const work = getKyobunWork(selectedMember, date);
               const info = work ? workInfo(work.type) : workInfo("");
+                          const diaDayType = work ? getDiaDayType(work.type, date) : null;
+              const diaInfo = work ? getDiaInfo(work.dia, diaDayType) : null;
+
               const isT = isToday(currentYear, currentMonth, day);
               const isSun = di === 0,
                 isSat = di === 6;
@@ -12863,6 +12866,20 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
                       >
                         {work.dia}
                       </div>
+                                            {diaInfo && diaInfo.start_time && (
+                        <div
+                          style={{
+                            textAlign: "center",
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: "#4F46E5",
+                            marginTop: 1,
+                          }}
+                        >
+                          {diaInfo.start_time}
+                        </div>
+                      )}
+
                     </>
                   )}
                 </div>
