@@ -8897,10 +8897,10 @@ function PaySettingScreen() {
     load();
   }, []);
 
-  const updateHours = (workType, value) => {
+  const updateField = (workType, field, value) => {
     setRows((prev) =>
       prev.map((r) =>
-        r.work_type === workType ? { ...r, night_hours: value } : r
+        r.work_type === workType ? { ...r, [field]: value } : r
       )
     );
   };
@@ -8911,6 +8911,7 @@ function PaySettingScreen() {
         .from("worktype_pay_settings")
         .update({
           night_hours: Number(r.night_hours) || 0,
+          holiday_day_hours: Number(r.holiday_day_hours) || 0,
           updated_at: new Date().toISOString(),
         })
         .eq("work_type", r.work_type);
@@ -8919,13 +8920,29 @@ function PaySettingScreen() {
     setTimeout(() => setSaveMsg(""), 2500);
   };
 
+  const numInput = (val, onChange) => (
+    <input
+      type="number"
+      value={val ?? 0}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        width: 64,
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: "1px solid #E5E7EB",
+        fontSize: 14,
+        textAlign: "right",
+      }}
+    />
+  );
+
   return (
     <div>
       <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
         급여시간 설정
       </div>
       <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
-        근무형태별 야간 1회당 시간을 입력하세요. (조합원 급여화면에 자동 반영)
+        근무형태별 인정 시간(1회 기준)을 입력하세요. 야간 = 22~06시.
       </div>
       {rows.map((r) => (
         <div
@@ -8935,30 +8952,38 @@ function PaySettingScreen() {
             borderRadius: 14,
             padding: "14px 16px",
             marginBottom: 10,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
             boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
           }}
         >
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 10 }}>
             {r.work_type}
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <input
-              type="number"
-              value={r.night_hours ?? 0}
-              onChange={(e) => updateHours(r.work_type, e.target.value)}
-              style={{
-                width: 70,
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid #E5E7EB",
-                fontSize: 14,
-                textAlign: "right",
-              }}
-            />
-            <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
+            <span style={{ fontSize: 13, color: "#6B7280" }}>🌙 야간시간</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {numInput(r.night_hours, (v) => updateField(r.work_type, "night_hours", v))}
+              <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span style={{ fontSize: 13, color: "#6B7280" }}>☀️ 주간시간</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {numInput(r.holiday_day_hours, (v) => updateField(r.work_type, "holiday_day_hours", v))}
+              <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+            </div>
           </div>
         </div>
       ))}
