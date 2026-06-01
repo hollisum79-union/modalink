@@ -15342,6 +15342,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [nightCount, setNightCount] = React.useState<number>(0);
   const [worktypeSettings, setWorktypeSettings] = React.useState<any[]>([]);
   const [shiftBase, setShiftBase] = React.useState<any>(null);
+  const [lastMonthLeaves, setLastMonthLeaves] = React.useState<any[]>([]);
   const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
   const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
   const [showDeductInfo, setShowDeductInfo] = React.useState(false);
@@ -15370,6 +15371,23 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         .limit(1)
         .maybeSingle();
       if (baseData) setShiftBase(baseData);
+
+      if (user?.employee_number) {
+        const now = new Date();
+        const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastPrev = new Date(firstThis.getTime() - 86400000);
+        const py = lastPrev.getFullYear();
+        const pm = lastPrev.getMonth();
+        const mm = String(pm + 1).padStart(2, "0");
+        const endDay = new Date(py, pm + 1, 0).getDate();
+        const { data: leaveData } = await supabase
+          .from("leave_history")
+          .select("*")
+          .eq("employee_number", user.employee_number)
+          .gte("used_date", `${py}-${mm}-01`)
+          .lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`);
+        if (leaveData) setLastMonthLeaves(leaveData);
+      }
 const { data: nightData } = await supabase
         .from("night_pay_settings")
         .select("*");
@@ -15456,6 +15474,21 @@ const { data: nightData } = await supabase
   };
 
   const lastMonthNight = getLastMonthNight();
+
+  const finalNight = (() => {
+    if (!lastMonthNight) return null;
+    let c = lastMonthNight.count;
+    for (const lv of lastMonthLeaves) {
+      if (calcShift(user.work_group, new Date(lv.used_date)) === "야간") {
+        c -= Number(lv.days) || 0;
+      }
+    }
+    return Math.max(0, c);
+  })();
+
+  React.useEffect(() => {
+    if (finalNight !== null) setNightCount(finalNight);
+  }, [finalNight]);
 
   const getBasicSalary = () => {
     if (!selectedGrade || !selectedHobong) return null;
@@ -16297,56 +16330,31 @@ const { data: nightData } = await supabase
                     근무형태를 먼저 선택하세요
                   </div>
                 )}
-               {lastMonthNight && (
+               {lastMonthNight ? (
                   <div
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
                       background: "#F5F3FF",
-                      borderRadius: 8,
-                      padding: "8px 12px",
-                      marginBottom: 8,
+                      borderRadius: 10,
+                      padding: "12px 14px",
                     }}
                   >
-                    <span style={{ fontSize: 12, color: "#6D28D9" }}>
-                      📅 전달({lastMonthNight.month}월) 야간 {lastMonthNight.count}일
-                    </span>
-                    <button
-                      onClick={() => setNightCount(lastMonthNight.count)}
-                      style={{
-                        border: "none",
-                        background: "#7C3AED",
-                        color: "#fff",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        borderRadius: 6,
-                        padding: "5px 10px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      이 횟수로 채우기
-                    </button>
+                    <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 4 }}>
+                      📅 전달({lastMonthNight.month}월) 근무표 야간 {lastMonthNight.count}일
+                    </div>
+                    {lastMonthNight.count - (finalNight ?? 0) > 0 && (
+                      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
+                        − 야간에 쓴 휴가 {(lastMonthNight.count - (finalNight ?? 0))}일 차감
+                      </div>
+                    )}
+                    <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>
+                      = 이번 달 야간 {finalNight}회 (자동)
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                    교대 조원만 야간이 자동계산돼요 (교번은 준비중)
                   </div>
                 )}
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="number"
-                    value={nightCount}
-                    onChange={(e) => setNightCount(Number(e.target.value) || 0)}
-                    style={{
-                      width: 80,
-                      padding: "10px 12px",
-                      borderRadius: 8,
-                      border: "1px solid #E5E7EB",
-                      fontSize: 15,
-                      textAlign: "right",
-                    }}
-                  />
-                  <span style={{ fontSize: 14, color: "#6B7280" }}>
-                    회 (이번 달 야간 횟수)
-                  </span>
-                </div>
                 <div
                   style={{
                     marginTop: 8,
