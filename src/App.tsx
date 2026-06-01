@@ -12693,7 +12693,92 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
             )}
           </div>
 
-          {loadingMembers ? (
+                    {loadingMembers ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>
+              불러오는 중...
+            </div>
+          ) : (
+            <div>
+              {!memberSearch && favorites.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 8 }}>
+                    ⭐ 즐겨찾기
+                  </div>
+                  {favorites.map((m) => (
+                    <div
+                      key={"fav" + m.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px 4px",
+                        borderBottom: "1px solid #F3F4F6",
+                      }}
+                    >
+                      <div
+                        onClick={() => setSelectedMember(m)}
+                        style={{ flex: 1, cursor: "pointer", fontSize: 15, color: "#1F2937" }}
+                      >
+                        {m.name}
+                      </div>
+                      <button
+                        onClick={() => removeFavorite(m.fav_id)}
+                        style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer" }}
+                      >
+                        ⭐
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {memberSearch ? (
+                members
+                  .filter((m) => (m.name || "").includes(memberSearch))
+                  .map((m) => {
+                    const isFav = favorites.some((f) => f.id === m.id);
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "12px 4px",
+                          borderBottom: "1px solid #F3F4F6",
+                        }}
+                      >
+                        <div
+                          onClick={() => setSelectedMember(m)}
+                          style={{ flex: 1, cursor: "pointer", fontSize: 15, color: "#1F2937" }}
+                        >
+                          {m.name}
+                        </div>
+                        <button
+                          onClick={() =>
+                            isFav
+                              ? removeFavorite(favorites.find((f) => f.id === m.id).fav_id)
+                              : addFavorite(m)
+                          }
+                          style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer" }}
+                        >
+                          {isFav ? "⭐" : "☆"}
+                        </button>
+                      </div>
+                    );
+                  })
+              ) : (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#C4B5FD", fontSize: 13 }}>
+                  이름을 입력해서 검색하세요
+                  <br />
+                  <span style={{ fontSize: 11, color: "#D1D5DB" }}>
+                    ☆ 버튼으로 즐겨찾기 추가 가능해요
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
             <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>
               불러오는 중...
             </div>
