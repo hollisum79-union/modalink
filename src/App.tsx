@@ -16279,7 +16279,7 @@ const { data: nightData } = await supabase
                     textAlign: "right",
                   }}
                 >
-                  {nightPay.toLocaleString("ko-KR")}원
+                  총 {nightTotalHours}시간 · {nightPay.toLocaleString("ko-KR")}원
                 </div>
               </div>
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
@@ -16301,7 +16301,7 @@ const { data: nightData } = await supabase
                   pay={overtimePay}
                   color="#0EA5E9"
                 />
-                {overtimeTotalHours > 8 && (
+               {overtimeTotalHours > 8 && (
                   <div
                     style={{
                       marginTop: 8,
@@ -16314,6 +16314,19 @@ const { data: nightData } = await supabase
                   >
                     8시간(1.5배) + {(overtimeTotalHours - 8).toFixed(1)}
                     시간(2배) 분리 계산
+                  </div>
+                )}
+                {(overtimeHour > 0 || overtimeMin > 0) && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: "#0EA5E9",
+                      textAlign: "right",
+                    }}
+                  >
+                    총 {overtimeHour}시간 {overtimeMin}분 · {overtimePay.toLocaleString("ko-KR")}원
                   </div>
                 )}
               </div>
