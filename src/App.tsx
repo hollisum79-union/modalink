@@ -9793,47 +9793,75 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록 (여러 장)</div>
         {/* ===== 엑셀(CSV) 한 번에 업로드 ===== */}
     <label style={{ display: "block", padding: 16, border: "2px dashed #6EE7B7", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#059669", fontSize: 14, fontWeight: 700, marginBottom: 8, background: "#F0FDF4" }}>
-      📄 엑셀(CSV) 파일로 한 번에 올리기
-      <input type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={(e) => {
+            📄 엑셀 또는 CSV 파일로 한 번에 올리기
+            <input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ display: "none" }} onChange={(e) => {
         const f = e.target.files && e.target.files[0];
         if (!f) return;
         setDiaError("");
+                const parseRows = (header: string[], dataRows: string[][]) => {
+          const col: any = {};
+          header.forEach((h, i) => { col[String(h).trim()] = i; });
+          const toH = (v: any) => {
+            const s = String(v || "").trim();
+            if (s.includes(":")) { const p = s.split(":").map(Number); return Math.round(((p[0] || 0) + (p[1] || 0) / 60 + (p[2] || 0) / 3600) * 100) / 100; }
+            return Number(s) || 0;
+          };
+          const hhmm = (v: any) => { const s = String(v || "").trim(); const p = s.split(":"); return p.length >= 2 ? p[0].padStart(2, "0") + ":" + p[1].padStart(2, "0") : s; };
+          const g = (c: string[], name: string) => c[col[name]] ?? "";
+          const rows = dataRows.map((c) => ({
+            dia_no: Number(g(c, "근무번호")) || 0,
+            day_type: String(g(c, "일자형태") || ""),
+            start_time: hhmm(g(c, "출근시간")),
+            end_time: hhmm(g(c, "퇴근시간")),
+            work_hours: toH(g(c, "근무시간")),
+            drive_hours: toH(g(c, "운전시간")),
+            prep_hours: toH(g(c, "준비시간")),
+            ride_hours: toH(g(c, "편승시간")),
+            wait_hours: toH(g(c, "대기시간")),
+            clean_hours: toH(g(c, "정리시간")),
+            watch_hours: toH(g(c, "감시시간")),
+            night_hours: toH(g(c, "심야시간")),
+            edu_hours: toH(g(c, "교육시간")),
+            distance_km: Number(g(c, "주행거리")) || 0,
+            photo: "",
+          })).filter((r) => r.dia_no > 0);
+          setCsvRows(rows);
+        };
+        const name = (f.name || "").toLowerCase();
+        if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+          const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+            if ((window as any).XLSX) return resolve((window as any).XLSX);
+            const s = document.createElement("script");
+            s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+            s.onload = () => resolve((window as any).XLSX);
+            s.onerror = () => reject(new Error("엑셀 도구 로드 실패"));
+            document.body.appendChild(s);
+          });
+          ensureXLSX().then((XLSX) => {
+            const fr = new FileReader();
+            fr.onload = (ev) => {
+              try {
+                const data = new Uint8Array(ev.target!.result as ArrayBuffer);
+                const wb = XLSX.read(data, { type: "array" });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+                const header = (aoa[0] || []).map((h: any) => String(h));
+                parseRows(header, aoa.slice(1).map((r) => r.map((c: any) => (c == null ? "" : String(c)))));
+              } catch (err) { setDiaError("엑셀 읽기 실패: " + String(err)); }
+            };
+            fr.readAsArrayBuffer(f);
+          }).catch((err) => setDiaError(String(err)));
+          return;
+        }
         const reader = new FileReader();
         reader.onload = () => {
           try {
             const text = String(reader.result || "");
             const lines = text.split(/\r?\n/).filter((l) => l.trim());
             const header = lines[0].split(",").map((h) => h.trim());
-            const col: any = {};
-            header.forEach((h, i) => { col[h] = i; });
-            const toH = (v: any) => {
-              const s = String(v || "").trim();
-              if (s.includes(":")) { const p = s.split(":").map(Number); return Math.round(((p[0] || 0) + (p[1] || 0) / 60 + (p[2] || 0) / 3600) * 100) / 100; }
-              return Number(s) || 0;
-            };
-            const hhmm = (v: any) => { const s = String(v || "").trim(); const p = s.split(":"); return p.length >= 2 ? p[0].padStart(2, "0") + ":" + p[1].padStart(2, "0") : s; };
-            const rows = lines.slice(1).map((line) => {
-              const c = line.split(",");
-              const g = (name: string) => c[col[name]] ?? "";
-              return {
-                dia_no: Number(g("근무번호")) || 0,
-                day_type: String(g("일자형태") || ""),
-                start_time: hhmm(g("출근시간")),
-                end_time: hhmm(g("퇴근시간")),
-                work_hours: toH(g("근무시간")),
-                drive_hours: toH(g("운전시간")),
-                prep_hours: toH(g("준비시간")),
-                ride_hours: toH(g("편승시간")),
-                wait_hours: toH(g("대기시간")),
-                clean_hours: toH(g("정리시간")),
-                watch_hours: toH(g("감시시간")),
-                night_hours: toH(g("심야시간")),
-                edu_hours: toH(g("교육시간")),
-                distance_km: Number(g("주행거리")) || 0,
-                photo: "",
-              };
-            }).filter((r) => r.dia_no > 0);
-            setCsvRows(rows);
+            parseRows(header, lines.slice(1).map((line) => line.split(",")));
+
+           
           } catch (err) { setDiaError("CSV 읽기 실패: " + String(err)); }
         };
         reader.readAsText(f, "utf-8");
