@@ -11473,6 +11473,11 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   const [memberSearch, setMemberSearch] = React.useState("");
   const [favorites, setFavorites] = React.useState<any[]>([]);
   const [favMode, setFavMode] = React.useState(false);
+  const [now, setNow] = React.useState(new Date());
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const today = new Date();
 
@@ -13254,112 +13259,112 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
       }}
     >
       {/* 헤더 */}
+            {/* 헤더 (흰 배너) */}
       <div
         style={{
-         background:
-            "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
-          padding: "calc(env(safe-area-inset-top) + 14px) 20px 18px",
-          borderRadius: 28,
+          background: "#fff",
+          padding: "calc(env(safe-area-inset-top) + 14px) 16px 14px",
+          borderBottom: "1px solid #EEF0F3",
         }}
       >
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 10,
+            textAlign: "center",
+            fontSize: 16,
+            fontWeight: 800,
+            color: "#4F46E5",
+            letterSpacing: "-0.3px",
           }}
         >
-          <button
-            onClick={onBack}
-            style={{
-              background: "rgba(255,255,255,0.15)",
-                border: "none",
-                borderRadius: "50%",
-                width: 36,
-                height: 36,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-            }}
-          >
-          <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
-          </button>
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 16,
-            }}
-          >
-            <button
-              onClick={() => {
-                const p = getPrevMonth(currentYear, currentMonth);
-                setCurrentYear(p.y);
-                setCurrentMonth(p.m);
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#fff",
-                fontSize: 20,
-                cursor: "pointer",
-              }}
-            >
-              ‹‹
-            </button>
-            <div style={{ color: "#fff", fontSize: 17, fontWeight: 700 }}>
-              {currentYear}년 {currentMonth}월
-            </div>
-            <button
-              onClick={() => {
-                const n = getNextMonth(currentYear, currentMonth);
-                setCurrentYear(n.y);
-                setCurrentMonth(n.m);
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#fff",
-                fontSize: 20,
-                cursor: "pointer",
-              }}
-            >
-              ››
-            </button>
-          </div>
-          <div style={{ width: 44 }} />
+          {now.getFullYear()}년 {now.getMonth() + 1}월 {now.getDate()}일{" "}
+          {["일", "월", "화", "수", "목", "금", "토"][now.getDay()]}요일{" "}
+          {String(now.getHours()).padStart(2, "0")}:
+          {String(now.getMinutes()).padStart(2, "0")}:
+          {String(now.getSeconds()).padStart(2, "0")}
         </div>
+
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
-            paddingBottom: 4,
+            marginTop: 5,
           }}
         >
-          <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>
-            {selectedCrew}조 근무표
-          </div>
+          <span style={{ fontSize: 12, color: "#6B7280" }}>
+            사용자 : <b style={{ color: "#1F2937" }}>{user?.name}</b>
+            {user?.work_group ? ` ( ${user.work_group} )` : ""}
+          </span>
           <button
-            onClick={() => setSelectedCrew(null)}
+            onClick={onBack}
             style={{
-              background: "rgba(255,255,255,0.18)",
-              border: "0.5px solid rgba(255,255,255,0.25)",
-              color: "#fff",
-              fontSize: 11,
-              fontWeight: 500,
+              background: "#EEF2FF",
+              border: "none",
+              color: "#6366F1",
+              fontSize: 12,
               cursor: "pointer",
-              padding: "4px 10px",
-              borderRadius: 100,
+              padding: "3px 11px",
+              borderRadius: 999,
               fontFamily: "inherit",
             }}
           >
-            조 변경
+            홈
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 14,
+          }}
+        >
+          <button
+            onClick={() => {
+              const p = getPrevMonth(currentYear, currentMonth);
+              setCurrentYear(p.y);
+              setCurrentMonth(p.m);
+            }}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              background: "#F3F4F6",
+              border: "none",
+              color: "#6B7280",
+              fontSize: 14,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            ‹
+          </button>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>
+              {currentYear}년 {currentMonth}월
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const n = getNextMonth(currentYear, currentMonth);
+              setCurrentYear(n.y);
+              setCurrentMonth(n.m);
+            }}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              background: "#F3F4F6",
+              border: "none",
+              color: "#6B7280",
+              fontSize: 14,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            ›
           </button>
         </div>
       </div>
