@@ -15371,6 +15371,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [hfDay, setHfDay] = React.useState<number>(0);
   const [hfNight, setHfNight] = React.useState<number>(0);
   const [hfCount, setHfCount] = React.useState<number>(0);
+  const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
+  const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
 
   // 기본급표 + 저장된 설정 불러오기
   React.useEffect(() => {
