@@ -17422,6 +17422,10 @@ function LeaveScreen({ onBack, user }) {
 }
 function WorkAdjustScreen({ onBack, user }) {
   const [activeTab, setActiveTab] = useState("대기충당");
+  const [diaPhoto, setDiaPhoto] = useState(null);
+  const [diaLoading, setDiaLoading] = useState(false);
+  const [diaResult, setDiaResult] = useState(null);
+  const [diaError, setDiaError] = useState("");
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -17455,7 +17459,7 @@ function WorkAdjustScreen({ onBack, user }) {
       Number(formDiaNum) >= diaMin &&
       Number(formDiaNum) <= diaMax);
 
-  const tabs = ["대기충당", "지정근무", "지원근무", "휴무충당", "교번교체"];
+ const tabs = ["대기충당", "지정근무", "지원근무", "휴무충당", "교번교체", "다이아"];
 
   const tabTypeMap = {
     대기충당: "standby",
@@ -17819,8 +17823,80 @@ function WorkAdjustScreen({ onBack, user }) {
             : "💡 야간 근무는 자동으로 임금계산기에 반영됩니다."}
         </div>
 
-        {/* 교번교체 안내 */}
-        {activeTab === "교번교체" ? (
+       {/* 다이아 입력 */}
+        {activeTab === "다이아" ? (
+          <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록</div>
+            <label style={{ display: "block", padding: 16, border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+              {diaPhoto ? "사진 다시 선택" : "📷 다이아 시간표 사진 선택"}
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => { setDiaPhoto(String(reader.result)); setDiaResult(null); setDiaError(""); };
+                reader.readAsDataURL(f);
+              }} />
+            </label>
+            {diaPhoto && (<img src={diaPhoto} alt="미리보기" style={{ width: "100%", borderRadius: 12, marginBottom: 12 }} />)}
+            {diaPhoto && !diaResult && (
+              <button disabled={diaLoading} onClick={async () => {
+                setDiaLoading(true); setDiaError("");
+                try {
+                  const comma = diaPhoto.indexOf(",");
+                  const meta = diaPhoto.slice(5, diaPhoto.indexOf(";"));
+                  const b64 = diaPhoto.slice(comma + 1);
+                  const r = await fetch("/.netlify/functions/read-dia", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
+                  const d = await r.json();
+                  if (d.error) throw new Error(d.error);
+                  const txt = (d.text || "").replace(/```json|```/g, "").trim();
+                  setDiaResult(JSON.parse(txt));
+                } catch (err) { setDiaError("읽기 실패: " + String(err)); }
+                setDiaLoading(false);
+              }} style={{ width: "100%", padding: 14, background: diaLoading ? "#9CA3AF" : "linear-gradient(135deg,#4F46E5,#6366F1)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                {diaLoading ? "AI가 읽는 중..." : "AI로 읽기"}
+              </button>
+            )}
+            {diaError && <div style={{ color: "#DC2626", fontSize: 13, marginTop: 10 }}>{diaError}</div>}
+            {diaResult && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>읽은 결과 (수정 가능)</div>
+                {[["dia_no","다이아번호"],["distance_km","주행키로"],["start_time","출근시간"],["work_hours","인정근무"],["drive_hours","운전"],["wait_hours","대기"],["ride_hours","편승"],["watch_hours","감시"],["edu_hours","교육"],["prep_hours","준비"],["clean_hours","정리"],["night_hours","심야"]].map(([k, label]) => (
+                  <div key={k} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ width: 70, fontSize: 12, color: "#6B7280" }}>{label}</span>
+                    <input value={diaResult[k] ?? ""} onChange={(e) => setDiaResult({ ...diaResult, [k]: e.target.value })} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", color: "#1F2937" }} />
+                  </div>
+                ))}
+                <button onClick={async () => {
+                  setDiaLoading(true);
+                  try {
+                    const row = {
+                      dia_no: Number(diaResult.dia_no) || 0,
+                      distance_km: Number(diaResult.distance_km) || 0,
+                      start_time: String(diaResult.start_time || ""),
+                      work_hours: Number(diaResult.work_hours) || 0,
+                      drive_hours: Number(diaResult.drive_hours) || 0,
+                      wait_hours: Number(diaResult.wait_hours) || 0,
+                      ride_hours: Number(diaResult.ride_hours) || 0,
+                      watch_hours: Number(diaResult.watch_hours) || 0,
+                      edu_hours: Number(diaResult.edu_hours) || 0,
+                      prep_hours: Number(diaResult.prep_hours) || 0,
+                      clean_hours: Number(diaResult.clean_hours) || 0,
+                      night_hours: Number(diaResult.night_hours) || 0,
+                      photo: diaPhoto || "",
+                    };
+                    const { error } = await supabase.from("kyobun_dia").upsert(row);
+                    if (error) throw new Error(error.message);
+                    showToast("다이아 " + row.dia_no + "번 저장됨!", "success");
+                    setDiaPhoto(null); setDiaResult(null);
+                  } catch (err) { setDiaError("저장 실패: " + String(err)); }
+                  setDiaLoading(false);
+                }} style={{ width: "100%", marginTop: 8, padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                  이대로 저장
+                </button>
+              </div>
+            )}
+          </div>
+        ) : activeTab === "교번교체" ? (
           <div
             style={{
               background: "#fff",
