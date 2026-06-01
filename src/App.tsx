@@ -9019,7 +9019,8 @@ function AdminScreen({ onBack, user, onNavigate }) {
   const [diaLoading, setDiaLoading] = useState(false);
   const [diaResult, setDiaResult] = useState(null);
     const [diaError, setDiaError] = useState("");
-  const [diaList, setDiaList] = useState([]);
+    const [diaList, setDiaList] = useState([]);
+  const [csvRows, setCsvRows] = useState<any[]>([]);
 
   const [pendingMembers, setPendingMembers] = useState(dummyPendingMembers);
 
