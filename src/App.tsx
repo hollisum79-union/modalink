@@ -16440,6 +16440,49 @@ const { data: nightData } = await supabase
                   </div>
                 )}
               </div>
+
+              <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
+                    휴무충당
+                  </div>
+                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                    1회 근무의 주간·야간 시간과 횟수 (본인 입력)
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: "#6B7280", width: 56 }}>☀️ 주간</span>
+                  <input
+                    type="number"
+                    value={hfDay}
+                    onChange={(e) => setHfDay(Number(e.target.value) || 0)}
+                    style={{ width: 56, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }}
+                  />
+                  <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+                  <span style={{ fontSize: 13, color: "#6B7280", width: 56, marginLeft: 8 }}>🌙 야간</span>
+                  <input
+                    type="number"
+                    value={hfNight}
+                    onChange={(e) => setHfNight(Number(e.target.value) || 0)}
+                    style={{ width: 56, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }}
+                  />
+                  <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="number"
+                    value={hfCount}
+                    onChange={(e) => setHfCount(Number(e.target.value) || 0)}
+                    style={{ width: 80, padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 15, textAlign: "right" }}
+                  />
+                  <span style={{ fontSize: 14, color: "#6B7280" }}>회 (이번 달 횟수)</span>
+                </div>
+                {hfCount > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#DC2626", textAlign: "right" }}>
+                    {holidayFillPay.toLocaleString("ko-KR")}원
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 명세서 */}
@@ -16511,6 +16554,14 @@ const { data: nightData } = await supabase
                           {
                             label: `연장근로수당 (${overtimeHour}시간 ${overtimeMin}분)`,
                             amount: overtimePay,
+                          },
+                        ]
+                      : []),
+                    ...(holidayFillPay > 0
+                      ? [
+                          {
+                            label: `휴무충당 (${hfCount}회)`,
+                            amount: holidayFillPay,
                           },
                         ]
                       : []),
