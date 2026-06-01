@@ -15341,6 +15341,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [nightMin, setNightMin] = React.useState<number>(0);
   const [nightCount, setNightCount] = React.useState<number>(0);
   const [worktypeSettings, setWorktypeSettings] = React.useState<any[]>([]);
+  const [shiftBase, setShiftBase] = React.useState<any>(null);
   const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
   const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
   const [showDeductInfo, setShowDeductInfo] = React.useState(false);
@@ -15361,6 +15362,14 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         .from("worktype_pay_settings")
         .select("*");
       if (wtData) setWorktypeSettings(wtData);
+
+      const { data: baseData } = await supabase
+        .from("shift_base")
+        .select("*")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (baseData) setShiftBase(baseData);
 const { data: nightData } = await supabase
         .from("night_pay_settings")
         .select("*");
@@ -15411,6 +15420,42 @@ const { data: nightData } = await supabase
       setTimeout(() => setSaveMsg(""), 2500);
     }
   };
+
+  const calcShift = (crew: string, date: Date): string => {
+    if (!shiftBase) return "";
+    const cycle = ["주간", "야간", "비번", "휴무"];
+    const baseDate = new Date(shiftBase.base_date);
+    baseDate.setHours(0, 0, 0, 0);
+    const target = new Date(date);
+    target.setHours(0, 0, 0, 0);
+    const diff = Math.round((target.getTime() - baseDate.getTime()) / 86400000);
+    const bases: Record<string, number> = {
+      A: cycle.indexOf(shiftBase.a_work_type),
+      B: cycle.indexOf(shiftBase.b_work_type),
+      C: cycle.indexOf(shiftBase.c_work_type),
+      D: cycle.indexOf(shiftBase.d_work_type),
+    };
+    if (bases[crew] === undefined) return "";
+    return cycle[(((bases[crew] + diff) % 4) + 4) % 4];
+  };
+
+  const getLastMonthNight = () => {
+    if (!shiftBase || !user?.work_group) return null;
+    if (!["A", "B", "C", "D"].includes(user.work_group)) return null;
+    const now = new Date();
+    const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastPrev = new Date(firstThis.getTime() - 86400000);
+    const py = lastPrev.getFullYear();
+    const pm = lastPrev.getMonth();
+    const days = new Date(py, pm + 1, 0).getDate();
+    let count = 0;
+    for (let d = 1; d <= days; d++) {
+      if (calcShift(user.work_group, new Date(py, pm, d)) === "야간") count++;
+    }
+    return { count, month: pm + 1 };
+  };
+
+  const lastMonthNight = getLastMonthNight();
 
   const getBasicSalary = () => {
     if (!selectedGrade || !selectedHobong) return null;
@@ -16250,6 +16295,38 @@ const { data: nightData } = await supabase
                 ) : (
                   <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 8 }}>
                     근무형태를 먼저 선택하세요
+                  </div>
+                )}
+               {lastMonthNight && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      background: "#F5F3FF",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: "#6D28D9" }}>
+                      📅 전달({lastMonthNight.month}월) 야간 {lastMonthNight.count}일
+                    </span>
+                    <button
+                      onClick={() => setNightCount(lastMonthNight.count)}
+                      style={{
+                        border: "none",
+                        background: "#7C3AED",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        borderRadius: 6,
+                        padding: "5px 10px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      이 횟수로 채우기
+                    </button>
                   </div>
                 )}
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
