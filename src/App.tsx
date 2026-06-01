@@ -10211,7 +10211,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                 </button>
               </div>
             </div>
-          ))}
+          )}
       </div>
     </div>
   );
