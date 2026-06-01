@@ -15,7 +15,7 @@ function EmblemImg({ style }: any) {
   if (err) {
     return (
       <div
-        style={{f
+        style={{
           ...style,
           background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
           display: "flex",
