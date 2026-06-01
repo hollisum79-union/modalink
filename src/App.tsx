@@ -9034,7 +9034,7 @@ function AdminScreen({ onBack, user, onNavigate }) {
     },
     {
       id: "workmanage",
-      label: "근무 관리",
+      label: "교번근무 관리",
       icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
       color: "#4F46E5",
       bg: "#EEF2FF",
@@ -15339,6 +15339,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
   const [nightHour, setNightHour] = React.useState<number>(0);
   const [nightMin, setNightMin] = React.useState<number>(0);
+  const [nightCount, setNightCount] = React.useState<number>(0);
+  const [worktypeSettings, setWorktypeSettings] = React.useState<any[]>([]);
   const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
   const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
   const [showDeductInfo, setShowDeductInfo] = React.useState(false);
@@ -15353,7 +15355,12 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         .from("salary_table")
         .select("*")
         .order("hobong", { ascending: true });
-      if (salaryData) setSalaryTable(salaryData);
+     if (salaryData) setSalaryTable(salaryData);
+
+      const { data: wtData } = await supabase
+        .from("worktype_pay_settings")
+        .select("*");
+      if (wtData) setWorktypeSettings(wtData);
 const { data: nightData } = await supabase
         .from("night_pay_settings")
         .select("*");
@@ -15466,7 +15473,9 @@ const { data: nightData } = await supabase
   const tongsangWage = (basicSalary ?? 0) + totalAllowance;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
-  const nightTotalHours = nightHour + nightMin / 60;
+  const nightHoursPerShift =
+    worktypeSettings.find((w) => w.work_type === workType)?.night_hours || 0;
+  const nightTotalHours = nightHoursPerShift * nightCount;
   const nightPay = Math.round(hourlyWage * 0.5 * nightTotalHours);
 
   const overtimeTotalHours = overtimeHour + overtimeMin / 60;
@@ -16234,14 +16243,44 @@ const { data: nightData } = await supabase
                     22:00~06:00 · 가산율 0.5배
                   </div>
                 </div>
-                <TimeInput
-                  hour={nightHour}
-                  min={nightMin}
-                  onHourChange={setNightHour}
-                  onMinChange={setNightMin}
-                  pay={nightPay}
-                  color="#7C3AED"
-                />
+                {nightHoursPerShift > 0 ? (
+                  <div style={{ fontSize: 12, color: "#7C3AED", marginBottom: 8 }}>
+                    🌙 야간 1회 = {nightHoursPerShift}시간 (관리자 설정)
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 8 }}>
+                    근무형태를 먼저 선택하세요
+                  </div>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="number"
+                    value={nightCount}
+                    onChange={(e) => setNightCount(Number(e.target.value) || 0)}
+                    style={{
+                      width: 80,
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #E5E7EB",
+                      fontSize: 15,
+                      textAlign: "right",
+                    }}
+                  />
+                  <span style={{ fontSize: 14, color: "#6B7280" }}>
+                    회 (이번 달 야간 횟수)
+                  </span>
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: "#7C3AED",
+                    textAlign: "right",
+                  }}
+                >
+                  {nightPay.toLocaleString("ko-KR")}원
+                </div>
               </div>
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
@@ -16339,7 +16378,7 @@ const { data: nightData } = await supabase
                     ...(nightPay > 0
                       ? [
                           {
-                            label: `야간근로수당 (${nightHour}시간 ${nightMin}분)`,
+                           label: `야간근로수당 (${nightCount}회)`,
                             amount: nightPay,
                           },
                         ]
