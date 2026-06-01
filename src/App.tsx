@@ -12733,7 +12733,8 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
 
               {memberSearch ? (
                 members
-                  .filter((m) => (m.name || "").includes(memberSearch))
+                  .filter((m) => (m.name || "").replace(/\s/g, "").includes(memberSearch.replace(/\s/g, ""))
+
                   .map((m) => {
                     const isFav = favorites.some((f) => f.id === m.id);
                     return (
@@ -12907,29 +12908,18 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
                   </div>
                   {work && (
                     <>
-                      <div
+                                           <div
                         style={{
                           textAlign: "center",
-                          background: info.bg,
-                          color: info.text,
-                          borderRadius: 6,
-                          padding: "2px 0",
-                          fontSize: 11,
-                          fontWeight: 700,
-                          margin: "0 2px 2px",
-                        }}
-                      >
-                        {info.short}
-                      </div>
-                      <div
-                        style={{
-                          textAlign: "center",
-                          fontSize: 9,
-                          color: "#9CA3AF",
+                          fontSize: 18,
+                          fontWeight: 800,
+                          color: "#1F2937",
+                          marginTop: 2,
                         }}
                       >
                         {work.dia}
                       </div>
+
                                             {diaInfo && diaInfo.start_time && (
                         <div
                           style={{
