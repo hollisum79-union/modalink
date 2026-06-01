@@ -9818,9 +9818,18 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
       </button>
     )}
     {diaError && <div style={{ color: "#DC2626", fontSize: 13, marginTop: 10 }}>{diaError}</div>}
-    {diaResult && (
+        {diaResult && (
       <div style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>읽은 결과 (수정 가능)</div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>구분 (저장 전 꼭 선택)</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+          {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((d) => {
+            const on = (diaResult.day_type || "평일") === d;
+            return (
+              <button key={d} onClick={() => setDiaResult({ ...diaResult, day_type: d })} style={{ padding: "7px 14px", borderRadius: 100, border: on ? "none" : "1px solid #E5E7EB", background: on ? "linear-gradient(135deg,#4F46E5,#6366F1)" : "#fff", color: on ? "#fff" : "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{d}</button>
+            );
+          })}
+        </div>
         {[["dia_no","다이아번호"],["distance_km","주행키로"],["start_time","출근시간"],["work_hours","인정근무"],["drive_hours","운전"],["wait_hours","대기"],["ride_hours","편승"],["watch_hours","감시"],["edu_hours","교육"],["prep_hours","준비"],["clean_hours","정리"],["night_hours","심야"]].map(([k, label]) => (
           <div key={k} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <span style={{ width: 70, fontSize: 12, color: "#6B7280" }}>{label}</span>
@@ -9841,6 +9850,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
             };
             const row = {
               dia_no: Number(diaResult.dia_no) || 0,
+              day_type: String(diaResult.day_type || "평일"),
               distance_km: Number(diaResult.distance_km) || 0,
               start_time: String(diaResult.start_time || ""),
               work_hours: toH(diaResult.work_hours),
@@ -9856,7 +9866,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
             };
             const { error } = await supabase.from("kyobun_dia").upsert(row);
             if (error) throw new Error(error.message);
-            alert("다이아 " + row.dia_no + "번 저장됨!");
+            alert("다이아 " + row.dia_no + "번 (" + row.day_type + ") 저장됨!");
             setDiaPhoto(null); setDiaResult(null);
           } catch (err) { setDiaError("저장 실패: " + String(err)); }
           setDiaLoading(false);
