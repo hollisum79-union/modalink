@@ -15,7 +15,7 @@ function EmblemImg({ style }: any) {
   if (err) {
     return (
       <div
-        style={{
+        style={{f
           ...style,
           background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
           display: "flex",
@@ -12878,65 +12878,82 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
                       : "2px solid transparent",
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: isT ? 800 : 500,
-                      textAlign: "center",
-                      marginBottom: 4,
-                      color: isSun ? "#EF4444" : isSat ? "#3B82F6" : "#1F2937",
-                    }}
-                  >
-                    {isT ? (
-                      <span
-                        style={{
-                          background: "#4F46E5",
-                          color: "#fff",
-                          borderRadius: "50%",
-                          width: 22,
-                          height: 22,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 12,
-                        }}
-                      >
-                        {day}
-                      </span>
-                    ) : (
-                      day
-                    )}
-                  </div>
-                  {work && (
-                    <>
-                                           <div
-                        style={{
-                          textAlign: "center",
-                          fontSize: 18,
-                          fontWeight: 800,
-                          color: "#1F2937",
-                          marginTop: 2,
-                        }}
-                      >
-                        {work.dia}
-                      </div>
-
-                                            {diaInfo && diaInfo.start_time && (
+                                   {(() => {
+                    const isHoli = isHolidayDate(date) && !isSun && !isSat;
+                    const dayColor = isSun || isHoli ? "#EF4444" : isSat ? "#3B82F6" : "#111827";
+                    const subColor = isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#374151";
+                    const isRest = work && work.type === "휴무";
+                    const isOff = work && work.type === "비번";
+                    return (
+                      <>
                         <div
                           style={{
-                            textAlign: "center",
                             fontSize: 10,
-                            fontWeight: 700,
-                            color: "#4F46E5",
-                            marginTop: 1,
+                            fontWeight: 600,
+                            textAlign: "center",
+                            marginBottom: 4,
+                            color: isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#9CA3AF",
                           }}
                         >
-                          {diaInfo.start_time}
+                          {isT ? (
+                            <span
+                              style={{
+                                background: "#4F46E5",
+                                color: "#fff",
+                                borderRadius: "50%",
+                                width: 17,
+                                height: 17,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 9.5,
+                              }}
+                            >
+                              {day}
+                            </span>
+                          ) : (
+                            day
+                          )}
                         </div>
-                      )}
+                        {work && (isRest ? (
+                          <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: subColor, marginTop: 7 }}>
+                            휴
+                          </div>
+                        ) : isOff ? (
+                          <div style={{ textAlign: "center", fontSize: 16, color: "#D1D5DB", marginTop: 7 }}>
+                            ~
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ textAlign: "center", fontSize: 15, fontWeight: 800, color: dayColor, lineHeight: 1, marginBottom: 4 }}>
+                              {work.dia}
+                            </div>
+                            {diaInfo && diaInfo.start_time && (
+                              <div
+                                style={{
+                                  textAlign: "center",
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  color: dayColor,
+                                  background: isHoli ? "#FEE2E2" : "#F3F4F6",
+                                  borderRadius: 7,
+                                  padding: "2px 6px",
+                                  margin: "0 auto",
+                                  display: "inline-block",
+                                  letterSpacing: "-0.5px",
+                                  whiteSpace: "nowrap",
+                                  maxWidth: "100%",
+                                }}
+                              >
+                                {diaInfo.start_time}
+                              </div>
+                            )}
+                          </>
+                        ))}
+                      </>
+                    );
+                  })()}
 
-                    </>
-                  )}
                 </div>
               );
             })}
