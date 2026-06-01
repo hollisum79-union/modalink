@@ -9903,7 +9903,9 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
     )}
   </div>
 )}
+        {activeMenu === "vote" &&
           (voteDone ? (
+
             <div
               style={{
                 display: "flex",
