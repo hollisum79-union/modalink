@@ -12731,10 +12731,11 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
                 </div>
               )}
 
-              {memberSearch ? (
+                        {memberSearch ? (
                 members
-                  .filter((m) => (m.name || "").replace(/\s/g, "").includes(memberSearch.replace(/\s/g, ""))
-
+                  .filter((m) =>
+                    (m.name || "").replace(/\s/g, "").includes(memberSearch.replace(/\s/g, ""))
+                  )
                   .map((m) => {
                     const isFav = favorites.some((f) => f.id === m.id);
                     return (
