@@ -9830,19 +9830,28 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
         <button onClick={async () => {
           setDiaLoading(true);
           try {
+            const toH = (v) => {
+              const s = String(v || "").trim();
+              if (s.includes(":")) {
+                const p = s.split(":").map(Number);
+                const h = p[0] || 0, m = p[1] || 0, sec = p[2] || 0;
+                return Math.round((h + m / 60 + sec / 3600) * 100) / 100;
+              }
+              return Number(s) || 0;
+            };
             const row = {
               dia_no: Number(diaResult.dia_no) || 0,
               distance_km: Number(diaResult.distance_km) || 0,
               start_time: String(diaResult.start_time || ""),
-              work_hours: Number(diaResult.work_hours) || 0,
-              drive_hours: Number(diaResult.drive_hours) || 0,
-              wait_hours: Number(diaResult.wait_hours) || 0,
-              ride_hours: Number(diaResult.ride_hours) || 0,
-              watch_hours: Number(diaResult.watch_hours) || 0,
-              edu_hours: Number(diaResult.edu_hours) || 0,
-              prep_hours: Number(diaResult.prep_hours) || 0,
-              clean_hours: Number(diaResult.clean_hours) || 0,
-              night_hours: Number(diaResult.night_hours) || 0,
+              work_hours: toH(diaResult.work_hours),
+              drive_hours: toH(diaResult.drive_hours),
+              wait_hours: toH(diaResult.wait_hours),
+              ride_hours: toH(diaResult.ride_hours),
+              watch_hours: toH(diaResult.watch_hours),
+              edu_hours: toH(diaResult.edu_hours),
+              prep_hours: toH(diaResult.prep_hours),
+              clean_hours: toH(diaResult.clean_hours),
+              night_hours: toH(diaResult.night_hours),
               photo: diaPhoto || "",
             };
             const { error } = await supabase.from("kyobun_dia").upsert(row);
