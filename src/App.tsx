@@ -9018,7 +9018,9 @@ function AdminScreen({ onBack, user, onNavigate }) {
   const [diaPhoto, setDiaPhoto] = useState(null);
   const [diaLoading, setDiaLoading] = useState(false);
   const [diaResult, setDiaResult] = useState(null);
-  const [diaError, setDiaError] = useState("");
+    const [diaError, setDiaError] = useState("");
+  const [diaList, setDiaList] = useState([]);
+
   const [pendingMembers, setPendingMembers] = useState(dummyPendingMembers);
 
   // 공지 작성
@@ -9787,97 +9789,120 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
         
 {activeMenu === "kyobundia" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
-    <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록</div>
+    <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록 (여러 장)</div>
     <label style={{ display: "block", padding: 16, border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-      {diaPhoto ? "사진 다시 선택" : "📷 다이아 시간표 사진 선택"}
-      <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
-        const f = e.target.files && e.target.files[0];
-        if (!f) return;
-        const reader = new FileReader();
-        reader.onload = () => { setDiaPhoto(String(reader.result)); setDiaResult(null); setDiaError(""); };
-        reader.readAsDataURL(f);
+      📷 다이아 사진 여러 장 선택
+      <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        setDiaError(""); setDiaList([]);
+        let loaded = 0;
+        const arr = new Array(files.length);
+        files.forEach((f, i) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            arr[i] = { photo: String(reader.result), result: null, day_type: "평일", status: "대기" };
+            loaded++;
+            if (loaded === files.length) setDiaList([...arr]);
+          };
+          reader.readAsDataURL(f);
+        });
       }} />
     </label>
-    {diaPhoto && (<img src={diaPhoto} alt="미리보기" style={{ width: "100%", borderRadius: 12, marginBottom: 12 }} />)}
-    {diaPhoto && !diaResult && (
+
+    {diaList.length > 0 && (
+      <button disabled={diaLoading} onClick={async () => {
+        setDiaLoading(true); setDiaError("");
+        const next = [...diaList];
+        for (let i = 0; i < next.length; i++) {
+          if (next[i].result) continue;
+          next[i].status = "읽는중";
+          setDiaList([...next]);
+          try {
+            const photo = next[i].photo;
+            const comma = photo.indexOf(",");
+            const meta = photo.slice(5, photo.indexOf(";"));
+            const b64 = photo.slice(comma + 1);
+            const r = await fetch("/.netlify/functions/read-dia", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
+            const d = await r.json();
+            if (d.error) throw new Error(d.error);
+            const txt = (d.text || "").replace(/```json|```/g, "").trim();
+            next[i].result = JSON.parse(txt);
+            next[i].status = "완료";
+          } catch (err) {
+            next[i].status = "실패";
+          }
+          setDiaList([...next]);
+        }
+        setDiaLoading(false);
+      }} style={{ width: "100%", padding: 14, marginBottom: 12, background: diaLoading ? "#9CA3AF" : "linear-gradient(135deg,#4F46E5,#6366F1)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        {diaLoading ? "AI가 읽는 중..." : "전부 AI로 읽기 (" + diaList.length + "장)"}
+      </button>
+    )}
+
+    {diaError && <div style={{ color: "#DC2626", fontSize: 13, marginBottom: 10 }}>{diaError}</div>}
+
+    {diaList.map((item, i) => (
+      <div key={i} style={{ border: "1px solid #E5E7EB", borderRadius: 12, padding: 12, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <img src={item.photo} alt="" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>
+              {item.result ? "다이아 " + (item.result.dia_no ?? "?") + "번" : "사진 " + (i + 1)}
+            </div>
+            <div style={{ fontSize: 12, color: item.status === "실패" ? "#DC2626" : item.status === "완료" ? "#059669" : "#6B7280" }}>{item.status}</div>
+          </div>
+        </div>
+        {item.result && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((d) => {
+              const on = item.day_type === d;
+              return (
+                <button key={d} onClick={() => { const n = [...diaList]; n[i].day_type = d; setDiaList(n); }} style={{ padding: "6px 12px", borderRadius: 100, border: on ? "none" : "1px solid #E5E7EB", background: on ? "linear-gradient(135deg,#4F46E5,#6366F1)" : "#fff", color: on ? "#fff" : "#6B7280", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{d}</button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    ))}
+
+    {diaList.some((x) => x.result) && (
       <button disabled={diaLoading} onClick={async () => {
         setDiaLoading(true); setDiaError("");
         try {
-          const comma = diaPhoto.indexOf(",");
-          const meta = diaPhoto.slice(5, diaPhoto.indexOf(";"));
-          const b64 = diaPhoto.slice(comma + 1);
-          const r = await fetch("/.netlify/functions/read-dia", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
-          const d = await r.json();
-          if (d.error) throw new Error(d.error);
-          const txt = (d.text || "").replace(/```json|```/g, "").trim();
-          setDiaResult(JSON.parse(txt));
-        } catch (err) { setDiaError("읽기 실패: " + String(err)); }
+          const toH = (v) => {
+            const s = String(v || "").trim();
+            if (s.includes(":")) { const p = s.split(":").map(Number); return Math.round(((p[0] || 0) + (p[1] || 0) / 60 + (p[2] || 0) / 3600) * 100) / 100; }
+            return Number(s) || 0;
+          };
+          const rows = diaList.filter((x) => x.result).map((x) => ({
+            dia_no: Number(x.result.dia_no) || 0,
+            day_type: String(x.day_type || "평일"),
+            distance_km: Number(x.result.distance_km) || 0,
+            start_time: String(x.result.start_time || ""),
+            work_hours: toH(x.result.work_hours),
+            drive_hours: toH(x.result.drive_hours),
+            wait_hours: toH(x.result.wait_hours),
+            ride_hours: toH(x.result.ride_hours),
+            watch_hours: toH(x.result.watch_hours),
+            edu_hours: toH(x.result.edu_hours),
+            prep_hours: toH(x.result.prep_hours),
+            clean_hours: toH(x.result.clean_hours),
+            night_hours: toH(x.result.night_hours),
+            photo: x.photo || "",
+          }));
+          const { error } = await supabase.from("kyobun_dia").upsert(rows);
+          if (error) throw new Error(error.message);
+          alert(rows.length + "개 저장 완료!");
+          setDiaList([]);
+        } catch (err) { setDiaError("저장 실패: " + String(err)); }
         setDiaLoading(false);
-      }} style={{ width: "100%", padding: 14, background: diaLoading ? "#9CA3AF" : "linear-gradient(135deg,#4F46E5,#6366F1)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-        {diaLoading ? "AI가 읽는 중..." : "AI로 읽기"}
+      }} style={{ width: "100%", marginTop: 8, padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        전부 저장 ({diaList.filter((x) => x.result).length}개)
       </button>
-    )}
-    {diaError && <div style={{ color: "#DC2626", fontSize: 13, marginTop: 10 }}>{diaError}</div>}
-        {diaResult && (
-      <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>읽은 결과 (수정 가능)</div>
-        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>구분 (저장 전 꼭 선택)</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-          {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((d) => {
-            const on = (diaResult.day_type || "평일") === d;
-            return (
-              <button key={d} onClick={() => setDiaResult({ ...diaResult, day_type: d })} style={{ padding: "7px 14px", borderRadius: 100, border: on ? "none" : "1px solid #E5E7EB", background: on ? "linear-gradient(135deg,#4F46E5,#6366F1)" : "#fff", color: on ? "#fff" : "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{d}</button>
-            );
-          })}
-        </div>
-        {[["dia_no","다이아번호"],["distance_km","주행키로"],["start_time","출근시간"],["work_hours","인정근무"],["drive_hours","운전"],["wait_hours","대기"],["ride_hours","편승"],["watch_hours","감시"],["edu_hours","교육"],["prep_hours","준비"],["clean_hours","정리"],["night_hours","심야"]].map(([k, label]) => (
-          <div key={k} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ width: 70, fontSize: 12, color: "#6B7280" }}>{label}</span>
-            <input value={diaResult[k] ?? ""} onChange={(e) => setDiaResult({ ...diaResult, [k]: e.target.value })} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", color: "#1F2937" }} />
-          </div>
-        ))}
-        <button onClick={async () => {
-          setDiaLoading(true);
-          try {
-            const toH = (v) => {
-              const s = String(v || "").trim();
-              if (s.includes(":")) {
-                const p = s.split(":").map(Number);
-                const h = p[0] || 0, m = p[1] || 0, sec = p[2] || 0;
-                return Math.round((h + m / 60 + sec / 3600) * 100) / 100;
-              }
-              return Number(s) || 0;
-            };
-            const row = {
-              dia_no: Number(diaResult.dia_no) || 0,
-              day_type: String(diaResult.day_type || "평일"),
-              distance_km: Number(diaResult.distance_km) || 0,
-              start_time: String(diaResult.start_time || ""),
-              work_hours: toH(diaResult.work_hours),
-              drive_hours: toH(diaResult.drive_hours),
-              wait_hours: toH(diaResult.wait_hours),
-              ride_hours: toH(diaResult.ride_hours),
-              watch_hours: toH(diaResult.watch_hours),
-              edu_hours: toH(diaResult.edu_hours),
-              prep_hours: toH(diaResult.prep_hours),
-              clean_hours: toH(diaResult.clean_hours),
-              night_hours: toH(diaResult.night_hours),
-              photo: diaPhoto || "",
-            };
-            const { error } = await supabase.from("kyobun_dia").upsert(row);
-            if (error) throw new Error(error.message);
-            alert("다이아 " + row.dia_no + "번 (" + row.day_type + ") 저장됨!");
-            setDiaPhoto(null); setDiaResult(null);
-          } catch (err) { setDiaError("저장 실패: " + String(err)); }
-          setDiaLoading(false);
-        }} style={{ width: "100%", marginTop: 8, padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-          이대로 저장
-        </button>
-      </div>
     )}
   </div>
 )}
-{activeMenu === "vote" &&
           (voteDone ? (
             <div
               style={{
