@@ -9785,7 +9785,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
   </div>
 )}
 9786  )}
-      {activeMenu === "kyobundia" && (        ← 식단표 다음 바로 다이아
+      {activeMenu === "kyobundia" && ( 
 9791    <div style={{ background: "#fff"...
 {activeMenu === "kyobundia" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
