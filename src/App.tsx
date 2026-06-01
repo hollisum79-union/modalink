@@ -11741,6 +11741,44 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
     return 순환[(((bases[조] + diff) % 4) + 4) % 4];
   };
 
+  // 날짜가 휴일(주말 or 공휴일)인지 판단
+  const isHolidayDate = (d: Date) => {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return true;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return holidays.includes(`${y}-${m}-${dd}`);
+  };
+
+  // 근무타입 + 날짜로 다이아 구분(day_type) 결정
+  const getDiaDayType = (type: string, date: Date) => {
+    const todayHol = isHolidayDate(date);
+    const tomorrow = new Date(date);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomoHol = isHolidayDate(tomorrow);
+    if (type === "주간") return todayHol ? "휴일" : "평일";
+    if (type === "야간") {
+      if (!todayHol && !tomoHol) return "평평";
+      if (!todayHol && tomoHol) return "평휴";
+      if (todayHol && tomoHol) return "휴휴";
+      if (todayHol && !tomoHol) return "휴평";
+    }
+    return null;
+  };
+
+  // 다이아번호 + 구분으로 시간표 찾기
+  const getDiaInfo = (diaNo: any, dayType: string | null) => {
+    if (!dayType || diaNo == null) return null;
+    return (
+      diaTable.find(
+        (r) => Number(r.dia_no) === Number(diaNo) && r.day_type === dayType
+      ) || null
+    );
+  };
+
+
+  
   const getKyobunWork = (member: any, date: Date) => {
     if (!member || rotationData.length === 0) return null;
     const base = new Date("2026-06-01");
