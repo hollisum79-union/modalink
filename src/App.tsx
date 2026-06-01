@@ -9019,7 +9019,8 @@ function AdminScreen({ onBack, user, onNavigate }) {
   const [diaLoading, setDiaLoading] = useState(false);
   const [diaResult, setDiaResult] = useState(null);
     const [diaError, setDiaError] = useState("");
-    const [diaList, setDiaList] = useState([]);
+        const [diaList, setDiaList] = useState([]);
+  const [csvRows, setCsvRows] = useState<any[]>([]);
   const [csvRows, setCsvRows] = useState<any[]>([]);
 
   const [pendingMembers, setPendingMembers] = useState(dummyPendingMembers);
@@ -9791,6 +9792,81 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
 {activeMenu === "kyobundia" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록 (여러 장)</div>
+        {/* ===== 엑셀(CSV) 한 번에 업로드 ===== */}
+    <label style={{ display: "block", padding: 16, border: "2px dashed #6EE7B7", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#059669", fontSize: 14, fontWeight: 700, marginBottom: 8, background: "#F0FDF4" }}>
+      📄 엑셀(CSV) 파일로 한 번에 올리기
+      <input type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={(e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        setDiaError("");
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const text = String(reader.result || "");
+            const lines = text.split(/\r?\n/).filter((l) => l.trim());
+            const header = lines[0].split(",").map((h) => h.trim());
+            const col: any = {};
+            header.forEach((h, i) => { col[h] = i; });
+            const toH = (v: any) => {
+              const s = String(v || "").trim();
+              if (s.includes(":")) { const p = s.split(":").map(Number); return Math.round(((p[0] || 0) + (p[1] || 0) / 60 + (p[2] || 0) / 3600) * 100) / 100; }
+              return Number(s) || 0;
+            };
+            const hhmm = (v: any) => { const s = String(v || "").trim(); const p = s.split(":"); return p.length >= 2 ? p[0].padStart(2, "0") + ":" + p[1].padStart(2, "0") : s; };
+            const rows = lines.slice(1).map((line) => {
+              const c = line.split(",");
+              const g = (name: string) => c[col[name]] ?? "";
+              return {
+                dia_no: Number(g("근무번호")) || 0,
+                day_type: String(g("일자형태") || ""),
+                start_time: hhmm(g("출근시간")),
+                end_time: hhmm(g("퇴근시간")),
+                work_hours: toH(g("근무시간")),
+                drive_hours: toH(g("운전시간")),
+                prep_hours: toH(g("준비시간")),
+                ride_hours: toH(g("편승시간")),
+                wait_hours: toH(g("대기시간")),
+                clean_hours: toH(g("정리시간")),
+                watch_hours: toH(g("감시시간")),
+                night_hours: toH(g("심야시간")),
+                edu_hours: toH(g("교육시간")),
+                distance_km: Number(g("주행거리")) || 0,
+                photo: "",
+              };
+            }).filter((r) => r.dia_no > 0);
+            setCsvRows(rows);
+          } catch (err) { setDiaError("CSV 읽기 실패: " + String(err)); }
+        };
+        reader.readAsText(f, "utf-8");
+      }} />
+    </label>
+
+    {csvRows.length > 0 && (
+      <div style={{ marginBottom: 16, padding: 12, background: "#F0FDF4", borderRadius: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#065F46", marginBottom: 8 }}>
+          {csvRows.length}개 다이아 읽음 ({csvRows[0]?.day_type})
+        </div>
+        <div style={{ fontSize: 12, color: "#047857", marginBottom: 10, maxHeight: 120, overflowY: "auto" }}>
+          {csvRows.map((r, i) => (
+            <div key={i}>{r.dia_no}번 · {r.start_time}~{r.end_time} · {r.work_hours}h</div>
+          ))}
+        </div>
+        <button disabled={diaLoading} onClick={async () => {
+          setDiaLoading(true); setDiaError("");
+          try {
+            const { error } = await supabase.from("kyobun_dia").upsert(csvRows);
+            if (error) throw new Error(error.message);
+            alert(csvRows.length + "개 저장 완료!");
+            setCsvRows([]);
+          } catch (err) { setDiaError("저장 실패: " + String(err)); }
+          setDiaLoading(false);
+        }} style={{ width: "100%", padding: 14, background: diaLoading ? "#9CA3AF" : "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          {diaLoading ? "저장 중..." : "전부 저장 (" + csvRows.length + "개)"}
+        </button>
+      </div>
+    )}
+    {/* ===== 엑셀 업로드 끝 ===== */}
+
     <label style={{ display: "block", padding: 16, border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
       📷 다이아 사진 여러 장 선택
       <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => {
