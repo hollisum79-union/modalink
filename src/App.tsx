@@ -12628,7 +12628,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
       // return ( 부터 마지막 ); 까지 선택 후 아래 코드로 교체
       // ============================================================
 
-      return (
+            return (
         <div style={{ padding: "16px" }}>
           <button
             onClick={() => {
@@ -12647,7 +12647,6 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
             ← 소속 변경
           </button>
 
-          {/* 검색창 */}
           <div
             style={{
               display: "flex",
@@ -12693,7 +12692,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
             )}
           </div>
 
-                    {loadingMembers ? (
+          {loadingMembers ? (
             <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>
               불러오는 중...
             </div>
@@ -12776,26 +12775,6 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
                   </span>
                 </div>
               )}
-            </div>
-          )}
-
-            <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>
-              불러오는 중...
-            </div>
-          ) : (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "40px 0",
-                color: "#C4B5FD",
-                fontSize: 13,
-              }}
-            >
-              이름을 입력해서 검색하세요
-              <br />
-              <span style={{ fontSize: 11, color: "#D1D5DB" }}>
-                ☆ 버튼으로 즐겨찾기 추가 가능해요
-              </span>
             </div>
           )}
         </div>
