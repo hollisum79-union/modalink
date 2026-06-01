@@ -15190,6 +15190,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [salaryTable, setSalaryTable] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [workType, setWorkType] = React.useState<string>("");
+  const [nightSettings, setNightSettings] = React.useState<any[]>([]);
   const [saveMsg, setSaveMsg] = React.useState<string>("");
 
   const [manualInputs, setManualInputs] = React.useState<
@@ -15238,7 +15239,10 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         .select("*")
         .order("hobong", { ascending: true });
       if (salaryData) setSalaryTable(salaryData);
-
+const { data: nightData } = await supabase
+        .from("night_pay_settings")
+        .select("*");
+      if (nightData) setNightSettings(nightData);
       // 저장된 급여설정 불러오기
       if (user?.employee_number) {
         const { data: settings } = await supabase
@@ -15397,28 +15401,38 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       label: "업무보전수당",
       type: "auto",
       desc: "근무형태 선택 후 자동계산",
-      extra: (
-        <select
-          value={workType}
-          onChange={(e) => setWorkType(e.target.value)}
-          style={{
-            marginTop: 6,
-            width: "100%",
-            padding: "6px 8px",
-            borderRadius: 8,
-            border: "1px solid #DDD6FE",
-            fontSize: 13,
-            color: "#4338CA",
-            background: "#F5F3FF",
-          }}
-        >
-          <option value="">근무형태 선택</option>
-          {workTypes.map((w) => (
-            <option key={w} value={w}>
-              {w}
-            </option>
-          ))}
-        </select>
+     extra: (
+        <>
+          <select
+            value={workType}
+            onChange={(e) => setWorkType(e.target.value)}
+            style={{
+              marginTop: 6,
+              width: "100%",
+              padding: "6px 8px",
+              borderRadius: 8,
+              border: "1px solid #DDD6FE",
+              fontSize: 13,
+              color: "#4338CA",
+              background: "#F5F3FF",
+            }}
+          >
+            <option value="">근무형태 선택</option>
+            {workTypes.map((w) => (
+              <option key={w} value={w}>
+                {w}
+              </option>
+            ))}
+          </select>
+          {workType && (() => {
+            const found = nightSettings.find((s) => s.work_type === workType);
+            return found ? (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#4338CA", fontWeight: 700 }}>
+                🌙 야간 1회 = {found.night_hours}시간 (관리자 설정)
+              </div>
+            ) : null;
+          })()}
+        </>
       ),
     },
     {
