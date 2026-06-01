@@ -8882,6 +8882,112 @@ function MemberManageScreen() {
     </div>
   );
 }
+function PaySettingScreen() {
+  const [rows, setRows] = React.useState([]);
+  const [saveMsg, setSaveMsg] = React.useState("");
+
+  React.useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase
+        .from("worktype_pay_settings")
+        .select("*")
+        .order("work_type");
+      if (data) setRows(data);
+    };
+    load();
+  }, []);
+
+  const updateHours = (workType, value) => {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.work_type === workType ? { ...r, night_hours: value } : r
+      )
+    );
+  };
+
+  const handleSave = async () => {
+    for (const r of rows) {
+      await supabase
+        .from("worktype_pay_settings")
+        .update({
+          night_hours: Number(r.night_hours) || 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("work_type", r.work_type);
+    }
+    setSaveMsg("✅ 저장됐어요!");
+    setTimeout(() => setSaveMsg(""), 2500);
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+        급여시간 설정
+      </div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
+        근무형태별 야간 1회당 시간을 입력하세요. (조합원 급여화면에 자동 반영)
+      </div>
+      {rows.map((r) => (
+        <div
+          key={r.work_type}
+          style={{
+            background: "#fff",
+            borderRadius: 14,
+            padding: "14px 16px",
+            marginBottom: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          }}
+        >
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>
+            {r.work_type}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="number"
+              value={r.night_hours ?? 0}
+              onChange={(e) => updateHours(r.work_type, e.target.value)}
+              style={{
+                width: 70,
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #E5E7EB",
+                fontSize: 14,
+                textAlign: "right",
+              }}
+            />
+            <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+          </div>
+        </div>
+      ))}
+      <button
+        onClick={handleSave}
+        style={{
+          width: "100%",
+          marginTop: 12,
+          padding: "14px",
+          borderRadius: 12,
+          border: "none",
+          background: "#4F46E5",
+          color: "#fff",
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        저장
+      </button>
+      {saveMsg && (
+        <div style={{ textAlign: "center", marginTop: 10, fontSize: 14, color: "#10B981" }}>
+          {saveMsg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [pendingMembers, setPendingMembers] = useState(dummyPendingMembers);
@@ -8964,6 +9070,14 @@ function AdminScreen({ onBack, user, onNavigate }) {
       icon: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
       color: "#EC4899",
       bg: "#FCE7F3",
+      badge: 0,
+    },
+    {
+      id: "paysettings",
+      label: "급여시간 설정",
+      icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+      color: "#7C3AED",
+      bg: "#F3E8FF",
       badge: 0,
     },
   ];
@@ -9171,6 +9285,7 @@ function AdminScreen({ onBack, user, onNavigate }) {
         )}
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
+        {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "members" && (
           <div>
             <div
