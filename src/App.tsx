@@ -15368,9 +15368,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [worktypeSettings, setWorktypeSettings] = React.useState<any[]>([]);
   const [shiftBase, setShiftBase] = React.useState<any>(null);
   const [lastMonthLeaves, setLastMonthLeaves] = React.useState<any[]>([]);
-  const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
-  const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
-  const [showDeductInfo, setShowDeductInfo] = React.useState(false);
+  const [hfDay, setHfDay] = React.useState<number>(0);
+  const [hfNight, setHfNight] = React.useState<number>(0);
+  const [hfCount, setHfCount] = React.useState<number>(0);
 
   // 기본급표 + 저장된 설정 불러오기
   React.useEffect(() => {
@@ -15588,7 +15588,16 @@ const { data: nightData } = await supabase
     hourlyWage * 1.5 * overtimeBase8 + hourlyWage * 2.0 * overtimeOver8
   );
 
-  const totalGross = tongsangWage + nightPay + overtimePay;
+  const hfTotal = hfDay + hfNight;
+  const hfWithin8 = Math.min(hfTotal, 8);
+  const hfOver8 = Math.max(hfTotal - 8, 0);
+  const holidayFillPay = Math.round(
+    (hourlyWage * (hfWithin8 * 1.5 + hfOver8 * 2.0) +
+      hourlyWage * 0.5 * hfNight) *
+      hfCount
+  );
+
+  const totalGross = tongsangWage + nightPay + overtimePay + holidayFillPay;
 
   const nationalPension = Math.round(tongsangWage * 0.045);
   const healthInsurance = Math.round(tongsangWage * 0.03545);
