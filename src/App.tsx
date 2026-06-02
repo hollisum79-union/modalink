@@ -21201,6 +21201,63 @@ function NoticeForm({ item, onClose }) {
   );
 }
 // ── 메인 앱 ──
+function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: string) => void }) {
+  const tabs = [
+    { icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6", label: "홈", action: "home" },
+    { icon: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z", label: "공지", action: "noticeList" },
+    { icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", label: "근무표", action: "schedule" },
+    { icon: "", emoji: "₩", label: "급여계산", action: "salary" },
+    { icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z", label: "마이페이지", action: "mySettings" },
+  ];
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "100%",
+        maxWidth: 430,
+        background: "#fff",
+        borderTop: "1px solid #F3F4F6",
+        display: "flex",
+        padding: "10px 0 24px",
+        zIndex: 100,
+      }}
+    >
+      {tabs.map((tab, i) => {
+        const active = screen === tab.action || (tab.action === "home" && screen === "home");
+        return (
+          <button
+            key={i}
+            onClick={() => setScreen(tab.action)}
+            style={{
+              flex: 1,
+              background: "none",
+              border: "none",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 3,
+              cursor: "pointer",
+            }}
+          >
+            {tab.emoji ? (
+              <span style={{ fontSize: 18, fontWeight: 900, color: active ? "#4F46E5" : "#9CA3AF" }}>
+                {tab.emoji}
+              </span>
+            ) : (
+              <Icon path={tab.icon} color={active ? "#4F46E5" : "#9CA3AF"} size={22} />
+            )}
+            <span style={{ fontSize: 10, color: active ? "#4F46E5" : "#9CA3AF", fontWeight: active ? 700 : 400 }}>
+              {tab.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 export default function App() {
   const [screen, setScreen] = useState("login");
   const [user, setUser] = useState(null);
