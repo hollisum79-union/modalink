@@ -12837,7 +12837,12 @@ if (data) {
             top: 56,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {String(selectedMember.employee_number) !== String(user?.employee_number) && (
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
+                {selectedMember.name}
+              </span>
+            )}
             <span style={{ display: "flex", gap: 4 }}>
               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#DBEAFE", color: "#1D4ED8" }}>
                 주 {cntDay}
