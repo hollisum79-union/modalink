@@ -12578,32 +12578,23 @@ if (data) {
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
           >
-            {(["대공원", "도봉"] as const).map((group) => (
+            {["현장조치 매뉴얼", "업무용 전화번호", "직원 연락처"].map((label) => (
               <button
-                key={group}
-                onClick={() => {
-                  setSelectedGroup(group);
-                  setMemberSearch("");
-                }}
+                key={label}
+                onClick={() => alert(label + " (준비중)")}
                 style={{
-                  padding: "24px 0",
+                  padding: "28px 12px",
                   borderRadius: 16,
                   border: "2px solid #E5E7EB",
                   background: "#fff",
-                  fontSize: 18,
+                  fontSize: 15,
                   fontWeight: 700,
                   color: "#374151",
                   cursor: "pointer",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                 }}
               >
-                {group}
-                <br />
-                <span
-                  style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 400 }}
-                >
-                  {group === "대공원" ? "114명" : "41명"}
-                </span>
+                {label}
               </button>
             ))}
           </div>
