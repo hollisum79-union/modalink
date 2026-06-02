@@ -11508,7 +11508,8 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   const [selectedMember, setSelectedMember] = React.useState<any>(null);
   const [members, setMembers] = React.useState<any[]>([]);
   const [rotationData, setRotationData] = React.useState<any[]>([]);
-    const [holidays, setHolidays] = React.useState<string[]>([]);
+const [holidays, setHolidays] = React.useState<string[]>([]);
+  const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
 
   // 근무조정 기록 불러오기 (선택된 사람 기준)
