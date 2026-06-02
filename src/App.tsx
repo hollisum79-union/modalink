@@ -21923,11 +21923,14 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     return <LogbookScreen goBack={() => setScreen("home")} />;
   if (screen === "schedule")
     return (
-      <ScheduleScreen
-        onBack={() => setScreen("home")}
-        user={user}
-        refreshUser={refreshUser}
-      />
+      <>
+        <ScheduleScreen
+          onBack={() => setScreen("home")}
+          user={user}
+          refreshUser={refreshUser}
+        />
+        <BottomTabBar screen={screen} setScreen={setScreen} />
+      </>
     );
   if (screen === "mySettings")
     return (
