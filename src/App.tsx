@@ -18672,9 +18672,14 @@ function WorkAdjustScreen({ onBack, user }) {
                             cursor: "pointer", fontFamily: "inherit",
                           }}
                         >
-                          <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>
-                            {x.member.name} <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 400 }}>({x.member.work_group})</span>
-                          </span>
+                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#4F46E5", flexShrink: 0 }}>
+                              {x.member.name?.charAt(0)}
+                            </div>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>
+                              {x.member.name} <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 400 }}>({x.member.work_group})</span>
+                            </span>
+                          </div>
                           <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>
                             주{x.count.주간} 야{x.count.야간} 비{x.count.비번} 휴{x.count.휴무}
                           </div>
