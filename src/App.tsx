@@ -1070,6 +1070,9 @@ function BoardList({ onBack, onSelect, onWrite, user, initialFilter = "전체" }
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
           padding: "52px 20px 24px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div
@@ -3217,8 +3220,11 @@ function InquiryList({ onBack, onSelect, onWrite, user }) {
         style={{
           background:
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
-          padding: "52px 20px 24px",
+         padding: "52px 20px 24px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div
@@ -5170,6 +5176,9 @@ const [showCheck, setShowCheck] = useState(false);
           padding: "56px 20px 16px",
           background: "#fff",
           borderBottom: "1px solid #F3F4F6",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -18037,6 +18046,9 @@ function WorkAdjustScreen({ onBack, user }) {
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
           padding: "52px 20px 24px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div
@@ -21991,8 +22003,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             background:
               "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
             padding: "52px 20px 24px",
-            borderRadius: 28,
-          }}
+          borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+        }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button
