@@ -12452,58 +12452,7 @@ if (data) {
         {/* 메모 패널 */}
         {editingDate && renderMemoPanel(editingDate)}
 
-        {/* 범례 */}
-        <div
-          style={{
-            padding: "12px 16px",
-            display: "flex",
-            gap: 8,
-            flexWrap: "wrap",
-            borderTop: "1px solid #F3F4F6",
-          }}
-        >
-          {[
-            ["주", "주간", "#DBEAFE", "#1D4ED8"],
-            ["야", "야간", "#EDE9FE", "#6D28D9"],
-            ["비", "비번", "#F3F4F6", "#6B7280"],
-            ["휴", "휴무", "#FEF3C7", "#92400E"],
-          ].map(([s, l, bg, t]) => (
-            <div
-              key={s}
-              style={{ display: "flex", alignItems: "center", gap: 4 }}
-            >
-              <span
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 5,
-                  background: bg as string,
-                  color: t as string,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {s}
-              </span>
-              <span style={{ fontSize: 11, color: "#9CA3AF" }}>{l}</span>
-            </div>
-          ))}
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#6366F1",
-                display: "inline-block",
-              }}
-            />
-            <span style={{ fontSize: 11, color: "#9CA3AF" }}>메모</span>
-          </div>
-        </div>
+        
 
         {/* 전체보기 */}
         <div style={{ padding: "0 16px 20px" }}>
@@ -12803,6 +12752,15 @@ if (data) {
       );
 
     const weeks = buildCalendarGrid(currentYear, currentMonth);
+    let cntDay = 0, cntNight = 0, cntRest = 0;
+    for (let d = 1; d <= new Date(currentYear, currentMonth, 0).getDate(); d++) {
+      const w = getKyobunWork(selectedMember, new Date(currentYear, currentMonth - 1, d));
+      if (w) {
+        if (w.type === "주간") cntDay++;
+        else if (w.type === "야간") cntNight++;
+        else if (w.type === "휴무") cntRest++;
+      }
+    }
     return (
       <div>
         <div
@@ -12818,8 +12776,21 @@ if (data) {
             top: 56,
           }}
         >
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
-            {selectedMember.name} ({selectedGroup})
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
+              {selectedMember.name} ({selectedGroup})
+            </span>
+            <span style={{ display: "flex", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#DBEAFE", color: "#1D4ED8" }}>
+                주 {cntDay}
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#EDE9FE", color: "#6D28D9" }}>
+                야 {cntNight}
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280" }}>
+                휴 {cntRest}
+              </span>
+            </span>
           </div>
           <button
             onClick={() => setSelectedMember(null)}
