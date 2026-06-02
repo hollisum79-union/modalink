@@ -11516,6 +11516,9 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
       } else if (crewData?.crew) {
         setSelectedCrew(crewData.crew as any);
       }
+      if (user?.work_type === "교번" && (user?.work_group === "대공원" || user?.work_group === "도봉")) {
+        setSelectedGroup(user.work_group as any);
+      }
       setCrewLoaded(true);
     };
     init();
@@ -11564,7 +11567,19 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
         )
         .eq("work_group", selectedGroup)
         .order("name");
-      if (data) setMembers(data);
+if (data) {
+        setMembers(data);
+        if (
+          user?.work_type === "교번" &&
+          user?.employee_number &&
+          selectedGroup === user?.work_group
+        ) {
+          const me = data.find(
+            (m) => String(m.employee_number) === String(user.employee_number)
+          );
+          if (me) setSelectedMember(me);
+        }
+      }
       setLoadingMembers(false);
     };
     fetch();
