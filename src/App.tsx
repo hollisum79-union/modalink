@@ -11586,7 +11586,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
         .select(
           "id, name, employee_number, work_group, start_position, schedule_total"
         )
-        .eq("work_group", selectedGroup)
+        .in("work_group", ["대공원", "도봉"])
         .order("name");
 if (data) {
         setMembers(data);
