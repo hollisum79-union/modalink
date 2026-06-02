@@ -18710,7 +18710,10 @@ function WorkAdjustScreen({ onBack, user }) {
                               </tbody>
                             </table>
                           </div>
-                          <div style={{ padding: "0 14px 14px" }}>
+                          {/* keep */}
+                          )}
+                          {isOpen && (
+                            <div style={{ padding: "0 14px 14px" }}>
                             <button
                               onClick={async () => {
                                 const { error } = await supabase.from("kyobun_swap").insert([{
