@@ -18877,6 +18877,46 @@ function WorkAdjustScreen({ onBack, user }) {
         ) : (
           // ─────── 대기충당/지정근무/지원근무/휴무충당 기록 모드 ───────
           <>
+            {(() => {
+              const COLOR: any = {
+                대기충당: "#6D28D9", 지정근무: "#0F6E56", 지원근무: "#185FA5", 휴무충당: "#854F0B",
+              };
+              const c = COLOR[activeTab] || "#4F46E5";
+              const y = new Date().getFullYear();
+              const yearRecs = records.filter((r) => (r.work_date || "").startsWith(`${y}-`));
+              const dayCnt = yearRecs.filter((r) => r.work_shift === "주간").length;
+              const nightCnt = yearRecs.filter((r) => r.work_shift === "야간").length;
+              return (
+                <div
+                  style={{
+                    background: "#fff",
+                    borderRadius: 20,
+                    padding: "16px 18px",
+                    boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+                    marginBottom: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>올해 {activeTab}</span>
+                    <span style={{ fontSize: 10, color: "#9CA3AF" }}>{y}.1.1 ~ 오늘</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 10 }}>
+                    <span style={{ fontSize: 22, fontWeight: 800, color: c }}>{yearRecs.length}</span>
+                    <span style={{ fontSize: 12, color: "#6B7280" }}>회</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, borderTop: "0.5px solid #EEF0F3", paddingTop: 10 }}>
+                    <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 2 }}>주간</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>{dayCnt}</div>
+                    </div>
+                    <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 2 }}>야간</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>{nightCnt}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
             <div
               style={{
                 background: "#fff",
