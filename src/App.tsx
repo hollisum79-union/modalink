@@ -13068,7 +13068,7 @@ const getKyobunWork = (member: any, date: Date) => {
                             day
                           )}
                         </div>
-                       {work && work.swapped && (
+                       {work && (work as any).swapped && (
                           <div style={{ textAlign: "center", fontSize: 10, color: "#4F46E5", fontWeight: 700, marginBottom: 2 }}>
                             🔄 교체
                           </div>
