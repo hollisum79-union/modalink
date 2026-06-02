@@ -19126,6 +19126,12 @@ appearance: "none",
               </button>
             </div>
 
+           {(() => {
+            const _now = new Date();
+            const _ym = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}`;
+            const monthRecords = records.filter((r) => (r.work_date || "").startsWith(_ym));
+            return (
+            <>
             {/* 기록 목록 */}
             <div
               style={{
@@ -19150,7 +19156,7 @@ appearance: "none",
                 <span
                   style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 500 }}
                 >
-                  총 {records.length}건
+           총 {monthRecords.length}건
                 </span>
               </div>
 
@@ -19165,7 +19171,7 @@ appearance: "none",
                 >
                   불러오는 중...
                 </div>
-              ) : records.length === 0 ? (
+              ) : monthRecords.length === 0 ? (
                 <div
                   style={{
                     textAlign: "center",
@@ -19177,7 +19183,7 @@ appearance: "none",
                   아직 기록이 없어요 📝
                 </div>
               ) : (
-                records.map((r) => (
+                monthRecords.map((r) => (
                   <div
                     key={r.id}
                     style={{
@@ -19255,6 +19261,9 @@ appearance: "none",
                 ))
               )}
             </div>
+              </>
+            );
+            })()}
           </>
         )}
       </div>
