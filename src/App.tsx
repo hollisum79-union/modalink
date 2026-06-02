@@ -11509,7 +11509,20 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   const [members, setMembers] = React.useState<any[]>([]);
   const [rotationData, setRotationData] = React.useState<any[]>([]);
     const [holidays, setHolidays] = React.useState<string[]>([]);
-  const [diaTable, setDiaTable] = React.useState<any[]>([]);
+  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
+
+  // 근무조정 기록 불러오기 (선택된 사람 기준)
+  React.useEffect(() => {
+    if (!selectedMember?.employee_number) { setAdjustRecords([]); return; }
+    const loadAdjust = async () => {
+      const { data } = await supabase
+        .from("work_adjust")
+        .select("*")
+        .eq("employee_number", selectedMember.employee_number);
+      if (data) setAdjustRecords(data);
+    };
+    loadAdjust();
+  }, [selectedMember]);
 
   const [loadingMembers, setLoadingMembers] = React.useState(false);
   const [memberSearch, setMemberSearch] = React.useState("");
@@ -13033,7 +13046,40 @@ if (data) {
                       </>
                     );
                   })()}
-
+{(() => {
+                    const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    const recs = adjustRecords.filter((r) => r.work_date === dstr);
+                    if (recs.length === 0) return null;
+                    const LABEL = {
+                      "대기충당": "충당", "휴무충당": "휴충", "지정근무": "지정", "지원근무": "지원",
+                    };
+                    const COLOR = {
+                      "대기충당": { bg: "#EDE9FE", fg: "#6D28D9" },
+                      "휴무충당": { bg: "#FAEEDA", fg: "#854F0B" },
+                      "지정근무": { bg: "#E1F5EE", fg: "#0F6E56" },
+                      "지원근무": { bg: "#E6F1FB", fg: "#185FA5" },
+                    };
+                    return (
+                      <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {recs.map((r, i) => {
+                          const c = COLOR[r.adjust_type] || { bg: "#F3F4F6", fg: "#374151" };
+                          const m = (r.memo || "").match(/다이아\s*(\d+)/);
+                          const shiftMark = r.work_shift === "야간" ? "야" : "주";
+                          const sub = m ? `${shiftMark}${m[1]}` : (r.memo && r.memo.includes("취급") ? "취급" : shiftMark);
+                          return (
+                            <div key={i} style={{ background: c.bg, borderRadius: 5, padding: "2px 3px" }}>
+                              <div style={{ fontSize: 9, color: c.fg, fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>
+                                {LABEL[r.adjust_type] || r.adjust_type}
+                              </div>
+                              <div style={{ fontSize: 9, color: c.fg, lineHeight: 1.3, textAlign: "center" }}>
+                                {sub}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
