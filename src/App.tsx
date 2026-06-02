@@ -18471,12 +18471,16 @@ function WorkAdjustScreen({ onBack, user }) {
                       const s = new Date(swapStart), e = new Date(swapEnd);
                       const fmt = (w: any) =>
                         !w ? "-" : w.type === "휴무" ? "휴" : w.type === "비번" ? "비" : w.dia;
-                      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+                      const from = new Date(s); from.setDate(from.getDate() - 1);
+                      const to = new Date(e); to.setDate(to.getDate() + 1);
+                      for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
                         const dd = new Date(d);
+                        const isEdge = dd < s || dd > e;
                         days.push({
                           label: `${dd.getMonth() + 1}/${dd.getDate()}`,
                           mine: fmt(calcKyobunWork(me, dd, swapRotation)),
                           theirs: fmt(calcKyobunWork(x.member, dd, swapRotation)),
+                          edge: isEdge,
                         });
                       }
                     }
@@ -18513,19 +18517,19 @@ function WorkAdjustScreen({ onBack, user }) {
                                 <tr>
                                   <td style={{ padding: "5px 8px 5px 0", color: "#9CA3AF", fontSize: 11, whiteSpace: "nowrap" }}>날짜</td>
                                   {days.map((row, i) => (
-                                    <td key={i} style={{ textAlign: "center", color: "#9CA3AF", fontSize: 11, padding: "5px 6px", whiteSpace: "nowrap" }}>{row.label}</td>
+                                    <td key={i} style={{ textAlign: "center", color: row.edge ? "#C7C9CF" : "#9CA3AF", fontSize: 11, padding: "5px 6px", whiteSpace: "nowrap" }}>{row.label}</td>
                                   ))}
                                 </tr>
                                 <tr style={{ borderTop: "1px solid #EEF0F3" }}>
                                   <td style={{ padding: "6px 8px 6px 0", color: "#6B7280", whiteSpace: "nowrap" }}>내 다이아</td>
                                   {days.map((row, i) => (
-                                    <td key={i} style={{ textAlign: "center", fontWeight: 600, color: "#374151", padding: "6px" }}>{row.mine}</td>
+                                    <td key={i} style={{ textAlign: "center", fontWeight: 600, color: row.edge ? "#C7C9CF" : "#374151", padding: "6px" }}>{row.mine}</td>
                                   ))}
                                 </tr>
                                 <tr style={{ borderTop: "1px solid #EEF0F3" }}>
                                   <td style={{ padding: "6px 8px 6px 0", color: "#4F46E5", fontWeight: 600, whiteSpace: "nowrap" }}>상대 다이아</td>
                                   {days.map((row, i) => (
-                                    <td key={i} style={{ textAlign: "center", fontWeight: 600, color: "#4F46E5", padding: "6px" }}>{row.theirs}</td>
+                                    <td key={i} style={{ textAlign: "center", fontWeight: 600, color: row.edge ? "#B9BDEA" : "#4F46E5", padding: "6px" }}>{row.theirs}</td>
                                   ))}
                                 </tr>
                               </tbody>
