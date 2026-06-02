@@ -17863,6 +17863,26 @@ function WorkAdjustScreen({ onBack, user }) {
   const [formFillType, setFormFillType] = useState("다이아");
   const [formDiaNum, setFormDiaNum] = useState("");
   const [formMemo, setFormMemo] = useState("");
+  // 교번교체용 상태
+  const [swapMembers, setSwapMembers] = useState<any[]>([]);
+  const [swapDate, setSwapDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+  const [swapPartner, setSwapPartner] = useState<any>(null);
+  const [swapSearch, setSwapSearch] = useState("");
+
+  // 기관사 명단 불러오기 (교번교체 상대 선택용)
+  useEffect(() => {
+    const loadSwapMembers = async () => {
+      const { data } = await supabase
+        .from("members")
+        .select("*")
+        .in("work_group", ["대공원", "도봉"])
+        .order("name");
+      if (data) setSwapMembers(data);
+    };
+    loadSwapMembers();
+  }, []);
 
   // 다이아 번호 범위 (주간/야간)
   const diaRange = formShift === "주간" ? "1~59" : "60~90";
@@ -18318,26 +18338,151 @@ function WorkAdjustScreen({ onBack, user }) {
             style={{
               background: "#fff",
               borderRadius: 20,
-              padding: "40px 20px",
-              textAlign: "center",
+              padding: "20px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
             }}
           >
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🔄</div>
             <div
               style={{
                 fontSize: 14,
-                fontWeight: 700,
+                fontWeight: 800,
                 color: "#1F2937",
-                marginBottom: 8,
+                marginBottom: 16,
               }}
             >
-              교번교체
+              🔄 교번교체 요청
             </div>
-            <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.6 }}>
-              구간 매칭 시스템 준비 중입니다.
-              <br />곧 만나요! 🚀
+
+            {/* 교체 날짜 */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>
+                교체 날짜
+              </div>
+              <input
+                type="date"
+                value={swapDate}
+                onChange={(e) => setSwapDate(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: "1px solid #E5E7EB",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                  WebkitAppearance: "none",
+                  appearance: "none",
+                  fontFamily: "inherit",
+                }}
+              />
             </div>
+
+            {/* 상대 기관사 선택 */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>
+                교체 상대
+              </div>
+              {swapPartner ? (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #C7D2FE",
+                    background: "#EEF2FF",
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#3730A3" }}>
+                    {swapPartner.name} ({swapPartner.work_group})
+                  </span>
+                  <button
+                    onClick={() => { setSwapPartner(null); setSwapSearch(""); }}
+                    style={{
+                      background: "none", border: "none", color: "#6366F1",
+                      fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    변경
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={swapSearch}
+                    onChange={(e) => setSwapSearch(e.target.value)}
+                    placeholder="기관사 이름 검색"
+                    style={{
+                      width: "100%",
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      border: "1px solid #E5E7EB",
+                      fontSize: 14,
+                      boxSizing: "border-box",
+                      fontFamily: "inherit",
+                    }}
+                  />
+                  {swapSearch && (
+                    <div style={{ marginTop: 6, maxHeight: 180, overflowY: "auto" }}>
+                      {swapMembers
+                        .filter(
+                          (m) =>
+                            m.name.includes(swapSearch) &&
+                            String(m.employee_number) !== String(user?.employee_number)
+                        )
+                        .map((m) => (
+                          <button
+                            key={m.employee_number}
+                            onClick={() => { setSwapPartner(m); setSwapSearch(""); }}
+                            style={{
+                              display: "block", width: "100%", textAlign: "left",
+                              padding: "10px 14px", border: "none",
+                              borderBottom: "1px solid #F3F4F6",
+                              background: "#fff", fontSize: 14, color: "#374151",
+                              cursor: "pointer", fontFamily: "inherit",
+                            }}
+                          >
+                            {m.name} <span style={{ fontSize: 12, color: "#9CA3AF" }}>({m.work_group})</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* 요청 버튼 */}
+            <button
+              onClick={async () => {
+                if (!swapPartner) { showToast("상대 기관사를 선택하세요", "error"); return; }
+                const { error } = await supabase.from("kyobun_swap").insert([{
+                  swap_date: swapDate,
+                  a_employee_number: String(user?.employee_number),
+                  a_name: user?.name,
+                  b_employee_number: String(swapPartner.employee_number),
+                  b_name: swapPartner.name,
+                  status: "대기",
+                }]);
+                if (error) { showToast("요청 실패: " + error.message, "error"); return; }
+                showToast("교체 요청을 보냈어요", "success");
+                setSwapPartner(null);
+              }}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: 12,
+                border: "none",
+                background: "linear-gradient(90deg,#4F46E5,#6D28D9)",
+                color: "#fff",
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              🔄 교체 요청 보내기
+            </button>
           </div>
         ) : activeTab === "휴무충당" && holidayMode === "신청" ? (
           // ─────── 휴무충당 신청 모드 ───────
