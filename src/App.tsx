@@ -12792,31 +12792,35 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
       <div>
         <div
           style={{
-            padding: "10px 16px",
-            background: "#4F46E5",
+            padding: "8px 16px",
+            background: "#fff",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
+            justifyContent: "center",
+            gap: 8,
+            borderBottom: "1px solid #EEF0F3",
             position: "sticky",
             top: 56,
           }}
         >
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
+            {selectedMember.name} ({selectedGroup})
+          </div>
           <button
             onClick={() => setSelectedMember(null)}
             style={{
-              background: "none",
+              background: "#EEF2FF",
               border: "none",
-              color: "rgba(255,255,255,0.8)",
-              fontSize: 13,
+              color: "#6366F1",
+              fontSize: 12,
               cursor: "pointer",
+              padding: "3px 11px",
+              borderRadius: 999,
+              fontFamily: "inherit",
             }}
           >
             ← 목록
           </button>
-          <div style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>
-            {selectedMember.name} ({selectedGroup})
-          </div>
-          <div style={{ width: 40 }} />
         </div>
         <div
           style={{
@@ -13297,7 +13301,11 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
             {user?.work_group ? ` ( ${user.work_group} )` : ""}
           </span>
           <button
-            onClick={onBack}
+            onClick={() => {
+              setSelectedGroup(null);
+              setSelectedMember(null);
+              setSelectedCrew(null);
+            }}
             style={{
               background: "#EEF2FF",
               border: "none",
@@ -13309,7 +13317,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
               fontFamily: "inherit",
             }}
           >
-            홈
+            메뉴화면
           </button>
         </div>
 
