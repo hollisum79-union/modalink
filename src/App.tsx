@@ -12653,7 +12653,12 @@ if (data) {
               ← 메뉴화면
             </button>
             <button
-              onClick={() => setSelectedGroup(user?.work_group as any)}
+              onClick={() => {
+                const me = members.find(
+                  (m) => String(m.employee_number) === String(user?.employee_number)
+                );
+                if (me) setSelectedMember(me);
+              }}
               style={{
                 background: "#EEF2FF",
                 border: "none",
@@ -12666,7 +12671,7 @@ if (data) {
                 fontFamily: "inherit",
               }}
             >
-              내 근무
+              내 근무 →
             </button>
           </div>
 
@@ -12687,7 +12692,7 @@ if (data) {
               type="text"
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
-              placeholder={`${selectedGroup} 기관사 이름 검색`}
+              placeholder={`기관사 이름 검색`}
               style={{
                 flex: 1,
                 background: "none",
