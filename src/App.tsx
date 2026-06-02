@@ -11525,6 +11525,22 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     loadAdjust();
   }, [selectedMember]);
 
+  // 교번교체(수락된 것) 불러오기 - 선택된 사람이 a거나 b인 경우
+  const [swapData, setSwapData] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    if (!selectedMember?.employee_number) { setSwapData([]); return; }
+    const loadSwaps = async () => {
+      const emp = String(selectedMember.employee_number);
+      const { data } = await supabase
+        .from("kyobun_swap")
+        .select("*")
+        .eq("status", "수락")
+        .or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`);
+      if (data) setSwapData(data);
+    };
+    loadSwaps();
+  }, [selectedMember]);
+
   const [loadingMembers, setLoadingMembers] = React.useState(false);
   const [memberSearch, setMemberSearch] = React.useState("");
   const [favorites, setFavorites] = React.useState<any[]>([]);
@@ -11853,25 +11869,73 @@ if (data) {
 
 
   
- const getKyobunWork = (member: any, date: Date) => {
-    if (!member || rotationData.length === 0) return null;
-    const groupName = member.work_group === "도봉" ? "도봉 41" : "대공원 114";
-    const base = new Date("2026-06-01");
-    base.setHours(0, 0, 0, 0);
-    const target = new Date(date);
-    target.setHours(0, 0, 0, 0);
-    const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
-    const pos =
-      ((((member.start_position - 1 + diff) % member.schedule_total) +
-        member.schedule_total) %
-        member.schedule_total) +
-      1;
-    const row = rotationData.find(
-      (r) => r.group_name === groupName && r.position === pos
-    );
-    return row ? { dia: row.dia_value, type: row.work_type } : null;
-  };
+ loadAdjust();
+  }, [selectedMember]);
 
+  // 교번교체(수락된 것) 불러오기 - 선택된 사람이 a거나 b인 경우
+  const [swapData, setSwapData] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    if (!selectedMember?.employee_number) { setSwapData([]); return; }
+    const loadSwaps = async () => {
+      const emp = String(selectedMember.employee_number);
+      const { data } = await supabase
+        .from("kyobun_swap")
+        .select("*")
+        .eq("status", "수락")
+        .or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`);
+      if (data) setSwapData(data);
+    };
+    loadSwaps();
+  }, [selectedMember]);
+const getKyobunWork = (member: any, date: Date) => {
+    if (!member || rotationData.length === 0) return null;
+
+    const calc = (mem: any) => {
+      const groupName = mem.work_group === "도봉" ? "도봉 41" : "대공원 114";
+      const base = new Date("2026-06-01");
+      base.setHours(0, 0, 0, 0);
+      const target = new Date(date);
+      target.setHours(0, 0, 0, 0);
+      const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+      const pos =
+        ((((mem.start_position - 1 + diff) % mem.schedule_total) +
+          mem.schedule_total) %
+          mem.schedule_total) + 1;
+      const row = rotationData.find(
+        (r) => r.group_name === groupName && r.position === pos
+      );
+      return row ? { dia: row.dia_value, type: row.work_type } : null;
+    };
+
+    const mine = calc(member);
+
+    const y = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const dateStr = `${y}-${mm}-${dd}`;
+    const emp = String(member.employee_number);
+
+    const swap = swapData.find(
+      (s) =>
+        s.swap_date === dateStr &&
+        (String(s.a_employee_number) === emp ||
+          String(s.b_employee_number) === emp)
+    );
+    if (swap) {
+      const partnerEmp =
+        String(swap.a_employee_number) === emp
+          ? String(swap.b_employee_number)
+          : String(swap.a_employee_number);
+      const partner = members.find(
+        (p) => String(p.employee_number) === partnerEmp
+      );
+      if (partner) {
+        const partnerWork = calc(partner);
+        if (partnerWork) return { ...partnerWork, swapped: true };
+      }
+    }
+    return mine;
+  };
   const isToday = (y: number, m: number, d: number) =>
     d === today.getDate() &&
     m === today.getMonth() + 1 &&
@@ -13009,6 +13073,11 @@ if (data) {
                             day
                           )}
                         </div>
+                       {work && work.swapped && (
+                          <div style={{ textAlign: "center", fontSize: 10, color: "#4F46E5", fontWeight: 700, marginBottom: 2 }}>
+                            🔄 교체
+                          </div>
+                        )}
                         {work && (isRest ? (
                           <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: subColor, marginTop: 7 }}>
                             휴
@@ -17947,7 +18016,19 @@ function WorkAdjustScreen({ onBack, user }) {
     new Date().toISOString().split("T")[0]
   );
   const [swapMatches, setSwapMatches] = useState<any[]>([]);
-  const [swapSearched, setSwapSearched] = useState(false);
+ const [swapSearched, setSwapSearched] = useState(false);
+  const [receivedSwaps, setReceivedSwaps] = useState<any[]>([]);
+
+  const loadReceivedSwaps = async () => {
+    const { data } = await supabase
+      .from("kyobun_swap")
+      .select("*")
+      .eq("b_employee_number", String(user?.employee_number))
+      .eq("status", "대기")
+      .order("created_at", { ascending: false });
+    if (data) setReceivedSwaps(data);
+  };
+  useEffect(() => { loadReceivedSwaps(); }, []);
 
   // 순환표 불러오기 (대공원+도봉 둘 다)
   useEffect(() => {
@@ -18432,6 +18513,53 @@ function WorkAdjustScreen({ onBack, user }) {
             }}
           >
             <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 8 }}>
+             {receivedSwaps.length > 0 && (
+              <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #F3F4F6" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>
+                  📥 나에게 온 교체 요청
+                </div>
+                {receivedSwaps.map((req) => (
+                  <div key={req.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px", marginBottom: 10 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>
+                      {req.a_name} 기관사
+                    </div>
+                    <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 12 }}>
+                      교체 요청일: {req.swap_date}
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          const { error } = await supabase
+                            .from("kyobun_swap")
+                            .update({ status: "수락" })
+                            .eq("id", req.id);
+                          if (error) { showToast("처리 실패: " + error.message, "error"); return; }
+                          showToast("교체를 수락했어요", "success");
+                          loadReceivedSwaps();
+                        }}
+                        style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: "linear-gradient(90deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        수락
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const { error } = await supabase
+                            .from("kyobun_swap")
+                            .update({ status: "거절" })
+                            .eq("id", req.id);
+                          if (error) { showToast("처리 실패: " + error.message, "error"); return; }
+                          showToast("교체를 거절했어요", "info");
+                          loadReceivedSwaps();
+                        }}
+                        style={{ flex: 1, padding: "11px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        거절
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
               🔄 교번교체 요청
             </div>
             <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16, lineHeight: 1.5 }}>
