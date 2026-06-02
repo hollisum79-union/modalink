@@ -12641,13 +12641,15 @@ if (data) {
                 setMemberSearch("");
               }}
               style={{
-                background: "none",
+                background: "#EEF2FF",
                 border: "none",
                 color: "#6366F1",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
-                padding: 0,
+                padding: "5px 13px",
+                borderRadius: 999,
+                fontFamily: "inherit",
               }}
             >
               ← 메뉴화면
