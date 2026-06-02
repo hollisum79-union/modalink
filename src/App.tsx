@@ -12565,6 +12565,21 @@ if (data) {
     if (!selectedGroup)
       return (
         <div style={{ padding: "24px 16px" }}>
+          <button
+            onClick={() => setSelectedGroup(user?.work_group as any)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#6366F1",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              marginBottom: 16,
+              padding: 0,
+            }}
+          >
+            ← 내 근무표 보기
+          </button>
           <div
             style={{
               fontSize: 14,
