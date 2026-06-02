@@ -23367,7 +23367,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               </div>
             );
           })()}
-          </div>
           <div
             onClick={() => setScreen("workAdjust")}
             style={{
