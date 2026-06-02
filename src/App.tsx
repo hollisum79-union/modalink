@@ -18731,7 +18731,8 @@ function WorkAdjustScreen({ onBack, user }) {
                             >
                               🔄 교체 요청 보내기
                             </button>
-                          </div>
+                         </div>
+                        )}
                         )}
                       </div>
                     );
