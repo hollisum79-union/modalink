@@ -13052,13 +13052,13 @@ if (data) {
                     const recs = adjustRecords.filter((r) => r.work_date === dstr);
                     if (recs.length === 0) return null;
                     const LABEL = {
-                      "대기충당": "충당", "휴무충당": "휴충", "지정근무": "지정", "지원근무": "지원",
+                      standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원",
                     };
                     const COLOR = {
-                      "대기충당": { bg: "#EDE9FE", fg: "#6D28D9" },
-                      "휴무충당": { bg: "#FAEEDA", fg: "#854F0B" },
-                      "지정근무": { bg: "#E1F5EE", fg: "#0F6E56" },
-                      "지원근무": { bg: "#E6F1FB", fg: "#185FA5" },
+                      standby: { bg: "#EDE9FE", fg: "#6D28D9" },
+                      holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" },
+                      designated: { bg: "#E1F5EE", fg: "#0F6E56" },
+                      support: { bg: "#E6F1FB", fg: "#185FA5" },
                     };
                     return (
                       <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
