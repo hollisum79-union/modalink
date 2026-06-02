@@ -3692,7 +3692,11 @@ function WelfareScreen({ onBack, user }) {
           background:
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
           padding: "52px 20px 24px",
+          padding: "52px 20px 24px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div
@@ -4587,6 +4591,9 @@ function VoteScreen({ onBack, user }) {
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
           padding: "52px 20px 24px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div
@@ -6051,7 +6058,11 @@ const [showAddCat, setShowAddCat] = useState(false);
           background:
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
           padding: "52px 20px 24px",
+         padding: "52px 20px 24px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div
@@ -7051,6 +7062,9 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
           padding: "52px 20px 28px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
         }}
       >
         <div
@@ -17371,6 +17385,9 @@ function LeaveScreen({ onBack, user }) {
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
           padding: "52px 20px 24px",
           borderRadius: 28,
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
           display: "flex",
           alignItems: "center",
           gap: 12,
