@@ -11607,18 +11607,16 @@ if (data) {
   }, [selectedGroup]);
 
   React.useEffect(() => {
-    if (!selectedGroup) return;
     const fetch = async () => {
-      const groupName = selectedGroup === "대공원" ? "대공원 114" : "도봉 41";
       const { data } = await supabase
         .from("schedule_rotation")
         .select("*")
-        .eq("group_name", groupName)
+        .in("group_name", ["대공원 114", "도봉 41"])
         .order("position");
       if (data) setRotationData(data);
     };
     fetch();
-  }, [selectedGroup]);
+  }, []);
   // ============================================================
   // [추가 위치 1] ScheduleScreen 안에서
   // const [loadingMembers 바로 아래에 추가
@@ -11820,8 +11818,9 @@ if (data) {
 
 
   
-  const getKyobunWork = (member: any, date: Date) => {
+ const getKyobunWork = (member: any, date: Date) => {
     if (!member || rotationData.length === 0) return null;
+    const groupName = member.work_group === "도봉" ? "도봉 41" : "대공원 114";
     const base = new Date("2026-06-01");
     base.setHours(0, 0, 0, 0);
     const target = new Date(date);
@@ -11832,7 +11831,9 @@ if (data) {
         member.schedule_total) %
         member.schedule_total) +
       1;
-    const row = rotationData.find((r) => r.position === pos);
+    const row = rotationData.find(
+      (r) => r.group_name === groupName && r.position === pos
+    );
     return row ? { dia: row.dia_value, type: row.work_type } : null;
   };
 
