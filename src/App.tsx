@@ -11869,7 +11869,16 @@ if (data) {
 
 
   
- loadAdjust();
+React.useEffect(() => {
+    if (!selectedMember?.employee_number) { setAdjustRecords([]); return; }
+    const loadAdjust = async () => {
+      const { data } = await supabase
+        .from("work_adjust")
+        .select("*")
+        .eq("employee_number", selectedMember.employee_number);
+      if (data) setAdjustRecords(data);
+    };
+    loadAdjust();
   }, [selectedMember]);
 
   // 교번교체(수락된 것) 불러오기 - 선택된 사람이 a거나 b인 경우
