@@ -12571,9 +12571,10 @@ if (data) {
               fontWeight: 700,
               color: "#1F2937",
               marginBottom: 16,
+              textAlign: "center",
             }}
           >
-            소속 선택
+            대공원 승무 사업소
           </div>
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
