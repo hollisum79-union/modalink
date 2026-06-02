@@ -18461,26 +18461,80 @@ function WorkAdjustScreen({ onBack, user }) {
                     이 기간에 갯수가 같은 기관사가 없어요
                   </div>
                 ) : (
-                  swapMatches.map((x) => (
-                    <button
-                      key={x.member.employee_number}
-                      onClick={() => setSwapPartner(x.member)}
-                      style={{
-                        display: "block", width: "100%", textAlign: "left",
-                        padding: "12px 14px", marginBottom: 6, borderRadius: 12,
-                        border: swapPartner?.employee_number === x.member.employee_number ? "2px solid #6366F1" : "1px solid #E5E7EB",
-                        background: swapPartner?.employee_number === x.member.employee_number ? "#EEF2FF" : "#fff",
-                        cursor: "pointer", fontFamily: "inherit",
-                      }}
-                    >
-                      <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>
-                        {x.member.name} <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 400 }}>({x.member.work_group})</span>
-                      </span>
-                      <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>
-                        주{x.count.주간} 야{x.count.야간} 비{x.count.비번} 휴{x.count.휴무}
+                  swapMatches.map((x) => {
+                    const isOpen = swapPartner?.employee_number === x.member.employee_number;
+                    const me = swapMembers.find(
+                      (m) => String(m.employee_number) === String(user?.employee_number)
+                    );
+                    const days: any[] = [];
+                    if (isOpen && me) {
+                      const s = new Date(swapStart), e = new Date(swapEnd);
+                      const fmt = (w: any) =>
+                        !w ? "-" : w.type === "휴무" ? "휴" : w.type === "비번" ? "비" : w.dia;
+                      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+                        const dd = new Date(d);
+                        days.push({
+                          label: `${dd.getMonth() + 1}/${dd.getDate()}`,
+                          mine: fmt(calcKyobunWork(me, dd, swapRotation)),
+                          theirs: fmt(calcKyobunWork(x.member, dd, swapRotation)),
+                        });
+                      }
+                    }
+                    return (
+                      <div
+                        key={x.member.employee_number}
+                        style={{
+                          marginBottom: 6, borderRadius: 12,
+                          border: isOpen ? "2px solid #6366F1" : "1px solid #E5E7EB",
+                          background: isOpen ? "#F5F7FF" : "#fff",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <button
+                          onClick={() => setSwapPartner(isOpen ? null : x.member)}
+                          style={{
+                            display: "block", width: "100%", textAlign: "left",
+                            padding: "12px 14px", border: "none", background: "none",
+                            cursor: "pointer", fontFamily: "inherit",
+                          }}
+                        >
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>
+                            {x.member.name} <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 400 }}>({x.member.work_group})</span>
+                          </span>
+                          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>
+                            주{x.count.주간} 야{x.count.야간} 비{x.count.비번} 휴{x.count.휴무}
+                          </div>
+                        </button>
+
+                        {isOpen && (
+                          <div style={{ padding: "0 14px 12px", overflowX: "auto" }}>
+                            <table style={{ borderCollapse: "collapse", fontSize: 13, minWidth: "100%" }}>
+                              <tbody>
+                                <tr>
+                                  <td style={{ padding: "5px 8px 5px 0", color: "#9CA3AF", fontSize: 11, whiteSpace: "nowrap" }}>날짜</td>
+                                  {days.map((row, i) => (
+                                    <td key={i} style={{ textAlign: "center", color: "#9CA3AF", fontSize: 11, padding: "5px 6px", whiteSpace: "nowrap" }}>{row.label}</td>
+                                  ))}
+                                </tr>
+                                <tr style={{ borderTop: "1px solid #EEF0F3" }}>
+                                  <td style={{ padding: "6px 8px 6px 0", color: "#6B7280", whiteSpace: "nowrap" }}>내 다이아</td>
+                                  {days.map((row, i) => (
+                                    <td key={i} style={{ textAlign: "center", fontWeight: 600, color: "#374151", padding: "6px" }}>{row.mine}</td>
+                                  ))}
+                                </tr>
+                                <tr style={{ borderTop: "1px solid #EEF0F3" }}>
+                                  <td style={{ padding: "6px 8px 6px 0", color: "#4F46E5", fontWeight: 600, whiteSpace: "nowrap" }}>상대 다이아</td>
+                                  {days.map((row, i) => (
+                                    <td key={i} style={{ textAlign: "center", fontWeight: 600, color: "#4F46E5", padding: "6px" }}>{row.theirs}</td>
+                                  ))}
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
-                    </button>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
