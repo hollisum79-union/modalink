@@ -18709,6 +18709,28 @@ function WorkAdjustScreen({ onBack, user }) {
                                 </tr>
                               </tbody>
                             </table>
+                         </div>
+                          <div style={{ padding: "0 14px 14px" }}>
+                            <button
+                              onClick={async () => {
+                                const { error } = await supabase.from("kyobun_swap").insert([{
+                                  swap_date: swapStart,
+                                  a_employee_number: String(user?.employee_number),
+                                  a_name: user?.name,
+                                  b_employee_number: String(x.member.employee_number),
+                                  b_name: x.member.name,
+                                  status: "대기",
+                                }]);
+                                if (error) { showToast("요청 실패: " + error.message, "error"); return; }
+                                showToast("교체 요청을 보냈어요", "success");
+                                setSwapPartner(null);
+                                setSwapSearched(false);
+                                setSwapMatches([]);
+                              }}
+                              style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "linear-gradient(90deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                            >
+                              🔄 교체 요청 보내기
+                            </button>
                           </div>
                         )}
                       </div>
