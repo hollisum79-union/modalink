@@ -11881,21 +11881,7 @@ React.useEffect(() => {
     loadAdjust();
   }, [selectedMember]);
 
-  // 교번교체(수락된 것) 불러오기 - 선택된 사람이 a거나 b인 경우
-  const [swapData, setSwapData] = React.useState<any[]>([]);
-  React.useEffect(() => {
-    if (!selectedMember?.employee_number) { setSwapData([]); return; }
-    const loadSwaps = async () => {
-      const emp = String(selectedMember.employee_number);
-      const { data } = await supabase
-        .from("kyobun_swap")
-        .select("*")
-        .eq("status", "수락")
-        .or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`);
-      if (data) setSwapData(data);
-    };
-    loadSwaps();
-  }, [selectedMember]);
+  
 const getKyobunWork = (member: any, date: Date) => {
     if (!member || rotationData.length === 0) return null;
 
