@@ -12627,22 +12627,48 @@ if (data) {
 
             return (
         <div style={{ padding: "16px" }}>
-          <button
-            onClick={() => {
-              setSelectedGroup(null);
-              setMemberSearch("");
-            }}
+          <div
             style={{
-              background: "none",
-              border: "none",
-              color: "#6366F1",
-              fontSize: 13,
-              cursor: "pointer",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
               marginBottom: 16,
             }}
           >
-            ← 소속 변경
-          </button>
+            <button
+              onClick={() => {
+                setSelectedGroup(null);
+                setMemberSearch("");
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#6366F1",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              ← 메뉴화면
+            </button>
+            <button
+              onClick={() => setSelectedGroup(user?.work_group as any)}
+              style={{
+                background: "#EEF2FF",
+                border: "none",
+                color: "#6366F1",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: "5px 13px",
+                borderRadius: 999,
+                fontFamily: "inherit",
+              }}
+            >
+              내 근무
+            </button>
+          </div>
 
           <div
             style={{
