@@ -18710,7 +18710,6 @@ function WorkAdjustScreen({ onBack, user }) {
                               </tbody>
                             </table>
                           </div>
-                          {/* keep */}
                           )}
                           {isOpen && (
                             <div style={{ padding: "0 14px 14px" }}>
