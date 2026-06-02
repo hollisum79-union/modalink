@@ -18709,7 +18709,7 @@ function WorkAdjustScreen({ onBack, user }) {
                                 </tr>
                               </tbody>
                             </table>
-                         </div>
+                          </div>
                           <div style={{ padding: "0 14px 14px" }}>
                             <button
                               onClick={async () => {
@@ -18731,17 +18731,14 @@ function WorkAdjustScreen({ onBack, user }) {
                             >
                               🔄 교체 요청 보내기
                             </button>
-                         </div>
-                        )}
+                          </div>
                         )}
                       </div>
                     );
                   })
                 )}
               </div>
-            )}
-
-            
+            )}         
           </div>
         ) : activeTab === "휴무충당" && holidayMode === "신청" ? (
           // ─────── 휴무충당 신청 모드 ───────
