@@ -10799,7 +10799,7 @@ function PointSection({ user }) {
   const monthlyPoint = monthLogs.reduce((s, l) => s + (l.point || 0), 0);
   const totalPoint = pointData.total || 0;
 
-  const byType = {};
+  const byType: any = {};
   monthLogs.forEach((l) => {
     if (!byType[l.action]) byType[l.action] = { count: 0, point: 0 };
     byType[l.action].count += 1;
