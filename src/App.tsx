@@ -9142,7 +9142,6 @@ function PointRankingAdmin() {
   );
 }
 
-</parameter>
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaPhoto, setDiaPhoto] = useState(null);
