@@ -10467,7 +10467,10 @@ function addPoint(empId, actionKey) {
       action: rule.label,
       point: rule.point,
     })
-    .then(() => {}, () => {});
+    .then(
+      (res) => console.log("포인트 DB 저장 결과:", res),
+      (err) => console.log("포인트 DB 저장 에러:", err)
+    );
   return rule.point;
 }
 
