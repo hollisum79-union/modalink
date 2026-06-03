@@ -17437,8 +17437,38 @@ function LeaveScreen({ onBack, user }) {
     new Date().toISOString().slice(0, 10)
   );
   const [useDays, setUseDays] = React.useState("1");
-  const [useMemo, setUseMemo] = React.useState("");
+ const [useMemo, setUseMemo] = React.useState("");
 
+  // 사용 내역 불러오기
+  const [history, setHistory] = React.useState<any[]>([]);
+  const loadHistory = async () => {
+    if (!user?.employee_number) return;
+    const { data } = await supabase
+      .from("leave_history")
+      .select("*")
+      .eq("employee_number", user.employee_number)
+      .order("used_date", { ascending: false });
+    if (data) setHistory(data);
+  };
+  React.useEffect(() => {
+    loadHistory();
+  }, [user]);
+
+  // 휴가 사용 취소 (잔여일수 복구)
+  const cancelLeave = async (h: any) => {
+    if (!window.confirm("이 휴가 사용을 취소할까요? 잔여일수가 복구됩니다.")) return;
+    const { error } = await supabase
+      .from("leave_history")
+      .update({ status: "취소" })
+      .eq("id", h.id);
+    if (error) {
+      alert("취소 실패: " + error.message);
+      return;
+    }
+    const cur = (remaining as any)[h.leave_type] || 0;
+    await saveRemaining(h.leave_type, cur + Number(h.days));
+    loadHistory();
+  };
   // 휴가 사용 처리
   const useLeave = async (item) => {
     const days = parseFloat(useDays);
@@ -17475,6 +17505,7 @@ function LeaveScreen({ onBack, user }) {
     setUseDays("1");
     setUseMemo("");
     alert(`${item.label} ${days}일 사용 처리되었습니다.`);
+    loadHistory();
   };
 
   // 잔여일수 저장하기
@@ -17791,7 +17822,67 @@ function LeaveScreen({ onBack, user }) {
           </div>
         ))}
       </div>
-
+{/* 휴가 사용 내역 */}
+      <div style={{ marginTop: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>휴가 사용 내역</div>
+          <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+            총 {history.filter((h) => h.status !== "취소").length}건
+          </div>
+        </div>
+        {history.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>
+            아직 사용한 휴가가 없어요
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {history.map((h) => {
+              const cancelled = h.status === "취소";
+              const typeLabel =
+                leaveItems.find((i) => i.id === h.leave_type)?.label || h.leave_type;
+              return (
+                <div
+                  key={h.id}
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #F3F4F6",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    opacity: cancelled ? 0.55 : 1,
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ background: cancelled ? "#F3F4F6" : "#EEF0FF", color: cancelled ? "#9CA3AF" : "#4F46E5", fontSize: 12, borderRadius: 6, padding: "2px 8px" }}>
+                        {typeLabel}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: cancelled ? "#9CA3AF" : "#1F2937", textDecoration: cancelled ? "line-through" : "none" }}>
+                        {h.days}일
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#9CA3AF" }}>
+                      {h.used_date}{h.memo ? ` · ${h.memo}` : ""}
+                    </div>
+                  </div>
+                  {cancelled ? (
+                    <span style={{ fontSize: 12, color: "#9CA3AF" }}>취소됨</span>
+                  ) : (
+                    <button
+                      onClick={() => cancelLeave(h)}
+                      style={{ fontSize: 13, color: "#EF4444", padding: "6px 12px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff", cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
       {/* 휴가 사용 모달 */}
       {useModal && (
         <div
