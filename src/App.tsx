@@ -27,6 +27,35 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[]) {
   );
   return row ? { dia: row.dia_value, type: row.work_type } : null;
 }
+function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTable: any[], holidays: string[]) {
+  if (!diaNo || !diaTable || diaTable.length === 0) return { workHours: 0, nightHours: 0 };
+  const date = new Date(dateStr);
+  const isHol = (d: Date) => {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return true;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return (holidays || []).includes(`${y}-${m}-${dd}`);
+  };
+  let dayType: string;
+  if (shift === "야간") {
+    const tomo = new Date(date);
+    tomo.setDate(tomo.getDate() + 1);
+    const th = isHol(date), mh = isHol(tomo);
+    if (!th && !mh) dayType = "평평";
+    else if (!th && mh) dayType = "평휴";
+    else if (th && mh) dayType = "휴휴";
+    else dayType = "휴평";
+  } else {
+    dayType = isHol(date) ? "휴일" : "평일";
+  }
+  const row = (diaTable || []).find(
+    (r: any) => Number(r.dia_no) === Number(diaNo) && r.day_type === dayType
+  );
+  if (!row) return { workHours: 0, nightHours: 0 };
+  return { workHours: Number(row.work_hours) || 0, nightHours: Number(row.night_hours) || 0 };
+}
 function getTodayWorkInfo(member: any, rotationData: any[], diaTable: any[], holidays: string[], date = new Date()) {
   const work = calcKyobunWork(member, date, rotationData);
   if (!work) return null;
@@ -16290,6 +16319,32 @@ const { data: nightData } = await supabase
         .from("night_pay_settings")
         .select("*");
       if (nightData) setNightSettings(nightData);
+
+      const { data: diaData } = await supabase.from("kyobun_dia").select("*");
+      if (diaData) setDiaTable(diaData);
+
+      try {
+        const hres = await fetch("/.netlify/functions/read-holidays?year=" + new Date().getFullYear());
+        const hjson = await hres.json();
+        if (hjson.holidays) setHolidays(hjson.holidays);
+      } catch (e) {
+        console.log("공휴일 불러오기 실패", e);
+      }
+
+      if (user?.employee_number) {
+        const tNow = new Date();
+        const ty = tNow.getFullYear();
+        const tm = String(tNow.getMonth() + 1).padStart(2, "0");
+        const tEnd = new Date(ty, tNow.getMonth() + 1, 0).getDate();
+        const { data: hfData } = await supabase
+          .from("work_adjust")
+          .select("*")
+          .eq("employee_number", user.employee_number)
+          .eq("adjust_type", "holiday_fill")
+          .gte("work_date", `${ty}-${tm}-01`)
+          .lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`);
+        if (hfData) setHfRecords(hfData);
+      }
       // 저장된 급여설정 불러오기
       if (user?.employee_number) {
         const { data: settings } = await supabase
@@ -16459,14 +16514,30 @@ const { data: nightData } = await supabase
     hourlyWage * 1.5 * overtimeBase8 + hourlyWage * 2.0 * overtimeOver8
   );
 
-  const hfTotal = hfDay + hfNight;
-  const hfWithin8 = Math.min(hfTotal, 8);
-  const hfOver8 = Math.max(hfTotal - 8, 0);
-  const holidayFillPay = Math.round(
-    (hourlyWage * (hfWithin8 * 1.5 + hfOver8 * 2.0) +
-      hourlyWage * 0.5 * hfNight) *
-      hfCount
-  );
+  let hfTotalWork = 0;
+  let hfTotalNight = 0;
+  let hfAutoCount = 0;
+  let hfPaySum = 0;
+  hfRecords.forEach((rec: any) => {
+    const m = (rec.memo || "").match(/다이아\s*(\d+)/);
+    if (!m) return;
+    const { workHours, nightHours } = calcHolidayFillHours(
+      m[1],
+      rec.work_shift,
+      rec.work_date,
+      diaTable,
+      holidays
+    );
+    if (workHours <= 0) return;
+    const within8 = Math.min(workHours, 8);
+    const over8 = Math.max(workHours - 8, 0);
+    hfPaySum +=
+      hourlyWage * (within8 * 1.5 + over8 * 2.0) + hourlyWage * 0.5 * nightHours;
+    hfTotalWork += workHours;
+    hfTotalNight += nightHours;
+    hfAutoCount += 1;
+  });
+  const holidayFillPay = Math.round(hfPaySum);
 
   const totalGross = tongsangWage + nightPay + overtimePay + holidayFillPay;
 
@@ -17324,42 +17395,27 @@ const { data: nightData } = await supabase
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
-                    휴무충당
+                    <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
+                    대무충당수당
                   </div>
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                    1회 근무의 주간·야간 시간과 횟수 (본인 입력)
+                    근무조정에 기록한 대무충당으로 자동 계산
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: 13, color: "#6B7280", width: 56 }}>☀️ 주간</span>
-                  <input
-                    type="number"
-                    value={hfDay}
-                    onChange={(e) => setHfDay(Number(e.target.value) || 0)}
-                    style={{ width: 56, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }}
-                  />
-                  <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
-                  <span style={{ fontSize: 13, color: "#6B7280", width: 56, marginLeft: 8 }}>🌙 야간</span>
-                  <input
-                    type="number"
-                    value={hfNight}
-                    onChange={(e) => setHfNight(Number(e.target.value) || 0)}
-                    style={{ width: 56, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }}
-                  />
-                  <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="number"
-                    value={hfCount}
-                    onChange={(e) => setHfCount(Number(e.target.value) || 0)}
-                    style={{ width: 80, padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 15, textAlign: "right" }}
-                  />
-                  <span style={{ fontSize: 14, color: "#6B7280" }}>회 (이번 달 횟수)</span>
-                </div>
-                {hfCount > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#DC2626", textAlign: "right" }}>
-                    {holidayFillPay.toLocaleString("ko-KR")}원
+                {hfAutoCount > 0 ? (
+                  <>
+                    <div style={{ background: "#FEF2F2", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
+                      이번 달 대무충당 {hfAutoCount}회 · 인정 {hfTotalWork.toFixed(2)}시간 (야간 {hfTotalNight.toFixed(2)}시간 포함)
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#DC2626", textAlign: "right" }}>
+                      {holidayFillPay.toLocaleString("ko-KR")}원
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
+                    이번 달 대무충당 기록이 없어요.
                   </div>
                 )}
               </div>
