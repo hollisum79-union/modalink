@@ -10805,8 +10805,7 @@ function PointSection({ user }) {
     byType[l.action].count += 1;
     byType[l.action].point += l.point || 0;
   });
-  const byTypeArr = Object.entries(byType).sort((a, b) => b[1].point - a[1].point);
-
+  const byTypeArr = Object.entries(byType).sort((a: any, b: any) => b[1].point - a[1].point);
   const recentLogs = logs.slice(0, 5);
 
   return (
