@@ -16299,8 +16299,6 @@ const { data: nightData } = await supabase
           .maybeSingle();
 
         if (settings) {
-          if (settings.grade) setSelectedGrade(settings.grade);
-          if (settings.hobong) setSelectedHobong(settings.hobong);
           if (settings.work_type) setWorkType(settings.work_type);
           if (settings.checked_items) setCheckedItems(settings.checked_items);
           if (settings.manual_inputs) setManualInputs(settings.manual_inputs);
