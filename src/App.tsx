@@ -16317,7 +16317,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           .gte("used_date", `${py}-${mm}-01`)
           .lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`);
         if (leaveData) setLastMonthLeaves(leaveData);
-      }
+    }
       const { data: nightData } = await supabase
         .from("night_pay_settings")
         .select("*");
