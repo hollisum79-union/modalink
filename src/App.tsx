@@ -17343,55 +17343,7 @@ const { data: nightData } = await supabase
                   총 {nightTotalHours}시간 · {nightPay.toLocaleString("ko-KR")}원
                 </div>
               </div>
-              <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-                <div style={{ marginBottom: 8 }}>
-                  <div
-                    style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}
-                  >
-                    연장근로수당
-                  </div>
-                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                    8시간 이하 1.5배 · 8시간 초과분 2배
-                  </div>
-                </div>
-                <TimeInput
-                  hour={overtimeHour}
-                  min={overtimeMin}
-                  onHourChange={setOvertimeHour}
-                  onMinChange={setOvertimeMin}
-                  pay={overtimePay}
-                  color="#0EA5E9"
-                />
-               {overtimeTotalHours > 8 && (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontSize: 12,
-                      color: "#0EA5E9",
-                      background: "#F0F9FF",
-                      borderRadius: 8,
-                      padding: "6px 10px",
-                    }}
-                  >
-                    8시간(1.5배) + {(overtimeTotalHours - 8).toFixed(1)}
-                    시간(2배) 분리 계산
-                  </div>
-                )}
-                {(overtimeHour > 0 || overtimeMin > 0) && (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontSize: 15,
-                      fontWeight: 700,
-                      color: "#0EA5E9",
-                      textAlign: "right",
-                    }}
-                  >
-                    총 {overtimeHour}시간 {overtimeMin}분 · {overtimePay.toLocaleString("ko-KR")}원
-                  </div>
-                )}
-              </div>
-
+              
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
