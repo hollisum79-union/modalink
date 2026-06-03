@@ -16281,100 +16281,59 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   React.useEffect(() => {
     const init = async () => {
       setLoading(true);
+      const emp = user?.employee_number;
+      const now = new Date();
+      const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastPrev = new Date(firstThis.getTime() - 86400000);
+      const py = lastPrev.getFullYear();
+      const pm = lastPrev.getMonth();
+      const mm = String(pm + 1).padStart(2, "0");
+      const endDay = new Date(py, pm + 1, 0).getDate();
+      const ty = now.getFullYear();
+      const tm = String(now.getMonth() + 1).padStart(2, "0");
+      const tEnd = new Date(ty, now.getMonth() + 1, 0).getDate();
 
-      const { data: salaryData } = await supabase
-        .from("salary_table")
-        .select("*")
-        .order("hobong", { ascending: true });
-      if (salaryData) setSalaryTable(salaryData);
+      const [
+        salaryRes,
+        wtRes,
+        baseRes,
+        nightRes,
+        diaRes,
+        meRes,
+        leaveRes,
+        hfRes,
+        settingsRes,
+        holRes,
+      ] = await Promise.all([
+        supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
+        supabase.from("worktype_pay_settings").select("*"),
+        supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("night_pay_settings").select("*"),
+        supabase.from("kyobun_dia").select("dia_no, day_type, work_hours, night_hours"),
+        emp ? supabase.from("members").select("grade, pay_step").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${ty}-${tm}-01`).lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        fetch("/.netlify/functions/read-holidays?year=" + ty).then((r) => r.json()).catch(() => ({ holidays: [] })),
+      ]);
 
-      const { data: wtData } = await supabase
-        .from("worktype_pay_settings")
-        .select("*");
-      if (wtData) setWorktypeSettings(wtData);
-
-      const { data: baseData } = await supabase
-        .from("shift_base")
-        .select("*")
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (baseData) setShiftBase(baseData);
-
-      if (user?.employee_number) {
-        const now = new Date();
-        const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastPrev = new Date(firstThis.getTime() - 86400000);
-        const py = lastPrev.getFullYear();
-        const pm = lastPrev.getMonth();
-        const mm = String(pm + 1).padStart(2, "0");
-        const endDay = new Date(py, pm + 1, 0).getDate();
-        const { data: leaveData } = await supabase
-          .from("leave_history")
-          .select("*")
-          .eq("employee_number", user.employee_number)
-          .gte("used_date", `${py}-${mm}-01`)
-          .lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`);
-        if (leaveData) setLastMonthLeaves(leaveData);
+      if (salaryRes.data) setSalaryTable(salaryRes.data);
+      if (wtRes.data) setWorktypeSettings(wtRes.data);
+      if (baseRes.data) setShiftBase(baseRes.data);
+      if (nightRes.data) setNightSettings(nightRes.data);
+      if (diaRes.data) setDiaTable(diaRes.data);
+      if (meRes.data) {
+        if (meRes.data.grade) setSelectedGrade(Number(meRes.data.grade));
+        if (meRes.data.pay_step) setSelectedHobong(Number(meRes.data.pay_step));
       }
-
-      const { data: nightData } = await supabase
-        .from("night_pay_settings")
-        .select("*");
-      if (nightData) setNightSettings(nightData);
-
-      if (user?.employee_number) {
-        const { data: meData } = await supabase
-          .from("members")
-          .select("grade, pay_step")
-          .eq("employee_number", user.employee_number)
-          .maybeSingle();
-        if (meData) {
-          if (meData.grade) setSelectedGrade(Number(meData.grade));
-          if (meData.pay_step) setSelectedHobong(Number(meData.pay_step));
-        }
-      }
-
-      const { data: diaData } = await supabase
-        .from("kyobun_dia")
-        .select("dia_no, day_type, work_hours, night_hours");
-      if (diaData) setDiaTable(diaData);
-
-      try {
-        const hres = await fetch("/.netlify/functions/read-holidays?year=" + new Date().getFullYear());
-        const hjson = await hres.json();
-        if (hjson.holidays) setHolidays(hjson.holidays);
-      } catch (e) {
-        console.log("공휴일 불러오기 실패", e);
-      }
-
-      if (user?.employee_number) {
-        const tNow = new Date();
-        const ty = tNow.getFullYear();
-        const tm = String(tNow.getMonth() + 1).padStart(2, "0");
-        const tEnd = new Date(ty, tNow.getMonth() + 1, 0).getDate();
-        const { data: hfData } = await supabase
-          .from("work_adjust")
-          .select("*")
-          .eq("employee_number", user.employee_number)
-          .eq("adjust_type", "holiday_fill")
-          .gte("work_date", `${ty}-${tm}-01`)
-          .lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`);
-        if (hfData) setHfRecords(hfData);
-      }
-
-      if (user?.employee_number) {
-        const { data: settings } = await supabase
-          .from("salary_settings")
-          .select("*")
-          .eq("employee_number", user.employee_number)
-          .maybeSingle();
-
-        if (settings) {
-          if (settings.work_type) setWorkType(settings.work_type);
-          if (settings.checked_items) setCheckedItems(settings.checked_items);
-          if (settings.manual_inputs) setManualInputs(settings.manual_inputs);
-        }
+      if (leaveRes.data) setLastMonthLeaves(leaveRes.data);
+      if (hfRes.data) setHfRecords(hfRes.data);
+      if (holRes && holRes.holidays) setHolidays(holRes.holidays);
+      if (settingsRes.data) {
+        const s = settingsRes.data;
+        if (s.work_type) setWorkType(s.work_type);
+        if (s.checked_items) setCheckedItems(s.checked_items);
+        if (s.manual_inputs) setManualInputs(s.manual_inputs);
       }
 
       setLoading(false);
