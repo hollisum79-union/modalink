@@ -16282,12 +16282,11 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const init = async () => {
       setLoading(true);
 
-      // 기본급표 불러오기
       const { data: salaryData } = await supabase
         .from("salary_table")
         .select("*")
         .order("hobong", { ascending: true });
-     if (salaryData) setSalaryTable(salaryData);
+      if (salaryData) setSalaryTable(salaryData);
 
       const { data: wtData } = await supabase
         .from("worktype_pay_settings")
@@ -16317,7 +16316,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           .gte("used_date", `${py}-${mm}-01`)
           .lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`);
         if (leaveData) setLastMonthLeaves(leaveData);
-    }
+      }
+
       const { data: nightData } = await supabase
         .from("night_pay_settings")
         .select("*");
@@ -16333,8 +16333,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           if (meData.grade) setSelectedGrade(Number(meData.grade));
           if (meData.pay_step) setSelectedHobong(Number(meData.pay_step));
         }
-        }
       }
+
       const { data: diaData } = await supabase.from("kyobun_dia").select("*");
       if (diaData) setDiaTable(diaData);
 
@@ -16360,7 +16360,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           .lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`);
         if (hfData) setHfRecords(hfData);
       }
-      // 저장된 급여설정 불러오기
+
       if (user?.employee_number) {
         const { data: settings } = await supabase
           .from("salary_settings")
