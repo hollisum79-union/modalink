@@ -16330,8 +16330,9 @@ const { data: nightData } = await supabase
           .eq("employee_number", user.employee_number)
           .maybeSingle();
         if (meData) {
-          if (meData.grade) setSelectedGrade(meData.grade);
-          if (meData.pay_step) setSelectedHobong(meData.pay_step);
+          if (meData.grade) setSelectedGrade(Number(meData.grade));
+          if (meData.pay_step) setSelectedHobong(Number(meData.pay_step));
+        }
         }
       }
       const { data: diaData } = await supabase.from("kyobun_dia").select("*");
