@@ -9141,7 +9141,115 @@ function PointRankingAdmin() {
     </div>
   );
 }
+function FieldActivityAdmin() {
+  const [title, setTitle] = React.useState("");
+  const [date, setDate] = React.useState("");
+  const [point, setPoint] = React.useState("");
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  const [doneMsg, setDoneMsg] = React.useState("");
 
+  React.useEffect(() => {
+    supabase.from("members").select("name, employee_number, is_union").then(({ data }) => {
+      setMembers((data || []).filter((m: any) => m.is_union === true));
+    });
+  }, []);
+
+  const toggle = (emp: string) => {
+    setSelected((prev) => prev.includes(emp) ? prev.filter((x) => x !== emp) : [...prev, emp]);
+  };
+  const toggleAll = () => {
+    if (selected.length === members.length) setSelected([]);
+    else setSelected(members.map((m: any) => String(m.employee_number)));
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) { alert("활동 이름을 입력하세요"); return; }
+    if (!point || Number(point) <= 0) { alert("지급 포인트를 입력하세요"); return; }
+    if (selected.length === 0) { alert("참여자를 선택하세요"); return; }
+    setSaving(true);
+    try {
+      const { data: act, error } = await supabase
+        .from("field_activities")
+        .insert({ title: title.trim(), activity_date: date || null, point: Number(point) })
+        .select()
+        .single();
+      if (error || !act) { alert("활동 등록 실패"); setSaving(false); return; }
+      const partRows = selected.map((emp) => ({ activity_id: act.id, employee_number: emp }));
+      await supabase.from("field_participants").insert(partRows);
+      const pointRows = selected.map((emp) => ({
+        employee_number: emp,
+        action: "활동 참여",
+        point: Number(point),
+        ref: title.trim(),
+      }));
+      await supabase.from("user_points").insert(pointRows);
+      setDoneMsg(`${selected.length}명에게 ${point}P 지급 완료!`);
+      setTitle(""); setDate(""); setPoint(""); setSelected([]);
+      setTimeout(() => setDoneMsg(""), 4000);
+    } catch (e) {
+      alert("오류가 발생했어요");
+    }
+    setSaving(false);
+  };
+
+  const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>🚩 현장활동 등록</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>참여자 전원에게 같은 포인트를 한 번에 지급</div>
+
+      {doneMsg && (
+        <div style={{ background: "#D1FAE5", color: "#065F46", borderRadius: 12, padding: "12px 14px", fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
+          ✅ {doneMsg}
+        </div>
+      )}
+
+      <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>활동 이름</div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 6월 2일 출근 선전전" style={{ ...inputStyle, marginBottom: 14 }} />
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>날짜</div>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ width: 110 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>지급 포인트</div>
+            <input type="number" value={point} onChange={(e) => setPoint(e.target.value)} placeholder="50" style={inputStyle} />
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>참여자 선택</span>
+          <span style={{ fontSize: 12, color: "#4F46E5", cursor: "pointer" }} onClick={toggleAll}>
+            {selected.length === members.length && members.length > 0 ? "전체 해제" : "전체 선택"} · {selected.length}명
+          </span>
+        </div>
+        <div style={{ maxHeight: 320, overflowY: "auto" }}>
+          {members.map((m: any) => {
+            const emp = String(m.employee_number);
+            const on = selected.includes(emp);
+            return (
+              <div key={emp} onClick={() => toggle(emp)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}>
+                <span style={{ width: 20, height: 20, borderRadius: 5, background: on ? "#4F46E5" : "#fff", border: on ? "none" : "1.5px solid #D1D5DB", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 13 }}>{on ? "✓" : ""}</span>
+                <span style={{ flex: 1, fontSize: 14, color: "#1F2937" }}>{m.name}</span>
+                <span style={{ fontSize: 12, color: "#9CA3AF" }}>{emp}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: saving ? "#A5B4FC" : "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>
+        {saving ? "지급 중…" : `${selected.length}명에게 ${point || 0}P 지급하기`}
+      </button>
+    </div>
+  );
+}
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaPhoto, setDiaPhoto] = useState(null);
@@ -9185,6 +9293,14 @@ function AdminScreen({ onBack, user, onNavigate }) {
   const [voteDone, setVoteDone] = useState(false);
 
   const adminMenus = [
+    {
+      id: "field",
+      label: "현장활동",
+      icon: "M3 21V5a2 2 0 012-2h6l1 2h7a1 1 0 011 1v9a1 1 0 01-1 1h-7l-1-2H5",
+      color: "#EC4899",
+      bg: "#FCE7F3",
+      badge: 0,
+    },
   {
       id: "ranking",
       label: "포인트 순위",
@@ -9461,6 +9577,7 @@ function AdminScreen({ onBack, user, onNavigate }) {
           </div>
         )}
         {activeMenu === "ranking" && <PointRankingAdmin />}
+        {activeMenu === "field" && <FieldActivityAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
@@ -10499,38 +10616,56 @@ function savePointData(empId, data) {
   } catch (e) {}
 }
 
-function addPoint(empId, actionKey) {
+async function addPoint(empId, actionKey, ref) {
   if (!POINT_RULES[actionKey]) return null;
   const rule = POINT_RULES[actionKey];
-  const today = getTodayStr();
-  const data = loadPointData(empId);
 
-  // 오늘 액션 초기화
-  if (!data.todayActions) data.todayActions = {};
-  if (!data.todayActions[today]) data.todayActions[today] = {};
-  const todayCount = data.todayActions[today][actionKey] || 0;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
-  if (todayCount >= rule.maxPerDay) return null; // 오늘 한도 초과
+  try {
+    if (actionKey === "notice" && ref) {
+      const { data } = await supabase
+        .from("user_points")
+        .select("id")
+        .eq("employee_number", String(empId))
+        .eq("action", rule.label)
+        .eq("ref", String(ref))
+        .limit(1);
+      if (data && data.length > 0) return null;
+    } else {
+      const { data } = await supabase
+        .from("user_points")
+        .select("id")
+        .eq("employee_number", String(empId))
+        .eq("action", rule.label)
+        .gte("created_at", todayStart.toISOString());
+      if (data && data.length >= rule.maxPerDay) return null;
+    }
 
-  data.total = (data.total || 0) + rule.point;
-  data.todayActions[today][actionKey] = todayCount + 1;
-  if (!data.logs) data.logs = [];
-  data.logs.unshift({
-    date: new Date().toLocaleString("ko-KR"),
-    action: rule.label,
-    point: rule.point,
-    total: data.total,
-  });
-  if (data.logs.length > 100) data.logs = data.logs.slice(0, 100);
-  savePointData(empId, data);
-  supabase
-    .from("user_points")
-    .insert({
+    await supabase.from("user_points").insert({
       employee_number: String(empId),
       action: rule.label,
       point: rule.point,
-    })
-    .then(() => {}, () => {});
+      ref: ref ? String(ref) : null,
+    });
+  } catch (e) {
+    return null;
+  }
+
+  try {
+    const d = loadPointData(empId);
+    d.total = (d.total || 0) + rule.point;
+    if (!d.logs) d.logs = [];
+    d.logs.unshift({
+      date: new Date().toLocaleString("ko-KR"),
+      action: rule.label,
+      point: rule.point,
+      total: d.total,
+    });
+    savePointData(empId, d);
+  } catch (e) {}
+
   return rule.point;
 }
 
@@ -10853,16 +10988,20 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
     loadDb();
   }, [empId]);
   const today = getTodayStr();
-  const todayCheckin = pointData.todayActions?.[today]?.checkin || 0;
+ const todayCheckin = dbRows.filter((r: any) => {
+    if (r.action !== "출석 체크") return false;
+    const d = new Date(r.created_at);
+    const n = new Date();
+    return d.toDateString() === n.toDateString();
+  }).length;
 
-  const handleCheckin = () => {
+  const handleCheckin = async () => {
     if (user?.is_admin) { setToast("관리자는 포인트 대상이 아니에요"); setTimeout(() => setToast(""), 2000); return; }
-    const earned = addPoint(empId, "checkin");
+    const earned = await addPoint(empId, "checkin");
     if (earned) {
-      setPointData(loadPointData(empId));
       setToast(`+${earned}P 출석 체크 완료!`);
       setTimeout(() => setToast(""), 2000);
-      setTimeout(() => loadDb(), 800);
+      loadDb();
     } else {
       setToast("오늘 이미 출석했어요!");
       setTimeout(() => setToast(""), 2000);
@@ -22132,14 +22271,7 @@ export default function App() {
     if (!user || user.is_admin) return;
     const uid = getUserId(user);
     if (screen === "noticeDetail" && selectedNotice) {
-      const readKey = `read_notices_${uid}`;
-      const readList = JSON.parse(localStorage.getItem(readKey) || "[]");
-      const nid = selectedNotice.id || selectedNotice.title;
-      if (!readList.includes(nid)) {
-        addPoint(uid, "notice");
-        readList.push(nid);
-        localStorage.setItem(readKey, JSON.stringify(readList));
-      }
+      addPoint(uid, "notice", selectedNotice.id || selectedNotice.title);
     }
     if (screen === "vote") addPoint(uid, "vote");
     if (screen === "workAdjust") addPoint(uid, "schedule");
