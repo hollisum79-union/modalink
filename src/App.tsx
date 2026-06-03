@@ -10845,7 +10845,7 @@ function PointSection({ user }) {
           <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "8px 0" }}>이번 달 적립이 아직 없어요</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {byTypeArr.map(([label, info]) => (
+           {byTypeArr.map(([label, info]: any) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 13, color: "#374151" }}>{label} · {info.count}회</span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: "#4F46E5" }}>+{info.point}P</span>
