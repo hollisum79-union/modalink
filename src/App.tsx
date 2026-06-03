@@ -9180,6 +9180,7 @@ function FieldRegister() {
   const [selected, setSelected] = React.useState<string[]>([]);
   const [saving, setSaving] = React.useState(false);
   const [doneMsg, setDoneMsg] = React.useState("");
+  const [partSearch, setPartSearch] = React.useState("");
 
   React.useEffect(() => {
     supabase.from("members").select("name, employee_number, is_union").then(({ data }) => {
@@ -9259,8 +9260,27 @@ function FieldRegister() {
             {selected.length === members.length && members.length > 0 ? "전체 해제" : "전체 선택"} · {selected.length}명
           </span>
         </div>
+       <input
+          value={partSearch}
+          onChange={(e) => setPartSearch(e.target.value)}
+          placeholder="이름 또는 사번으로 검색"
+          style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 13, outline: "none", fontFamily: "inherit", marginBottom: 10 }}
+        />
         <div style={{ maxHeight: 320, overflowY: "auto" }}>
-          {members.map((m: any) => {
+          {members
+            .filter((m: any) => {
+              const q = partSearch.trim();
+              if (!q) return true;
+              return (m.name || "").includes(q) || String(m.employee_number || "").includes(q);
+            })
+            .sort((a: any, b: any) => {
+              const ka = /^[가-힣]/.test(a.name || "");
+              const kb = /^[가-힣]/.test(b.name || "");
+              if (ka && !kb) return -1;
+              if (!ka && kb) return 1;
+              return (a.name || "").localeCompare(b.name || "", "ko");
+            })
+            .map((m: any) => {
             const emp = String(m.employee_number);
             const on = selected.includes(emp);
             return (
