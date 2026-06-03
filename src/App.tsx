@@ -13526,6 +13526,7 @@ function MySettingsScreen({
   const [workSaved, setWorkSaved] = useState(false);
   const [savedWorkData, setSavedWorkData] = useState(null);
   const workTypes = ["교대", "교번", "통상", "변형통상"];
+  const [editMode, setEditMode] = useState(!(user?.work_type));
   // 화면 진입 시 DB에서 최신 user 정보 다시 가져오기
   React.useEffect(() => {
     if (!user?.employee_number) return;
@@ -14157,7 +14158,7 @@ function MySettingsScreen({
             />
             근무 정보
           </div>
-
+{editMode && (<>
           {/* 근무 유형 */}
           {[
             {
@@ -15129,6 +15130,7 @@ function MySettingsScreen({
                 alert("로그인 정보 없음 - 저장 안 됨");
               }
               setWorkSaved(true);
+              setEditMode(false);
               setTimeout(() => setWorkSaved(false), 2000);
             }}
             style={{
@@ -15147,7 +15149,31 @@ function MySettingsScreen({
           >
             근무정보 저장하기
           </button>
+</>)}
 
+          {!editMode && (
+            <div>
+              {[
+                { label: "근무 유형", value: (editWorkType || "-") + (editWorkGroup ? ` · ${editWorkGroup}조` : "") },
+                { label: "직급", value: editGrade ? `${editGrade}급` : "-" },
+                { label: "현재 호봉", value: editPayStep ? `${editPayStep}호봉` : "-" },
+                { label: "다음 승급일", value: editPayStepNextDate || "-" },
+                { label: "입사년도", value: editJoinYear || "-" },
+                { label: "출생연도", value: editBirthYear || "-" },
+              ].map((it, i, arr) => (
+                <div key={it.label} style={{ display: "flex", justifyContent: "space-between", padding: "11px 0", borderBottom: i < arr.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                  <span style={{ fontSize: 13, color: "#6B7280" }}>{it.label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{it.value}</span>
+                </div>
+              ))}
+              <button
+                onClick={() => setEditMode(true)}
+                style={{ width: "100%", marginTop: 16, padding: "12px", background: "#fff", color: "#4F46E5", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                ✏️ 수정하기
+              </button>
+            </div>
+          )}
           {/* 저장 후 실시간 현시 */}
           {savedWorkData && (
             <div
