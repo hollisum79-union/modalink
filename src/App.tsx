@@ -20404,15 +20404,49 @@ function HomeCarousel({
   onUrgentClick,
   carouselNotices = [],
   onCondolenceClick,
+  user,
 }: {
   urgentNotice?: any;
   carouselNotices?: any[];
   onUrgentClick: () => void;
   onCondolenceClick: () => void;
+  user?: any;
 }) {
   // 경조사 데이터 (Supabase events에서)
   const [condolences, setCondolences] = React.useState([]);
+const [topUsers, setTopUsers] = React.useState<any[]>([]);
+  const [myRank, setMyRank] = React.useState<any>(null);
 
+  React.useEffect(() => {
+    const loadTop = async () => {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { data } = await supabase
+        .from("user_points")
+        .select("employee_number, point, created_at")
+        .gte("created_at", monthStart);
+      if (!data) return;
+      const sums: any = {};
+      data.forEach((r: any) => {
+        sums[r.employee_number] = (sums[r.employee_number] || 0) + (r.point || 0);
+      });
+      const ranked = Object.entries(sums)
+        .map(([emp, total]) => ({ emp, total: total as number }))
+        .sort((a, b) => b.total - a.total);
+      const myId = String(user?.emp_id || user?.id || "");
+      const myIdx = ranked.findIndex((r) => r.emp === myId);
+      setMyRank(myIdx >= 0 ? { rank: myIdx + 1, total: ranked[myIdx].total } : null);
+      setTopUsers(
+        ranked.slice(0, 3).map((r, i) => ({
+          rank: i + 1,
+          emp: r.emp,
+          total: r.total,
+          isMe: r.emp === myId,
+        }))
+      );
+    };
+    loadTop();
+  }, [user]);
   React.useEffect(() => {
     const loadCondolences = async () => {
       const { data } = await supabase
@@ -20606,7 +20640,7 @@ function HomeCarousel({
                   color: "#92400E",
                 }}
               >
-                이번 달 접속 TOP 3
+                이번 달 활동 TOP 3
               </span>
               <span
                 style={{
@@ -20620,26 +20654,52 @@ function HomeCarousel({
               </span>
             </div>
 
-            {dummyTopUsers.map((u) => (
+            {topUsers.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#92400E", opacity: 0.7, padding: "4px 0" }}>
+                아직 집계된 활동이 없어요
+              </div>
+            ) : (
+              topUsers.map((u) => (
+                <div
+                  key={u.rank}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "4px 0",
+                    fontSize: 12,
+                    color: "#78350F",
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>
+                    {u.rank === 1 ? "🥇" : u.rank === 2 ? "🥈" : "🥉"}
+                  </span>
+                  <span style={{ fontWeight: 600 }}>{u.rank}위</span>
+                  <span style={{ flex: 1, fontWeight: u.isMe ? 800 : 500 }}>
+                    {u.isMe ? "나" : `조합원 ${["A", "B", "C"][u.rank - 1]}`}
+                  </span>
+                  <span style={{ fontWeight: 700 }}>{u.total}P</span>
+                </div>
+              ))
+            )}
+            {myRank && myRank.rank > 3 && (
               <div
-                key={u.rank}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
-                  padding: "4px 0",
+                  padding: "6px 0 0",
+                  marginTop: 4,
+                  borderTop: "1px solid rgba(146,64,14,0.15)",
                   fontSize: 12,
                   color: "#78350F",
+                  fontWeight: 700,
                 }}
               >
-                <span style={{ fontSize: 14 }}>
-                  {u.rank === 1 ? "🥇" : u.rank === 2 ? "🥈" : "🥉"}
-                </span>
-                <span style={{ fontWeight: 600 }}>{u.rank}위</span>
-                <span style={{ flex: 1 }}>조합원 #{u.memberId}</span>
-                <span style={{ fontWeight: 700 }}>{u.count}회</span>
+                <span style={{ flex: 1 }}>내 순위</span>
+                <span>{myRank.rank}위 ({myRank.total}P)</span>
               </div>
-            ))}
+            )}
           </div>
 
           {/* ====== 3번 카드: 경조사 ====== */}
@@ -23534,6 +23594,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           carouselNotices={carouselNotices}
           onUrgentClick={() => setScreen("noticeList")}
           onCondolenceClick={() => { setBoardTab("경조사"); setScreen("board"); }}
+          user={user}
         />
         <div
           style={{
