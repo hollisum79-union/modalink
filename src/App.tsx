@@ -10460,6 +10460,14 @@ function addPoint(empId, actionKey) {
   });
   if (data.logs.length > 100) data.logs = data.logs.slice(0, 100);
   savePointData(empId, data);
+  supabase
+    .from("user_points")
+    .insert({
+      employee_number: String(empId),
+      action: rule.label,
+      point: rule.point,
+    })
+    .then(() => {}, () => {});
   return rule.point;
 }
 
