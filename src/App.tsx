@@ -10793,6 +10793,7 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
   const todayCheckin = pointData.todayActions?.[today]?.checkin || 0;
 
   const handleCheckin = () => {
+    if (user?.is_admin) { setToast("관리자는 포인트 대상이 아니에요"); setTimeout(() => setToast(""), 2000); return; }
     const earned = addPoint(empId, "checkin");
     if (earned) {
       setPointData(loadPointData(empId));
@@ -22065,7 +22066,7 @@ export default function App() {
 
   // 화면별 포인트 적립
   React.useEffect(() => {
-    if (!user) return;
+    if (!user || user.is_admin) return;
     const uid = getUserId(user);
     if (screen === "noticeDetail" && selectedNotice) addPoint(uid, "notice");
     if (screen === "vote") addPoint(uid, "vote");
