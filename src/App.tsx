@@ -9087,7 +9087,62 @@ function PaySettingScreen() {
     </div>
   );
 }
+function PointRankingAdmin() {
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    (async () => {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { data: pts } = await supabase
+        .from("user_points")
+        .select("employee_number, point")
+        .gte("created_at", monthStart);
+      const { data: mem } = await supabase
+        .from("members")
+        .select("employee_number, name");
+      const nameMap: any = {};
+      (mem || []).forEach((m: any) => { nameMap[String(m.employee_number)] = m.name; });
+      const sums: any = {};
+      (pts || []).forEach((r: any) => {
+        const k = String(r.employee_number);
+        sums[k] = (sums[k] || 0) + (r.point || 0);
+      });
+      const ranked = Object.entries(sums)
+        .map(([emp, total]) => ({ emp, name: nameMap[emp] || "(미등록)", total: total as number }))
+        .sort((a, b) => b.total - a.total);
+      setRows(ranked);
+      setLoading(false);
+    })();
+  }, []);
 
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>🏆 이번 달 포인트 순위</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>매월 1일 초기화 · 실명 표시 (관리자 전용)</div>
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>이번 달 집계된 활동이 없어요</div>
+      ) : (
+        <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+          {rows.map((r, i) => (
+            <div key={r.emp} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderBottom: i < rows.length - 1 ? "1px solid #F3F4F6" : "none", background: i < 3 ? "#FFFBEB" : "#fff" }}>
+              <span style={{ fontSize: 16, fontWeight: 800, width: 28, textAlign: "center" }}>
+                {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
+              </span>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{r.name}</span>
+              <span style={{ fontSize: 12, color: "#9CA3AF", marginRight: 8 }}>{r.emp}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5" }}>{r.total}P</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+</parameter>
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaPhoto, setDiaPhoto] = useState(null);
@@ -9131,6 +9186,14 @@ function AdminScreen({ onBack, user, onNavigate }) {
   const [voteDone, setVoteDone] = useState(false);
 
   const adminMenus = [
+  {
+      id: "ranking",
+      label: "포인트 순위",
+      icon: "M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z",
+      color: "#F59E0B",
+      bg: "#FEF3C7",
+      badge: 0,
+    },
     {
       id: "memberlist",
       label: "조합원 명단",
@@ -9398,6 +9461,7 @@ function AdminScreen({ onBack, user, onNavigate }) {
             ))}
           </div>
         )}
+        {activeMenu === "ranking" && <PointRankingAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
@@ -22068,7 +22132,16 @@ export default function App() {
   React.useEffect(() => {
     if (!user || user.is_admin) return;
     const uid = getUserId(user);
-    if (screen === "noticeDetail" && selectedNotice) addPoint(uid, "notice");
+    if (screen === "noticeDetail" && selectedNotice) {
+      const readKey = `read_notices_${uid}`;
+      const readList = JSON.parse(localStorage.getItem(readKey) || "[]");
+      const nid = selectedNotice.id || selectedNotice.title;
+      if (!readList.includes(nid)) {
+        addPoint(uid, "notice");
+        readList.push(nid);
+        localStorage.setItem(readKey, JSON.stringify(readList));
+      }
+    }
     if (screen === "vote") addPoint(uid, "vote");
     if (screen === "workAdjust") addPoint(uid, "schedule");
   }, [screen, selectedNotice]);
