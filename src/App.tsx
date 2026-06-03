@@ -16323,6 +16323,17 @@ const { data: nightData } = await supabase
         .select("*");
       if (nightData) setNightSettings(nightData);
 
+      if (user?.employee_number) {
+        const { data: meData } = await supabase
+          .from("members")
+          .select("grade, pay_step")
+          .eq("employee_number", user.employee_number)
+          .maybeSingle();
+        if (meData) {
+          if (meData.grade) setSelectedGrade(meData.grade);
+          if (meData.pay_step) setSelectedHobong(meData.pay_step);
+        }
+      }
       const { data: diaData } = await supabase.from("kyobun_dia").select("*");
       if (diaData) setDiaTable(diaData);
 
