@@ -13527,6 +13527,7 @@ function MySettingsScreen({
   const [savedWorkData, setSavedWorkData] = useState(null);
   const workTypes = ["교대", "교번", "통상", "변형통상"];
   const [editMode, setEditMode] = useState(!(user?.work_type));
+  const [editNotify, setEditNotify] = useState(false);
   // 화면 진입 시 DB에서 최신 user 정보 다시 가져오기
   React.useEffect(() => {
     if (!user?.employee_number) return;
@@ -15175,7 +15176,7 @@ function MySettingsScreen({
             </div>
           )}
           {/* 저장 후 실시간 현시 */}
-          {savedWorkData && (
+         {editMode && savedWorkData && (
             <div
               style={{
                 marginTop: 16,
@@ -15537,7 +15538,23 @@ function MySettingsScreen({
             />
             알림 설정
           </div>
-          {[
+      {!editNotify && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F9FAFB", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+                <span style={{ fontSize: 13, color: "#6B7280" }}>받는 중인 알림</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#4F46E5" }}>
+                  {["urgentNotice", "agreement", "board", "vote", "inquiry"].filter((k) => notifSettings[k]).length}개 켜짐
+                </span>
+              </div>
+              <button
+                onClick={() => setEditNotify(true)}
+                style={{ width: "100%", padding: "12px", background: "#fff", color: "#4F46E5", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                ✏️ 수정하기
+              </button>
+            </div>
+          )}
+          {editNotify && [
             {
               key: "urgentNotice",
               label: "긴급공지",
@@ -15621,6 +15638,14 @@ function MySettingsScreen({
               </button>
             </div>
           ))}
+          {editNotify && (
+            <button
+              onClick={() => setEditNotify(false)}
+              style={{ width: "100%", marginTop: 14, padding: "12px", background: "linear-gradient(135deg, #4F46E5, #6D28D9)", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              완료
+            </button>
+          )}
         </div>
 
         {/* 앱 정보 */}
