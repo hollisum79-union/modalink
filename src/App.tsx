@@ -17347,9 +17347,6 @@ const { data: nightData } = await supabase
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
-                    <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
                     대무충당수당
                   </div>
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
