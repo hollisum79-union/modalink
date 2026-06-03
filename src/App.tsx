@@ -10467,10 +10467,7 @@ function addPoint(empId, actionKey) {
       action: rule.label,
       point: rule.point,
     })
-    .then(
-      (res) => console.log("포인트 DB 저장 결과:", res),
-      (err) => console.log("포인트 DB 저장 에러:", err)
-    );
+    .then(() => {}, () => {});
   return rule.point;
 }
 
@@ -10780,7 +10777,18 @@ function PointSection({ user }) {
   const [pointData, setPointData] = React.useState(() => loadPointData(empId));
   const [showLogs, setShowLogs] = React.useState(false);
   const [toast, setToast] = React.useState("");
-
+const [dbRows, setDbRows] = React.useState<any[]>([]);
+  const loadDb = async () => {
+    const { data } = await supabase
+      .from("user_points")
+      .select("action, point, created_at")
+      .eq("employee_number", String(empId))
+      .order("created_at", { ascending: false });
+    setDbRows(data || []);
+  };
+  React.useEffect(() => {
+    loadDb();
+  }, [empId]);
   const today = getTodayStr();
   const todayCheckin = pointData.todayActions?.[today]?.checkin || 0;
 
@@ -10790,34 +10798,36 @@ function PointSection({ user }) {
       setPointData(loadPointData(empId));
       setToast(`+${earned}P 출석 체크 완료!`);
       setTimeout(() => setToast(""), 2000);
+      setTimeout(() => loadDb(), 800);
     } else {
       setToast("오늘 이미 출석했어요!");
       setTimeout(() => setToast(""), 2000);
     }
   };
 
-  const now = new Date();
-  const curY = now.getFullYear();
-  const curM = now.getMonth() + 1;
-  const isThisMonth = (dateStr) => {
-    const m = String(dateStr).match(/(\d{4})\.\s*(\d{1,2})\./);
-    if (!m) return false;
-    return Number(m[1]) === curY && Number(m[2]) === curM;
-  };
+  const nowD = new Date();
+  const curY = nowD.getFullYear();
+  const curM = nowD.getMonth();
 
-  const logs = pointData.logs || [];
-  const monthLogs = logs.filter((l) => isThisMonth(l.date));
-  const monthlyPoint = monthLogs.reduce((s, l) => s + (l.point || 0), 0);
-  const totalPoint = pointData.total || 0;
+  const monthRows = dbRows.filter((r: any) => {
+    const d = new Date(r.created_at);
+    return d.getFullYear() === curY && d.getMonth() === curM;
+  });
+  const monthlyPoint = monthRows.reduce((s: number, r: any) => s + (r.point || 0), 0);
+  const totalPoint = dbRows.reduce((s: number, r: any) => s + (r.point || 0), 0);
 
   const byType: any = {};
-  monthLogs.forEach((l) => {
-    if (!byType[l.action]) byType[l.action] = { count: 0, point: 0 };
-    byType[l.action].count += 1;
-    byType[l.action].point += l.point || 0;
+  monthRows.forEach((r: any) => {
+    if (!byType[r.action]) byType[r.action] = { count: 0, point: 0 };
+    byType[r.action].count += 1;
+    byType[r.action].point += r.point || 0;
   });
   const byTypeArr = Object.entries(byType).sort((a: any, b: any) => b[1].point - a[1].point);
-  const recentLogs = logs.slice(0, 5);
+  const recentLogs = dbRows.slice(0, 5).map((r: any) => ({
+    action: r.action,
+    point: r.point,
+    date: new Date(r.created_at).toLocaleString("ko-KR"),
+  }));
 
   return (
     <div style={{ background: "#fff", borderRadius: 20, padding: 16, marginBottom: 12, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
