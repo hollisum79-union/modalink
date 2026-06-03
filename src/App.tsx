@@ -16335,7 +16335,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         }
       }
 
-      const { data: diaData } = await supabase.from("kyobun_dia").select("*");
+      const { data: diaData } = await supabase
+        .from("kyobun_dia")
+        .select("dia_no, day_type, work_hours, night_hours");
       if (diaData) setDiaTable(diaData);
 
       try {
@@ -17019,7 +17021,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
         {!loading && (
           <>
-            {/* 직급 선택 */}
+            {/* 직급·호봉 (보기 전용) */}
             <div
               style={{
                 background: "#fff",
@@ -17029,98 +17031,37 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
               }}
             >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: "#1F2937",
-                  marginBottom: 14,
-                }}
-              >
-                1️⃣ 직급 선택
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>
+                1️⃣ 직급 · 호봉
               </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7, 1fr)",
-                  gap: 8,
-                }}
-              >
-                {grades.map((g) => (
-                  <button
-                    key={g}
-                    onClick={() => setSelectedGrade(g)}
-                    style={{
-                      padding: "10px 0",
-                      borderRadius: 10,
-                      border:
-                        selectedGrade === g
-                          ? "2px solid #4F46E5"
-                          : "2px solid #E5E7EB",
-                      background: selectedGrade === g ? "#4F46E5" : "#F9FAFB",
-                      color: selectedGrade === g ? "#fff" : "#374151",
-                      fontWeight: selectedGrade === g ? 700 : 500,
-                      fontSize: 14,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {g}급
-                  </button>
-                ))}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 14, color: "#6B7280" }}>직급</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#4F46E5" }}>
+                  {selectedGrade ? `${selectedGrade}급` : "-"}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 12, marginTop: 12, borderTop: "1px solid #F3F4F6" }}>
+                <span style={{ fontSize: 14, color: "#6B7280" }}>현재 호봉</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#7C3AED" }}>
+                  {selectedHobong ? `${selectedHobong}호봉` : "-"}
+                </span>
+              </div>
+              <div style={{ background: "#F9FAFB", borderRadius: 10, padding: "12px 14px", marginTop: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontSize: 14, color: "#6B7280" }}>내 시급</span>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: "#1F2937" }}>
+                    {Math.round(hourlyWage).toLocaleString("ko-KR")}
+                    <span style={{ fontSize: 12, fontWeight: 400, color: "#9CA3AF" }}>원</span>
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4, textAlign: "right" }}>
+                  통상임금 ÷ 209시간
+                </div>
+              </div>
+              <div style={{ background: "#EEF2FF", borderRadius: 8, padding: "8px 11px", marginTop: 12, fontSize: 12, color: "#4338CA" }}>
+                직급·호봉은 마이페이지에서 변경하세요
               </div>
             </div>
-
-            {/* 호봉 선택 */}
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: 16,
-                padding: "18px 16px",
-                marginBottom: 14,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: "#1F2937",
-                  marginBottom: 14,
-                }}
-              >
-                2️⃣ 호봉 선택
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(8, 1fr)",
-                  gap: 6,
-                }}
-              >
-                {hobongs.map((h) => (
-                  <button
-                    key={h}
-                    onClick={() => setSelectedHobong(h)}
-                    style={{
-                      padding: "8px 0",
-                      borderRadius: 8,
-                      border:
-                        selectedHobong === h
-                          ? "2px solid #7C3AED"
-                          : "2px solid #E5E7EB",
-                      background: selectedHobong === h ? "#7C3AED" : "#F9FAFB",
-                      color: selectedHobong === h ? "#fff" : "#374151",
-                      fontWeight: selectedHobong === h ? 700 : 400,
-                      fontSize: 13,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {h}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* 수당 항목 */}
             <div
               style={{
