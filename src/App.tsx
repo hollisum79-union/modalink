@@ -6987,7 +6987,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
   const [contactTarget, setContactTarget] = useState(null);
   const [stationFilter, setStationFilter] = useState("전체");
   const [memberCount, setMemberCount] = useState(0);
-
+  const [memberSearch, setMemberSearch] = useState("");
   useEffect(() => {
     supabase
       .from("members")
@@ -8161,6 +8161,23 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                 marginBottom: 12,
               }}
             >
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid #F3F4F6" }}>
+                <input
+                  value={memberSearch}
+                  onChange={(e) => setMemberSearch(e.target.value)}
+                  placeholder="이름 또는 연락처로 검색"
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "9px 12px",
+                    border: "1px solid #E5E7EB",
+                    borderRadius: 10,
+                    fontSize: 13,
+                    outline: "none",
+                    fontFamily: "inherit",
+                  }}
+                />
+              </div>
               <div
                 style={{
                   padding: "10px 16px",
@@ -8208,7 +8225,21 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                   입사일
                 </div>
               </div>
-              {members.filter((m) => m.is_union === true).map((m, i) => (
+              {members
+                .filter((m) => m.is_union === true)
+                .filter((m) => {
+                  const q = memberSearch.trim();
+                  if (!q) return true;
+                  return (m.name || "").includes(q) || (m.phone || "").includes(q);
+                })
+                .sort((a, b) => {
+                  const ka = /^[가-힣]/.test(a.name || "");
+                  const kb = /^[가-힣]/.test(b.name || "");
+                  if (ka && !kb) return -1;
+                  if (!ka && kb) return 1;
+                  return (a.name || "").localeCompare(b.name || "", "ko");
+                })
+                .map((m, i) => (
                 <div
                   key={m.id}
                   style={{
