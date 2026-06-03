@@ -10768,7 +10768,6 @@ function PointSection({ user }) {
   const empId = getUserId(user);
   const [pointData, setPointData] = React.useState(() => loadPointData(empId));
   const [showLogs, setShowLogs] = React.useState(false);
-  const [checkedIn, setCheckedIn] = React.useState(false);
   const [toast, setToast] = React.useState("");
 
   const today = getTodayStr();
@@ -10778,7 +10777,6 @@ function PointSection({ user }) {
     const earned = addPoint(empId, "checkin");
     if (earned) {
       setPointData(loadPointData(empId));
-      setCheckedIn(true);
       setToast(`+${earned}P 출석 체크 완료!`);
       setTimeout(() => setToast(""), 2000);
     } else {
@@ -10787,253 +10785,96 @@ function PointSection({ user }) {
     }
   };
 
-  // 이번달 포인트 계산
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const monthlyPoint = (pointData.logs || [])
-    .filter((l) =>
-      l.date.startsWith(thisMonth.replace("-", "년 ").replace("-", "월"))
-    )
-    .reduce((s, l) => s + l.point, 0);
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = now.getMonth() + 1;
+  const isThisMonth = (dateStr) => {
+    const m = String(dateStr).match(/(\d{4})\.\s*(\d{1,2})\./);
+    if (!m) return false;
+    return Number(m[1]) === curY && Number(m[2]) === curM;
+  };
+
+  const logs = pointData.logs || [];
+  const monthLogs = logs.filter((l) => isThisMonth(l.date));
+  const monthlyPoint = monthLogs.reduce((s, l) => s + (l.point || 0), 0);
+  const totalPoint = pointData.total || 0;
+
+  const byType = {};
+  monthLogs.forEach((l) => {
+    if (!byType[l.action]) byType[l.action] = { count: 0, point: 0 };
+    byType[l.action].count += 1;
+    byType[l.action].point += l.point || 0;
+  });
+  const byTypeArr = Object.entries(byType).sort((a, b) => b[1].point - a[1].point);
+
+  const recentLogs = logs.slice(0, 5);
 
   return (
-    <div
-      style={{
-        background: "#fff",
-        borderRadius: 20,
-        padding: "20px",
-        marginBottom: 12,
-        boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
-      }}
-    >
+    <div style={{ background: "#fff", borderRadius: 20, padding: 16, marginBottom: 12, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
       {toast && (
-        <div
-          style={{
-            position: "fixed",
-            top: 60,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "#4F46E5",
-            color: "#fff",
-            borderRadius: 12,
-            padding: "10px 20px",
-            fontSize: 13,
-            fontWeight: 700,
-            zIndex: 999,
-            whiteSpace: "nowrap",
-          }}
-        >
+        <div style={{ position: "fixed", top: 80, left: "50%", transform: "translateX(-50%)", background: "#1F2937", color: "#fff", padding: "10px 18px", borderRadius: 20, fontSize: 14, zIndex: 9999 }}>
           {toast}
         </div>
       )}
-      <div
-        style={{
-          fontSize: 14,
-          fontWeight: 800,
-          color: "#1F2937",
-          marginBottom: 16,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <div
-          style={{
-            width: 4,
-            height: 18,
-            background: "#F59E0B",
-            borderRadius: 2,
-          }}
-        />
-        🏆 나의 포인트
+
+      <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 14 }}>🏆 나의 포인트</div>
+
+      <div style={{ background: "#F5F3FF", borderRadius: 16, padding: "20px 16px", textAlign: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, color: "#7C6FDA", marginBottom: 6 }}>이번 달 포인트</div>
+        <div style={{ fontSize: 38, fontWeight: 800, color: "#4F46E5", lineHeight: 1 }}>
+          {monthlyPoint}<span style={{ fontSize: 20 }}>P</span>
+        </div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 8 }}>매월 1일 집계 · 1등 상품 증정</div>
       </div>
 
-      {/* 포인트 요약 카드 */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 8,
-          marginBottom: 14,
-        }}
-      >
-        <div
-          style={{
-            background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
-            borderRadius: 14,
-            padding: "14px",
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              color: "rgba(255,255,255,0.75)",
-              marginBottom: 4,
-            }}
-          >
-            누적 포인트
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>
-            {(pointData.total || 0).toLocaleString()}
-            <span style={{ fontSize: 12 }}>P</span>
-          </div>
-        </div>
-        <div
-          style={{
-            background: "linear-gradient(135deg, #F59E0B, #D97706)",
-            borderRadius: 14,
-            padding: "14px",
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              color: "rgba(255,255,255,0.75)",
-              marginBottom: 4,
-            }}
-          >
-            이번달
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>
-            {monthlyPoint.toLocaleString()}
-            <span style={{ fontSize: 12 }}>P</span>
-          </div>
-        </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F9FAFB", borderRadius: 12, padding: "11px 16px", marginBottom: 16 }}>
+        <span style={{ fontSize: 13, color: "#6B7280" }}>누적 포인트</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{totalPoint}P</span>
       </div>
 
-      {/* 출석 체크 버튼 */}
       <button
         onClick={handleCheckin}
         disabled={todayCheckin >= 1}
-        style={{
-          width: "100%",
-          padding: "13px",
-          background:
-            todayCheckin >= 1
-              ? "#F3F4F6"
-              : "linear-gradient(135deg, #10B981, #059669)",
-          color: todayCheckin >= 1 ? "#9CA3AF" : "#fff",
-          border: "none",
-          borderRadius: 12,
-          fontSize: 14,
-          fontWeight: 700,
-          cursor: todayCheckin >= 1 ? "not-allowed" : "pointer",
-          fontFamily: "inherit",
-          marginBottom: 12,
-        }}
+        style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: todayCheckin >= 1 ? "#E5E7EB" : "#10B981", color: todayCheckin >= 1 ? "#9CA3AF" : "#fff", fontSize: 15, fontWeight: 700, cursor: todayCheckin >= 1 ? "default" : "pointer", fontFamily: "inherit", marginBottom: 16 }}
       >
         {todayCheckin >= 1 ? "✅ 오늘 출석 완료 (+10P)" : "🙋 출석 체크 (+10P)"}
       </button>
 
-      {/* 포인트 적립 안내 */}
-      <div
-        style={{
-          background: "#F8F7FF",
-          borderRadius: 12,
-          padding: "12px 14px",
-          marginBottom: 12,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: "#4F46E5",
-            marginBottom: 8,
-          }}
-        >
-          포인트 적립 안내
-        </div>
-        {Object.entries(POINT_RULES).map(([key, rule]) => (
-          <div
-            key={key}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "4px 0",
-              borderBottom: "1px solid #EEF0FF",
-              fontSize: 12,
-            }}
-          >
-            <span style={{ color: "#6B7280" }}>{rule.label}</span>
-            <span style={{ fontWeight: 700, color: "#4F46E5" }}>
-              +{rule.point}P
-            </span>
+      <div style={{ background: "#F9FAFB", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>이번 달 적립 내역</div>
+        {byTypeArr.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "8px 0" }}>이번 달 적립이 아직 없어요</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {byTypeArr.map(([label, info]) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: "#374151" }}>{label} · {info.count}회</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#4F46E5" }}>+{info.point}P</span>
+              </div>
+            ))}
           </div>
-        ))}
-        <div
-          style={{
-            marginTop: 8,
-            fontSize: 11,
-            color: "#9CA3AF",
-            lineHeight: 1.6,
-          }}
-        >
-          🏆 매월 1일 집계 · 1등 상품 증정
-          <br />※ 항목별 하루 적립 한도 있음
-        </div>
+        )}
       </div>
 
-      {/* 적립 내역 */}
       <button
         onClick={() => setShowLogs(!showLogs)}
-        style={{
-          width: "100%",
-          background: "none",
-          border: "1.5px solid #E5E7EB",
-          borderRadius: 12,
-          padding: "11px",
-          fontSize: 13,
-          fontWeight: 600,
-          color: "#6B7280",
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
+        style={{ width: "100%", padding: 12, borderRadius: 12, border: "1px solid #E5E7EB", background: "#fff", fontSize: 14, fontWeight: 600, color: "#4F46E5", cursor: "pointer", fontFamily: "inherit" }}
       >
-        {showLogs ? "내역 닫기 ▲" : "적립 내역 보기 ▼"}
+        {showLogs ? "최근 활동 닫기 ▲" : "최근 활동 보기 ▼"}
       </button>
 
       {showLogs && (
         <div style={{ marginTop: 10 }}>
-          {(pointData.logs || []).length === 0 ? (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "20px",
-                fontSize: 13,
-                color: "#9CA3AF",
-              }}
-            >
-              아직 적립 내역이 없어요
-            </div>
+          {recentLogs.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, fontSize: 13, color: "#9CA3AF" }}>아직 활동 내역이 없어요</div>
           ) : (
-            (pointData.logs || []).slice(0, 20).map((log, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "10px 0",
-                  borderBottom: "1px solid #F3F4F6",
-                }}
-              >
+            recentLogs.map((log, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
                 <div>
-                  <div
-                    style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}
-                  >
-                    {log.action}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>
-                    {log.date}
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{log.action}</div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{log.date}</div>
                 </div>
-                <div
-                  style={{ fontSize: 14, fontWeight: 700, color: "#10B981" }}
-                >
-                  +{log.point}P
-                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#10B981" }}>+{log.point}P</div>
               </div>
             ))
           )}
