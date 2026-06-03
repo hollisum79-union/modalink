@@ -22326,7 +22326,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     return <RegisterScreen onBack={() => setScreen("login")} />;
   if (screen === "noticeDetail" && selectedNotice)
     return (
-      <div style={{ padding: "20px 16px", maxWidth: 480, margin: "0 auto" }}>
+      <div style={{ padding: "calc(env(safe-area-inset-top) + 24px) 16px 40px", maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: "#fff" }}>
         <button
           onClick={() => setScreen("noticeList")}
           style={{ marginBottom: 16, padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}
