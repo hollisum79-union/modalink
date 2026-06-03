@@ -9141,7 +9141,7 @@ function PointRankingAdmin() {
     </div>
   );
 }
-function FieldActivityAdmin() {
+function FieldRegister() {
   const [title, setTitle] = React.useState("");
   const [date, setDate] = React.useState("");
   const [point, setPoint] = React.useState("");
@@ -9197,9 +9197,8 @@ function FieldActivityAdmin() {
   const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const };
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>🚩 현장활동 등록</div>
-      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>참여자 전원에게 같은 포인트를 한 번에 지급</div>
+    <div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>참여자 전원에게 같은 포인트를 한 번에 지급</div>
 
       {doneMsg && (
         <div style={{ background: "#D1FAE5", color: "#065F46", borderRadius: 12, padding: "12px 14px", fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
@@ -9247,6 +9246,98 @@ function FieldActivityAdmin() {
       <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: saving ? "#A5B4FC" : "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>
         {saving ? "지급 중…" : `${selected.length}명에게 ${point || 0}P 지급하기`}
       </button>
+    </div>
+  );
+}
+
+function FieldRanking() {
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [openEmp, setOpenEmp] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString();
+      const { data: parts } = await supabase
+        .from("field_participants")
+        .select("employee_number, activity_id, created_at")
+        .gte("created_at", yearStart);
+      const { data: acts } = await supabase
+        .from("field_activities")
+        .select("id, title, activity_date, point");
+      const { data: mem } = await supabase
+        .from("members")
+        .select("employee_number, name");
+      const nameMap: any = {};
+      (mem || []).forEach((m: any) => { nameMap[String(m.employee_number)] = m.name; });
+      const actMap: any = {};
+      (acts || []).forEach((a: any) => { actMap[a.id] = a; });
+      const byEmp: any = {};
+      (parts || []).forEach((p: any) => {
+        const k = String(p.employee_number);
+        if (!byEmp[k]) byEmp[k] = { count: 0, total: 0, list: [] };
+        const a = actMap[p.activity_id];
+        byEmp[k].count += 1;
+        byEmp[k].total += a ? (a.point || 0) : 0;
+        if (a) byEmp[k].list.push(a);
+      });
+      const ranked = Object.entries(byEmp)
+        .map(([emp, v]: any) => ({ emp, name: nameMap[emp] || "(미등록)", count: v.count, total: v.total, list: v.list.sort((x: any, y: any) => String(y.activity_date || "").localeCompare(String(x.activity_date || ""))) }))
+        .sort((a, b) => b.total - a.total);
+      setRows(ranked);
+      setLoading(false);
+    })();
+  }, []);
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>올해 현장활동 참여가 많은 순 · 이름을 누르면 상세</div>
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>아직 현장활동 기록이 없어요</div>
+      ) : (
+        <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1px solid #F3F4F6" }}>
+          {rows.map((r, i) => (
+            <div key={r.emp} style={{ borderBottom: i < rows.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+              <div onClick={() => setOpenEmp(openEmp === r.emp ? null : r.emp)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", background: i < 3 ? "#FFFBEB" : "#fff", cursor: "pointer" }}>
+                <span style={{ width: 26, textAlign: "center", fontSize: 15, fontWeight: 700 }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{r.name}</span>
+                <span style={{ fontSize: 13, color: "#6B7280" }}>{r.count}회 · {r.total}P</span>
+                <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: 6 }}>{openEmp === r.emp ? "▲" : "▼"}</span>
+              </div>
+              {openEmp === r.emp && (
+                <div style={{ background: "#FAFAFA", padding: "4px 16px 12px" }}>
+                  {r.list.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#9CA3AF", padding: "8px 0" }}>활동 정보 없음</div>
+                  ) : r.list.map((a: any, j: number) => (
+                    <div key={j} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: j < r.list.length - 1 ? "1px solid #F0F0F0" : "none" }}>
+                      <span style={{ flex: 1, fontSize: 13, color: "#374151" }}>{a.title}</span>
+                      <span style={{ fontSize: 11, color: "#9CA3AF", marginRight: 8 }}>{a.activity_date || ""}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#4F46E5" }}>+{a.point}P</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FieldActivityAdmin() {
+  const [tab, setTab] = React.useState("register");
+  return (
+    <div style={{ padding: 16 }}>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 14 }}>🚩 현장활동</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setTab("register")} style={{ flex: 1, padding: 10, borderRadius: 8, border: tab === "register" ? "none" : "1px solid #E5E7EB", background: tab === "register" ? "#4F46E5" : "#fff", color: tab === "register" ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>활동 등록</button>
+        <button onClick={() => setTab("ranking")} style={{ flex: 1, padding: 10, borderRadius: 8, border: tab === "ranking" ? "none" : "1px solid #E5E7EB", background: tab === "ranking" ? "#4F46E5" : "#fff", color: tab === "ranking" ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>참여 순위</button>
+      </div>
+      {tab === "register" && <FieldRegister />}
+      {tab === "ranking" && <FieldRanking />}
     </div>
   );
 }
