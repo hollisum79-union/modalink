@@ -11543,7 +11543,20 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   const [rotationData, setRotationData] = React.useState<any[]>([]);
 const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
-  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
+ const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
+  const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    if (!selectedMember?.employee_number) { setLeaveRecords([]); return; }
+    const loadLeave = async () => {
+      const { data } = await supabase
+        .from("leave_history")
+        .select("*")
+        .eq("employee_number", selectedMember.employee_number)
+        .neq("status", "취소");
+      if (data) setLeaveRecords(data);
+    };
+    loadLeave();
+  }, [selectedMember]);
 
   // 근무조정 기록 불러오기 (선택된 사람 기준)
   React.useEffect(() => {
@@ -13178,6 +13191,29 @@ const getKyobunWork = (member: any, date: Date) => {
                       </div>
                     );
                   })()}
+                {(() => {
+                    const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    const lv = leaveRecords.filter((r) => r.used_date === dstr);
+                    if (lv.length === 0) return null;
+                    const LV: Record<string, string> = {
+                      annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차",
+                      substitute: "대체", study: "학습", longService: "장기재직",
+                    };
+                    return (
+                      <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {lv.map((r, i) => (
+                          <div key={`lv${i}`} style={{ background: "#EEF0FF", borderRadius: 5, padding: "2px 3px" }}>
+                            <div style={{ fontSize: 9, color: "#4F46E5", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>
+                              {LV[r.leave_type] || r.leave_type}
+                            </div>
+                            <div style={{ fontSize: 9, color: "#4F46E5", lineHeight: 1.3, textAlign: "center" }}>
+                              {r.days}일
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}  
                 </div>
               );
             })}
