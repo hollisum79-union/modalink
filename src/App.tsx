@@ -10616,7 +10616,7 @@ function savePointData(empId, data) {
   } catch (e) {}
 }
 
-async function addPoint(empId, actionKey, ref) {
+async function addPoint(empId, actionKey, ref?) {
   if (!POINT_RULES[actionKey]) return null;
   const rule = POINT_RULES[actionKey];
 
