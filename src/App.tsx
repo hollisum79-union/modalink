@@ -16489,9 +16489,30 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
   const nightHoursPerShift =
     worktypeSettings.find((w) => w.work_type === workType)?.night_hours || 0;
-  const nightTotalHours = nightHoursPerShift * nightCount;
+    const isKyobun =
+    memberInfo?.work_type === "교번" &&
+    (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
+  const kyobunNightHours = (() => {
+    if (!isKyobun || rotationData.length === 0 || diaTable.length === 0) return 0;
+    const n = new Date();
+    const ft = new Date(n.getFullYear(), n.getMonth(), 1);
+    const lp = new Date(ft.getTime() - 86400000);
+    const yy = lp.getFullYear();
+    const mn = lp.getMonth();
+    const dd = new Date(yy, mn + 1, 0).getDate();
+    let sum = 0;
+    for (let i = 1; i <= dd; i++) {
+      const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData);
+      if (w && Number(w.dia) >= 60) {
+        const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+        const { nightHours } = calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays);
+        sum += nightHours;
+      }
+    }
+    return sum;
+  })();
+  const nightTotalHours = isKyobun ? kyobunNightHours : nightHoursPerShift * nightCount;
   const nightPay = Math.round(hourlyWage * 0.5 * nightTotalHours);
-
   const overtimeTotalHours = overtimeHour + overtimeMin / 60;
   const overtimeBase8 = Math.min(overtimeTotalHours, 8);
   const overtimeOver8 = Math.max(overtimeTotalHours - 8, 0);
