@@ -16793,54 +16793,20 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
             marginBottom: 4,
           }}
         >
-          📋 공제율 안내 (2025년 기준)
+          📋 공제율 안내 ({(dedRates?.year ?? 2025) + "년 기준"})
         </div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>
           법정 고정 요율 적용 · 실제 명세서와 소폭 차이 있을 수 있음
         </div>
-        {[
-          {
-            label: "국민연금",
-            rate: "4.5%",
-            base: "통상임금 기준",
-            color: "#3B82F6",
-          },
-          {
-            label: "건강보험",
-            rate: "3.545%",
-            base: "통상임금 기준",
-            color: "#10B981",
-          },
-          {
-            label: "장기요양보험",
-            rate: "건강보험료 × 12.95%",
-            base: "건강보험료 기준",
-            color: "#8B5CF6",
-          },
-          {
-            label: "고용보험",
-            rate: "0.9%",
-            base: "통상임금 기준",
-            color: "#F59E0B",
-          },
-          {
-            label: "소득세",
-            rate: "약 2%",
-            base: "부양가족 1인 기준 추정",
-            color: "#EF4444",
-          },
-          {
-            label: "지방소득세",
-            rate: "소득세 × 10%",
-            base: "소득세 기준",
-            color: "#EC4899",
-          },
-          {
-            label: "조합비",
-            rate: "기본급 × 1.2%",
-            base: "기본급 기준",
-            color: "#6366F1",
-          },
+ {[
+                  { label: "국민연금", rate: `${((dedRates?.national_pension ?? 0.045) * 100).toFixed(3).replace(/\.?0+$/, "")}%`, base: "통상임금 기준", color: "#3B82F6" },
+                  { label: "건강보험", rate: `${((dedRates?.health_insurance ?? 0.03545) * 100).toFixed(3).replace(/\.?0+$/, "")}%`, base: "통상임금 기준", color: "#10B981" },
+                  { label: "장기요양보험", rate: `건강보험료 × ${((dedRates?.long_term_care ?? 0.1295) * 100).toFixed(2).replace(/\.?0+$/, "")}%`, base: "건강보험료 기준", color: "#8B5CF6" },
+                  { label: "고용보험", rate: `${((dedRates?.employment_insurance ?? 0.009) * 100).toFixed(3).replace(/\.?0+$/, "")}%`, base: "통상임금 기준", color: "#F59E0B" },
+                  { label: "소득세", rate: "약 2%", base: "부양가족 1인 기준 추정", color: "#EF4444" },
+                  { label: "지방소득세", rate: `소득세 × ${((dedRates?.local_tax ?? 0.1) * 100).toFixed(1).replace(/\.?0+$/, "")}%`, base: "소득세 기준", color: "#EC4899" },
+                  { label: "조합비", rate: `기본급 × ${((dedRates?.union_fee ?? 0.012) * 100).toFixed(2).replace(/\.?0+$/, "")}%`, base: "기본급 기준", color: "#6366F1" },
+                ].map((item) => (
         ].map((item) => (
           <div
             key={item.label}
