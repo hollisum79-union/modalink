@@ -22425,6 +22425,7 @@ export default function App() {
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
       ]);
+      console.log("홈 쿼리 결과:", { salaryRes, meRes, dedRes });
       setHomeSalaryData({
         salaryTable: salaryRes.data || [],
         worktypeSettings: wtRes.data || [],
