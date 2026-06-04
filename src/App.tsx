@@ -22407,10 +22407,6 @@ export default function App() {
       } catch (e) {
         console.log("공휴일 불러오기 실패", e);
       }
-   } catch (e) {
-        console.log("공휴일 불러오기 실패", e);
-      }
-
       const emp = user?.employee_number;
       const now = new Date();
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
