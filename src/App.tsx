@@ -22437,7 +22437,7 @@ export default function App() {
       });
     };
     loadHomeWork();
-  }, []);
+  }, [user]);
   const onlineList = dummyMembers.slice(0, 8);
   const usage7days = [
     { date: "5/13", count: 8 },
