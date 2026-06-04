@@ -56,6 +56,84 @@ function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTab
   if (!row) return { workHours: 0, nightHours: 0 };
   return { workHours: Number(row.work_hours) || 0, nightHours: Number(row.night_hours) || 0 };
 }
+function computeNetPay(input: any) {
+  const {
+    grade, hobong, workType, checkedItems = {}, manualInputs = {},
+    nightCount = 0, salaryTable = [], worktypeSettings = [],
+    hfRecords = [], diaTable = [], holidays = [], dedRates = null,
+    memberInfo = null, rotationData = [],
+  } = input;
+
+  const row = salaryTable.find((r: any) => r.hobong === hobong);
+  const basicSalary = row ? (row[`grade_${grade}`] ?? null) : null;
+  if (!basicSalary) return null;
+
+  const longService = hobong >= 25 ? 130000 : hobong >= 20 ? 110000 : hobong >= 15 ? 80000 : hobong >= 10 ? 60000 : hobong >= 5 ? 50000 : 0;
+  const gradeSupport = (grade === 6 || grade === 7) ? 30000 : 0;
+  const wtRates: Record<string, number> = {
+    통상: 0.1, 변형통상: 0.108, 변형근무: 0.087,
+    "4조2교대(비심야)": 0.0675, "4조2교대(심야)": 0.0635,
+    "4조2교대(야간집중)": 0.06, 교번: 0.087,
+  };
+  const workTypePay = (basicSalary && workType) ? Math.round(basicSalary * (wtRates[workType] ?? 0)) : 0;
+
+  const allowanceAmount = (item: string): number => {
+    if (!checkedItems[item]) return 0;
+    if (item === "업무보전수당") return workTypePay;
+    if (item === "장기근속수당") return longService;
+    if (item === "직급보조비") return gradeSupport;
+    return manualInputs[item] ?? 0;
+  };
+  const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
+
+  const tongsangWage = (basicSalary ?? 0) + totalAllowance;
+  const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
+
+  const isKyobun = memberInfo?.work_type === "교번" && (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
+  let kyobunNightHours = 0;
+  if (isKyobun && rotationData.length > 0 && diaTable.length > 0) {
+    const n = new Date();
+    const lp = new Date(new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 86400000);
+    const yy = lp.getFullYear(); const mn = lp.getMonth();
+    const dcount = new Date(yy, mn + 1, 0).getDate();
+    for (let i = 1; i <= dcount; i++) {
+      const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData);
+      if (w && Number(w.dia) >= 60) {
+        const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+        kyobunNightHours += calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays).nightHours;
+      }
+    }
+  }
+  const nightHoursPerShift = worktypeSettings.find((w: any) => w.work_type === workType)?.night_hours || 0;
+  const nightTotalHours = isKyobun ? kyobunNightHours : nightHoursPerShift * nightCount;
+  const nightPay = Math.round(hourlyWage * 0.5 * nightTotalHours);
+
+  let hfPaySum = 0;
+  hfRecords.forEach((rec: any) => {
+    const m = (rec.memo || "").match(/다이아\s*(\d+)/);
+    if (!m) return;
+    const { workHours, nightHours } = calcHolidayFillHours(m[1], rec.work_shift, rec.work_date, diaTable, holidays);
+    if (workHours <= 0) return;
+    const within8 = Math.min(workHours, 8);
+    const over8 = Math.max(workHours - 8, 0);
+    hfPaySum += hourlyWage * (within8 * 1.5 + over8 * 2.0) + hourlyWage * 0.5 * nightHours;
+  });
+  const holidayFillPay = Math.round(hfPaySum);
+
+  const totalGross = tongsangWage + nightPay + holidayFillPay;
+
+  const r = dedRates || {};
+  const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
+  const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
+  const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
+  const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
+  const incomeTax = Math.round(totalGross * (r.income_tax ?? 0.02));
+  const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
+  const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
+  const totalDeduction = nationalPension + healthInsurance + longTermCare + employmentInsurance + incomeTax + localTax + unionFee;
+
+  return { netPay: totalGross - totalDeduction, totalGross, totalDeduction, tongsangWage };
+}
 function getTodayWorkInfo(member: any, rotationData: any[], diaTable: any[], holidays: string[], date = new Date()) {
   const work = calcKyobunWork(member, date, rotationData);
   if (!work) return null;
@@ -22307,6 +22385,7 @@ export default function App() {
   const [homeRotation, setHomeRotation] = useState<any[]>([]);
   const [homeDia, setHomeDia] = useState<any[]>([]);
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
+  const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   useEffect(() => {
     const loadHomeWork = async () => {
       const { data: rot } = await supabase
@@ -22328,6 +22407,38 @@ export default function App() {
       } catch (e) {
         console.log("공휴일 불러오기 실패", e);
       }
+   } catch (e) {
+        console.log("공휴일 불러오기 실패", e);
+      }
+
+      const emp = user?.employee_number;
+      const now = new Date();
+      const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastPrev = new Date(firstThis.getTime() - 86400000);
+      const py = lastPrev.getFullYear();
+      const mm = String(lastPrev.getMonth() + 1).padStart(2, "0");
+      const endDay = new Date(py, lastPrev.getMonth() + 1, 0).getDate();
+      const ty = now.getFullYear();
+      const tm = String(now.getMonth() + 1).padStart(2, "0");
+      const tEnd = new Date(ty, now.getMonth() + 1, 0).getDate();
+      const [salaryRes, wtRes, meRes, hfRes, settingsRes, dedRes] = await Promise.all([
+        supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
+        supabase.from("worktype_pay_settings").select("*"),
+        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${ty}-${tm}-01`).lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      setHomeSalaryData({
+        salaryTable: salaryRes.data || [],
+        worktypeSettings: wtRes.data || [],
+        memberInfo: meRes.data || null,
+        hfRecords: hfRes.data || [],
+        settings: settingsRes.data || null,
+        dedRates: dedRes.data || null,
+      });
+    };
+    loadHomeWork();
     };
     loadHomeWork();
   }, []);
@@ -23748,21 +23859,31 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               예상 실수령액
             </div>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#1F2937" }}>
-              3,248,750<span style={{ fontSize: 11, fontWeight: 400 }}>원</span>
+              {(() => {
+                const d = homeSalaryData;
+                if (!d || !d.memberInfo) return "—";
+                const s = d.settings || {};
+                const result = computeNetPay({
+                  grade: Number(d.memberInfo.grade) || 0,
+                  hobong: Number(d.memberInfo.pay_step) || 0,
+                  workType: s.work_type || d.memberInfo.work_type || "",
+                  checkedItems: s.checked_items || {},
+                  manualInputs: s.manual_inputs || {},
+                  nightCount: 0,
+                  salaryTable: d.salaryTable,
+                  worktypeSettings: d.worktypeSettings,
+                  hfRecords: d.hfRecords,
+                  diaTable: homeDia,
+                  holidays: homeHolidays,
+                  dedRates: d.dedRates,
+                  memberInfo: d.memberInfo,
+                  rotationData: homeRotation,
+                });
+                if (!result) return "—";
+                return result.netPay.toLocaleString("ko-KR");
+              })()}<span style={{ fontSize: 11, fontWeight: 400 }}>원</span>
             </div>
-            <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 4 }}>
-              전월 대비
-            </div>
-            <div
-              style={{
-                fontSize: 10,
-                color: "#10B981",
-                marginTop: 2,
-                fontWeight: 600,
-              }}
-            >
-              ▲ 231,500원
-            </div>
+            
           </div>
        {(() => {
             const info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays) : null;
