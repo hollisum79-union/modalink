@@ -23855,6 +23855,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             <div style={{ fontSize: 14, fontWeight: 900, color: "#1F2937" }}>
               {(() => {
                 const d = homeSalaryData;
+                console.log("홈급여데이터:", d);
                 if (!d || !d.memberInfo) return "—";
                 const s = d.settings || {};
                 const result = computeNetPay({
