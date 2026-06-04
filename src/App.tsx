@@ -16310,7 +16310,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         supabase.from("night_pay_settings").select("*"),
         supabase.from("kyobun_dia").select("dia_no, day_type, work_hours, night_hours"),
         emp ? supabase.from("members").select("grade, pay_step").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
-        emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`)
+.lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${ty}-${tm}-01`).lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
       ]);
@@ -16406,7 +16407,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const finalNight = (() => {
     if (!lastMonthNight) return null;
     let c = lastMonthNight.count;
-    for (const lv of lastMonthLeaves) {
+        for (const lv of lastMonthLeaves) {
+      if (lv.status === "취소") continue;
       if (calcShift(user.work_group, new Date(lv.used_date)) === "야간") {
         c -= Number(lv.days) || 0;
       }
