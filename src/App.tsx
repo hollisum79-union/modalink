@@ -16275,6 +16275,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [hfRecords, setHfRecords] = React.useState<any[]>([]);
     const [rotationData, setRotationData] = React.useState<any[]>([]);
   const [memberInfo, setMemberInfo] = React.useState<any>(null);
+  const [dedRates, setDedRates] = React.useState<any>(null);
   const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
   const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
   const [showDeductInfo, setShowDeductInfo] = React.useState(false);
@@ -16305,7 +16306,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         leaveRes,
         hfRes,
         settingsRes,
-        rotRes,
+       rotRes,
+        dedRes,
       ] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
@@ -16317,6 +16319,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${ty}-${tm}-01`).lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+        supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
    ]);
 
       if (salaryRes.data) setSalaryTable(salaryRes.data);
@@ -16331,7 +16334,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       }
       if (leaveRes.data) setLastMonthLeaves(leaveRes.data);
       if (hfRes.data) setHfRecords(hfRes.data);
-           if (rotRes.data) setRotationData(rotRes.data);
+          if (rotRes.data) setRotationData(rotRes.data);
+      if (dedRes.data) setDedRates(dedRes.data);
 
             fetch("/.netlify/functions/read-holidays?year=" + ty)
         .then((r) => r.json())
@@ -16547,13 +16551,14 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
   const totalGross = tongsangWage + nightPay + overtimePay + holidayFillPay;
 
-  const nationalPension = Math.round(tongsangWage * 0.045);
-  const healthInsurance = Math.round(tongsangWage * 0.03545);
-  const longTermCare = Math.round(healthInsurance * 0.1295);
-  const employmentInsurance = Math.round(tongsangWage * 0.009);
-  const incomeTax = Math.round(totalGross * 0.02);
-  const localTax = Math.round(incomeTax * 0.1);
-  const unionFee = Math.round((basicSalary ?? 0) * 0.012);
+  const r = dedRates || {};
+  const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
+  const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
+  const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
+  const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
+  const incomeTax = Math.round(totalGross * (r.income_tax ?? 0.02));
+  const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
+  const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
 
   const totalDeduction =
     nationalPension +
