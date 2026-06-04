@@ -16273,7 +16273,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [holidays, setHolidays] = React.useState<string[]>([]);
   const [hfRecords, setHfRecords] = React.useState<any[]>([]);
-  const [rotationData, setRotationData] = React.useState<any[]>([]);
+    const [rotationData, setRotationData] = React.useState<any[]>([]);
+  const [memberInfo, setMemberInfo] = React.useState<any>(null);
   const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
   const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
   const [showDeductInfo, setShowDeductInfo] = React.useState(false);
@@ -16311,7 +16312,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("night_pay_settings").select("*"),
         supabase.from("kyobun_dia").select("dia_no, day_type, work_hours, night_hours"),
-        emp ? supabase.from("members").select("grade, pay_step").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${ty}-${tm}-01`).lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
@@ -16323,7 +16324,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       if (baseRes.data) setShiftBase(baseRes.data);
       if (nightRes.data) setNightSettings(nightRes.data);
       if (diaRes.data) setDiaTable(diaRes.data);
-      if (meRes.data) {
+            if (meRes.data) {
+        setMemberInfo(meRes.data);
         if (meRes.data.grade) setSelectedGrade(Number(meRes.data.grade));
         if (meRes.data.pay_step) setSelectedHobong(Number(meRes.data.pay_step));
       }
