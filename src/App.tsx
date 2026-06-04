@@ -16807,7 +16807,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   { label: "지방소득세", rate: `소득세 × ${((dedRates?.local_tax ?? 0.1) * 100).toFixed(1).replace(/\.?0+$/, "")}%`, base: "소득세 기준", color: "#EC4899" },
                   { label: "조합비", rate: `기본급 × ${((dedRates?.union_fee ?? 0.012) * 100).toFixed(2).replace(/\.?0+$/, "")}%`, base: "기본급 기준", color: "#6366F1" },
                 ].map((item) => (
-        ].map((item) => (
           <div
             key={item.label}
             style={{
