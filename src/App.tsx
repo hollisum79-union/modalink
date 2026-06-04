@@ -22408,7 +22408,7 @@ export default function App() {
         console.log("공휴일 불러오기 실패", e);
       }
       const emp = user?.employee_number;
-      console.log("로딩 시작, emp:", emp);
+      console.log("로딩 시작, user:", user);
       const now = new Date();
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastPrev = new Date(firstThis.getTime() - 86400000);
