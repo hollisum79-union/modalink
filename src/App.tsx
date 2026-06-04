@@ -9020,6 +9020,72 @@ function MemberManageScreen() {
 function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
+  const [rates, setRates] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    const loadRates = async () => {
+      const { data } = await supabase
+        .from("deduction_rates")
+        .select("*")
+        .order("year", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        const pct = (v) => (Number(v) * 100).toFixed(3).replace(/\.?0+$/, "");
+        setRates({
+          ...data,
+          national_pension_pct: pct(data.national_pension),
+          health_insurance_pct: pct(data.health_insurance),
+          long_term_care_pct: pct(data.long_term_care),
+          employment_insurance_pct: pct(data.employment_insurance),
+          income_tax_pct: pct(data.income_tax),
+          local_tax_pct: pct(data.local_tax),
+          union_fee_pct: pct(data.union_fee),
+        });
+      };
+    };
+    loadRates();
+  }, []);
+
+  const rateField = (key, val, onChange) => (
+    <input
+      type="number"
+      step="0.001"
+      value={val ?? 0}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        width: 80,
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: "1px solid #E5E7EB",
+        fontSize: 14,
+        textAlign: "right",
+      }}
+    />
+  );
+
+  const updateRate = (field, value) => {
+    setRates((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveRates = async () => {
+    if (!rates) return;
+    const toNum = (v) => Number(v) / 100;
+    await supabase
+      .from("deduction_rates")
+      .update({
+        national_pension: toNum(rates.national_pension_pct),
+        health_insurance: toNum(rates.health_insurance_pct),
+        long_term_care: toNum(rates.long_term_care_pct),
+        employment_insurance: toNum(rates.employment_insurance_pct),
+        income_tax: toNum(rates.income_tax_pct),
+        local_tax: toNum(rates.local_tax_pct),
+        union_fee: toNum(rates.union_fee_pct),
+      })
+      .eq("id", rates.id);
+    setSaveMsg("✅ 요율 저장됐어요!");
+    setTimeout(() => setSaveMsg(""), 2500);
+  };
 
   React.useEffect(() => {
     const load = async () => {
@@ -9143,6 +9209,53 @@ function PaySettingScreen() {
         <div style={{ textAlign: "center", marginTop: 10, fontSize: 14, color: "#10B981" }}>
           {saveMsg}
         </div>
+      )}
+
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", margin: "28px 0 6px" }}>
+        공제 요율 설정
+      </div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
+        % 단위로 입력 (예: 4.75) · {rates?.year ?? ""}년 기준
+      </div>
+      {rates ? (
+        <div style={{ background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+          {[
+            ["국민연금", "national_pension_pct"],
+            ["건강보험", "health_insurance_pct"],
+            ["장기요양 (건보료 대비)", "long_term_care_pct"],
+            ["고용보험", "employment_insurance_pct"],
+            ["소득세", "income_tax_pct"],
+            ["지방소득세 (소득세 대비)", "local_tax_pct"],
+            ["조합비 (기본급 대비)", "union_fee_pct"],
+          ].map(([label, key]) => (
+            <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, color: "#6B7280" }}>{label}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {rateField(key, rates[key], (v) => updateRate(key, v))}
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>%</span>
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={handleSaveRates}
+            style={{
+              width: "100%",
+              marginTop: 8,
+              padding: "12px",
+              background: "#4F46E5",
+              color: "#fff",
+              border: "none",
+              borderRadius: 10,
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            요율 저장
+          </button>
+        </div>
+      ) : (
+        <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF" }}>요율 불러오는 중…</div>
       )}
     </div>
   );
