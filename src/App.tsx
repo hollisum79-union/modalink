@@ -22435,8 +22435,6 @@ export default function App() {
       });
     };
     loadHomeWork();
-    };
-    loadHomeWork();
   }, []);
   const onlineList = dummyMembers.slice(0, 8);
   const usage7days = [
