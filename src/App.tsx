@@ -16303,7 +16303,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         leaveRes,
         hfRes,
         settingsRes,
-        holRes,
       ] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
@@ -16314,7 +16313,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${ty}-${tm}-01`).lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
-        fetch("/.netlify/functions/read-holidays?year=" + ty).then((r) => r.json()).catch(() => ({ holidays: [] })),
       ]);
 
       if (salaryRes.data) setSalaryTable(salaryRes.data);
@@ -16328,7 +16326,10 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       }
       if (leaveRes.data) setLastMonthLeaves(leaveRes.data);
       if (hfRes.data) setHfRecords(hfRes.data);
-      if (holRes && holRes.holidays) setHolidays(holRes.holidays);
+            fetch("/.netlify/functions/read-holidays?year=" + ty)
+        .then((r) => r.json())
+        .then((hj) => { if (hj.holidays) setHolidays(hj.holidays); })
+        .catch(() => {});
       if (settingsRes.data) {
         const s = settingsRes.data;
         if (s.work_type) setWorkType(s.work_type);
