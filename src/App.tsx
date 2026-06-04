@@ -17242,39 +17242,46 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     22:00~06:00 · 가산율 0.5배
                   </div>
                 </div>
-                {nightHoursPerShift > 0 ? (
-                  <div style={{ fontSize: 12, color: "#7C3AED", marginBottom: 8 }}>
-                    🌙 야간 1회 = {nightHoursPerShift}시간 (관리자 설정)
+                                {isKyobun ? (
+                  <div style={{ background: "#F5F3FF", borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 4 }}>
+                      📅 전달 야간 다이아 근무 (다이아별 실제 시간 합산)
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>
+                      = 이번 달 야간 {Math.round(nightTotalHours)}시간 (자동)
+                    </div>
                   </div>
                 ) : (
-                  <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 8 }}>
-                    근무형태를 먼저 선택하세요
-                  </div>
-                )}
-               {lastMonthNight ? (
-                  <div
-                    style={{
-                      background: "#F5F3FF",
-                      borderRadius: 10,
-                      padding: "12px 14px",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 4 }}>
-                      📅 전달({lastMonthNight.month}월) 근무표 야간 {lastMonthNight.count}일
-                    </div>
-                    {lastMonthNight.count - (finalNight ?? 0) > 0 && (
-                      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
-                        − 야간에 쓴 휴가 {(lastMonthNight.count - (finalNight ?? 0))}일 차감
+                  <>
+                    {nightHoursPerShift > 0 ? (
+                      <div style={{ fontSize: 12, color: "#7C3AED", marginBottom: 8 }}>
+                        🌙 야간 1회 = {nightHoursPerShift}시간 (관리자 설정)
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 8 }}>
+                        근무형태를 먼저 선택하세요
                       </div>
                     )}
-                    <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>
-                      = 이번 달 야간 {finalNight}회 (자동)
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                    교대 조원만 야간이 자동계산돼요 (교번은 준비중)
-                  </div>
+                    {lastMonthNight ? (
+                      <div style={{ background: "#F5F3FF", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 4 }}>
+                          📅 전달({lastMonthNight.month}월) 근무표 야간 {lastMonthNight.count}일
+                        </div>
+                        {lastMonthNight.count - (finalNight ?? 0) > 0 && (
+                          <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
+                            − 야간에 쓴 휴가 {lastMonthNight.count - (finalNight ?? 0)}일 차감
+                          </div>
+                        )}
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>
+                          = 이번 달 야간 {finalNight}회 (자동)
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                        교대 조원만 야간이 자동계산돼요
+                      </div>
+                    )}
+                  </>
                 )}
                 <div
                   style={{
@@ -17285,7 +17292,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     textAlign: "right",
                   }}
                 >
-                  총 {nightTotalHours}시간 · {nightPay.toLocaleString("ko-KR")}원
+                총 {Math.round(nightTotalHours)}시간 · {nightPay.toLocaleString("ko-KR")}원
                 </div>
               </div>
               
