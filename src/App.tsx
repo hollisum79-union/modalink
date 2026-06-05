@@ -18066,7 +18066,7 @@ function LeaveScreen({ onBack, user }) {
       alert("사용 일수를 입력해주세요.");
       return;
     }
-    if (days > item.days) {
+    if (item.id !== "petition" && days > item.days) {
       alert(`잔여일수(${item.days}일)보다 많이 사용할 수 없습니다.`);
       return;
     }
@@ -18087,8 +18087,10 @@ function LeaveScreen({ onBack, user }) {
       return;
     }
     // 2. 잔여일수 차감
-    const newRemaining = item.days - days;
-    await saveRemaining(item.id, newRemaining);
+    if (item.id !== "petition") {
+      const newRemaining = item.days - days;
+      await saveRemaining(item.id, newRemaining);
+    }
     // 3. 모달 닫기
     setUseModal(null);
     setUseDate(new Date().toISOString().slice(0, 10));
@@ -18442,7 +18444,7 @@ function LeaveScreen({ onBack, user }) {
                 </span>
               </div>
             )}
-            {editingId !== item.id && item.days > 0 && (
+            {editingId !== item.id && (item.days > 0 || item.id === "petition") && (
               <button
                 onClick={() => setUseModal(item)}
                 style={{
