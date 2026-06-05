@@ -1535,16 +1535,16 @@ function CanteenScreen({ onBack, user }) {
     {
       key: "아침",
       emoji: "🌅",
-      time: "07:00 ~ 09:00",
+      time: info?.time_breakfast || "07:00 ~ 09:00",
       isCurrent: hour >= 7 && hour < 10,
     },
     {
       key: "점심",
       emoji: "☀️",
-      time: "11:30 ~ 13:30",
+      time: info?.time_lunch || "11:30 ~ 13:30",
       isCurrent: hour >= 10 && hour < 15,
     },
-    { key: "저녁", emoji: "🌙", time: "17:00 ~ 19:00", isCurrent: hour >= 15 },
+    { key: "저녁", emoji: "🌙", time: info?.time_dinner || "17:00 ~ 19:00", isCurrent: hour >= 15 },
   ];
 
   return (
