@@ -10397,10 +10397,7 @@ useEffect(() => {
                   {activeMenu === "canteen" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
     <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid #F0F0F4" }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>🍽️ 식당 운영정보</div>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>운영시간</div>
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>🍽️ 식당 운영정보</div>
         <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>식사시간</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <span style={{ width: 40, fontSize: 13, color: "#6B7280", fontWeight: 600, flexShrink: 0 }}>아침</span>
@@ -10410,25 +10407,21 @@ useEffect(() => {
           <span style={{ width: 40, fontSize: 13, color: "#6B7280", fontWeight: 600, flexShrink: 0 }}>점심</span>
           <input value={canteenTimeL} onChange={(e) => setCanteenTimeL(e.target.value)} placeholder="11:30 ~ 13:30" style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
           <span style={{ width: 40, fontSize: 13, color: "#6B7280", fontWeight: 600, flexShrink: 0 }}>저녁</span>
           <input value={canteenTimeD} onChange={(e) => setCanteenTimeD(e.target.value)} placeholder="17:00 ~ 19:00" style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
         </div>
-        <div style={{ fontSize: 11, color: "#B0B5BD" }}>비워두면 그 시간대는 안 보여요</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8, marginTop: 6 }}>식비</div>
+        <input value={canteenPrice} onChange={(e) => setCanteenPrice(e.target.value)} placeholder="4,000원" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", marginBottom: 14, WebkitAppearance: "none", appearance: "none" }} />
+        <button onClick={async () => {
+          const { error } = await supabase.from("canteen_info").upsert({ station: canteenStation, time_breakfast: canteenTimeB, time_lunch: canteenTimeL, time_dinner: canteenTimeD, price: canteenPrice });
+          if (error) { alert("저장 실패: " + error.message); return; }
+          setCanteenInfoDone(true);
+          setTimeout(() => setCanteenInfoDone(false), 2000);
+        }} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          {canteenInfoDone ? "✓ 저장됨" : "운영정보 저장"}
+        </button>
       </div>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>식비</div>
-        <input value={canteenPrice} onChange={(e) => setCanteenPrice(e.target.value)} placeholder="4,000원" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
-      </div>
-      <button onClick={async () => {
-        const { error } = await supabase.from("canteen_info").upsert({ station: canteenStation, time_breakfast: canteenTimeB, time_lunch: canteenTimeL, time_dinner: canteenTimeD, price: canteenPrice });
-        if (error) { alert("저장 실패: " + error.message); return; }
-        setCanteenInfoDone(true);
-        setTimeout(() => setCanteenInfoDone(false), 2000);
-      }} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-        {canteenInfoDone ? "✓ 저장됨" : "운영정보 저장"}
-      </button>
-    </div>
 
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>식단표 사진 등록</div>
     <div style={{ marginBottom: 14 }}>
