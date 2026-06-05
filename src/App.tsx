@@ -22477,6 +22477,7 @@ export default function App() {
   const [homeRotation, setHomeRotation] = useState<any[]>([]);
   const [homeDia, setHomeDia] = useState<any[]>([]);
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
+  const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   const [payCompare, setPayCompare] = useState<any>(null);
   useEffect(() => {
@@ -22723,6 +22724,17 @@ export default function App() {
   };
   React.useEffect(() => {
     loadNotices();
+  }, []);
+  React.useEffect(() => {
+    supabase
+      .from("shift_base")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setHomeShiftBase(data);
+      });
   }, []);
   // 앱 접속 포인트
   React.useEffect(() => {
@@ -24073,7 +24085,17 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           </div>
        {(() => {
             const info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays) : null;
-            const type = info?.type || "-";
+            let type = info?.type || "-";
+            if ((!info || type === "-") && user && homeShiftBase && ["A", "B", "C", "D"].includes(user.work_group)) {
+              const cycle = ["주간", "야간", "비번", "휴무"];
+              const baseDate = new Date(homeShiftBase.base_date);
+              baseDate.setHours(0, 0, 0, 0);
+              const today0 = new Date();
+              today0.setHours(0, 0, 0, 0);
+              const diff = Math.round((today0.getTime() - baseDate.getTime()) / 86400000);
+              const startIdx = cycle.indexOf(homeShiftBase[(user.work_group || "").toLowerCase() + "_work_type"]);
+              if (startIdx >= 0) type = cycle[(((startIdx + diff) % 4) + 4) % 4];
+            }
             const dr = info?.diaRow;
             const timeText =
               dr && dr.start_time && dr.end_time
@@ -24082,6 +24104,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 ? "비번"
                 : type === "휴무"
                 ? "휴무"
+                : type === "주간" || type === "야간"
+                ? type
                 : "-";
             let workText = "";
             const wh = dr?.work_hours;
@@ -24093,11 +24117,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             const isWork = type === "주간" || type === "야간";
             return (
               <div
+                onClick={() => setScreen("schedule")}
                 style={{
                   background: "#fff",
                   borderRadius: 16,
                   padding: "14px 12px",
                   boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+                  cursor: "pointer",
                 }}
               >
                 <div
