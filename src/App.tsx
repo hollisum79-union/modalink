@@ -16479,6 +16479,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [holidays, setHolidays] = React.useState<string[]>([]);
   const [hfRecords, setHfRecords] = React.useState<any[]>([]);
+  const [dutyRecords, setDutyRecords] = React.useState<any[]>([]);
     const [rotationData, setRotationData] = React.useState<any[]>([]);
   const [memberInfo, setMemberInfo] = React.useState<any>(null);
   const [dedRates, setDedRates] = React.useState<any>(null);
@@ -16514,6 +16515,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         settingsRes,
        rotRes,
         dedRes,
+        dutyRes,
       ] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
@@ -16526,6 +16528,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
+        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
    ]);
 
       if (salaryRes.data) setSalaryTable(salaryRes.data);
@@ -16542,6 +16545,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       if (hfRes.data) setHfRecords(hfRes.data);
           if (rotRes.data) setRotationData(rotRes.data);
       if (dedRes.data) setDedRates(dedRes.data);
+      if (dutyRes.data) setDutyRecords(dutyRes.data);
 
             fetch("/.netlify/functions/read-holidays?year=" + ty)
         .then((r) => r.json())
@@ -16710,15 +16714,29 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const yy = lp.getFullYear();
     const mn = lp.getMonth();
     const dd = new Date(yy, mn + 1, 0).getDate();
+    const dutyDates = new Set(
+      (dutyRecords || [])
+        .filter((r: any) => r.work_shift === "야간")
+        .map((r: any) => r.work_date)
+    );
     let sum = 0;
     for (let i = 1; i <= dd; i++) {
       const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData);
-      if (w && Number(w.dia) >= 60) {
-        const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      if (!w) continue;
+      const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      if (String(w.dia).startsWith("대기")) {
+        if (w.type === "야간" && !dutyDates.has(ds)) sum += 4;
+      } else if (Number(w.dia) >= 60) {
         const { nightHours } = calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays);
         sum += nightHours;
       }
     }
+    (dutyRecords || []).forEach((rec: any) => {
+      if (rec.work_shift !== "야간") return;
+      const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
+      if (!dm) return;
+      sum += calcHolidayFillHours(dm[1], "야간", rec.work_date, diaTable, holidays).nightHours;
+    });
     return sum;
   })();
   const nightTotalHours = isKyobun ? kyobunNightHours : nightHoursPerShift * nightCount;
