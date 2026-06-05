@@ -9689,6 +9689,16 @@ function AdminScreen({ onBack, user, onNavigate }) {
 
   // 식당메뉴 입력
   const [canteenStation, setCanteenStation] = useState("대공원");
+  const [canteenInfoDone, setCanteenInfoDone] = useState(false);
+  const [canteenHours, setCanteenHours] = useState("");
+const [canteenPrice, setCanteenPrice] = useState("");
+useEffect(() => {
+    supabase.from("canteen_info").select("*").eq("station", canteenStation).maybeSingle().then((res) => {
+      setCanteenHours(res.data?.open_hours || "");
+      setCanteenPrice(res.data?.price || "");
+    });
+  }, [canteenStation]);
+
   const [canteenMeal, setCanteenMeal] = useState("점심");
   const [canteenItems, setCanteenItems] = useState([
     { category: "주식", name: "" },
@@ -10382,6 +10392,26 @@ function AdminScreen({ onBack, user, onNavigate }) {
           ))}
                   {activeMenu === "canteen" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+    <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid #F0F0F4" }}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>🍽️ 식당 운영정보</div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>운영시간</div>
+        <textarea value={canteenHours} onChange={(e) => setCanteenHours(e.target.value)} placeholder={"조식 07:00 ~ 09:00\n중식 11:30 ~ 13:30\n석식 17:00 ~ 19:00"} style={{ width: "100%", minHeight: 74, padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", resize: "none", lineHeight: 1.5, WebkitAppearance: "none", appearance: "none" }} />
+      </div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>식비</div>
+        <input value={canteenPrice} onChange={(e) => setCanteenPrice(e.target.value)} placeholder="4,000원" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
+      </div>
+      <button onClick={async () => {
+        const { error } = await supabase.from("canteen_info").upsert({ station: canteenStation, open_hours: canteenHours, price: canteenPrice });
+        if (error) { alert("저장 실패: " + error.message); return; }
+        setCanteenInfoDone(true);
+        setTimeout(() => setCanteenInfoDone(false), 2000);
+      }} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        {canteenInfoDone ? "✓ 저장됨" : "운영정보 저장"}
+      </button>
+    </div>
+
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>식단표 사진 등록</div>
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>사업소</div>
