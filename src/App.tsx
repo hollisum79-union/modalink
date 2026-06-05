@@ -1508,6 +1508,10 @@ function CanteenScreen({ onBack, user }) {
   useEffect(() => {
     supabase.from("canteen").select("*").eq("station", station).then((res) => setMenus(res.data || []));
   }, [station]);
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    supabase.from("canteen_info").select("*").eq("station", station).maybeSingle().then((res) => setInfo(res.data || null));
+  }, [station]);
   const todayKey = (today.getMonth() + 1) + "/" + today.getDate();
   const [pickedDate, setPickedDate] = useState(null);
   const [showDates, setShowDates] = useState(false);
