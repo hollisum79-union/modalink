@@ -22387,7 +22387,8 @@ export default function App() {
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   useEffect(() => {
-    const loadHomeWork = async () => {
+   const loadHomeWork = async () => {
+      const t0 = performance.now();
       const { data: rot } = await supabase
         .from("schedule_rotation")
         .select("*")
@@ -22397,7 +22398,9 @@ export default function App() {
 
       const { data: dia } = await supabase.from("kyobun_dia").select("*");
       if (dia) setHomeDia(dia);
+      console.log("⏱️ 1.근무표+다이아:", Math.round(performance.now() - t0), "ms");
 
+      const t1 = performance.now();
       try {
         const res = await fetch(
           "/.netlify/functions/read-holidays?year=" + new Date().getFullYear()
@@ -22407,8 +22410,9 @@ export default function App() {
       } catch (e) {
         console.log("공휴일 불러오기 실패", e);
       }
+      console.log("⏱️ 2.공휴일(Netlify):", Math.round(performance.now() - t1), "ms");
       const emp = user?.employee_number;
-      console.log("로딩 시작, user:", user);
+      const t2 = performance.now();
       const now = new Date();
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastPrev = new Date(firstThis.getTime() - 86400000);
@@ -22426,7 +22430,7 @@ export default function App() {
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
       ]);
-      console.log("홈 쿼리 결과:", { salaryRes, meRes, dedRes });
+      console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       setHomeSalaryData({
         salaryTable: salaryRes.data || [],
         worktypeSettings: wtRes.data || [],
