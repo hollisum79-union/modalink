@@ -22478,6 +22478,7 @@ export default function App() {
   const [homeDia, setHomeDia] = useState<any[]>([]);
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
+  const [payCompare, setPayCompare] = useState<any>(null);
   useEffect(() => {
     if (!homeSalaryData || !homeSalaryData.memberInfo || !user?.employee_number) return;
     const d = homeSalaryData;
@@ -22508,7 +22509,19 @@ export default function App() {
         { employee_number: user.employee_number, year_month: ym, net_pay: result.netPay },
         { onConflict: "employee_number,year_month" }
       )
-      .then(() => {});
+      .then(() => {
+        const lp = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const pym = `${lp.getFullYear()}-${String(lp.getMonth() + 1).padStart(2, "0")}`;
+        supabase
+          .from("monthly_pay")
+          .select("net_pay")
+          .eq("employee_number", user.employee_number)
+          .eq("year_month", pym)
+          .maybeSingle()
+          .then(({ data }) => {
+            setPayCompare({ curr: result.netPay, prev: data ? data.net_pay : null });
+          });
+      });
   }, [homeSalaryData, homeDia, homeHolidays, homeRotation, user]);
   useEffect(() => {
     const loadHomeWork = async () => {
@@ -24049,6 +24062,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 return result.netPay.toLocaleString("ko-KR");
               })()}<span style={{ fontSize: 11, fontWeight: 400 }}>원</span>
             </div>
+            {payCompare && payCompare.prev != null && (
+              <div style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: payCompare.curr - payCompare.prev >= 0 ? "#2563EB" : "#DC2626" }}>
+                전월 대비 {payCompare.curr - payCompare.prev >= 0 ? "▲" : "▼"}{Math.abs(payCompare.curr - payCompare.prev).toLocaleString("ko-KR")}원
+              </div>
+            )}
             
           </div>
        {(() => {
