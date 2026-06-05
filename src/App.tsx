@@ -16898,15 +16898,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 {w}
               </option>
             ))}
-          </select>
-          {workType && (() => {
-            const found = nightSettings.find((s) => s.work_type === workType);
-            return found ? (
-              <div style={{ marginTop: 6, fontSize: 12, color: "#4338CA", fontWeight: 700 }}>
-                🌙 야간 1회 = {found.night_hours}시간 (관리자 설정)
-              </div>
-            ) : null;
-          })()}
+      </select>
         </>
       ),
     },
