@@ -18586,6 +18586,104 @@ function LeaveScreen({ onBack, user }) {
     </div>
   );
 }
+function DistanceScreen({ onBack, user }) {
+  const [baseKm, setBaseKm] = useState("");
+  const [baseDate, setBaseDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    if (!user?.employee_number) return;
+    (async () => {
+      const { data } = await supabase
+        .from("members")
+        .select("base_distance_km, base_distance_date")
+        .eq("employee_number", user.employee_number)
+        .maybeSingle();
+      if (data) {
+        setBaseKm(data.base_distance_km != null ? String(data.base_distance_km) : "");
+        setBaseDate(data.base_distance_date || "");
+      }
+    })();
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user?.employee_number) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("members")
+      .update({
+        base_distance_km: Number(baseKm) || 0,
+        base_distance_date: baseDate || null,
+      })
+      .eq("employee_number", user.employee_number);
+    setSaving(false);
+    setToast(error ? "저장 실패: " + error.message : "저장됐어요");
+    setTimeout(() => setToast(""), 2000);
+  };
+
+  const baseNum = Number(baseKm) || 0;
+  const total = baseNum;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 80 }}>
+      <div style={{ background: "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)", padding: "52px 20px 24px", borderRadius: 28, display: "flex", alignItems: "center", gap: 12, color: "#fff" }}>
+        <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <Icon path="M15 19l-7-7 7-7" color="#fff" size={20} />
+        </button>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>무사고 주행키로</h2>
+          <p style={{ margin: "2px 0 0", fontSize: 12, opacity: 0.85 }}>안전운행 누적 기록</p>
+        </div>
+      </div>
+
+      <div style={{ margin: 16 }}>
+        <div style={{ background: "#fff", borderRadius: 20, padding: "24px 18px", textAlign: "center", boxShadow: "0 2px 8px rgba(79,70,229,0.06)", marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 6 }}>총 누적 주행키로</div>
+          <div style={{ fontSize: 30, fontWeight: 900, color: "#1F2937", letterSpacing: -0.5 }}>
+            {total.toLocaleString("ko-KR")}<span style={{ fontSize: 15, color: "#6B7280", fontWeight: 700 }}> km</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div style={{ flex: 1, background: "#fff", borderRadius: 14, padding: 14, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+            <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>기준 누적 (입력)</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937" }}>{baseNum.toLocaleString("ko-KR")} km</div>
+            <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>{baseDate ? baseDate + " 기준" : "기준일 미설정"}</div>
+          </div>
+          <div style={{ flex: 1, background: "#fff", borderRadius: 14, padding: 14, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+            <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>앱 누적 (자동)</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#0F6E56" }}>준비 중</div>
+            <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>곧 자동 계산</div>
+          </div>
+        </div>
+
+        <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>기준 누적키로 입력</div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>지금까지 누적 주행키로 (km)</div>
+            <input type="number" value={baseKm} onChange={(e) => setBaseKm(e.target.value)} placeholder="예: 850000" style={{ width: "100%", padding: "12px 14px", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 15, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>기준일 (이 날까지의 누적)</div>
+            <input type="date" value={baseDate} onChange={(e) => setBaseDate(e.target.value)} style={{ width: "100%", padding: "12px 14px", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 15, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>이 날 다음날부터 앱이 매일 운행 km를 더해요.</div>
+          </div>
+          <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg, #4F46E5, #6D28D9)", color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+            {saving ? "저장 중..." : "💾 저장"}
+          </button>
+        </div>
+      </div>
+
+      {toast && (
+        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "rgba(31,41,55,0.95)", color: "#fff", padding: "10px 20px", borderRadius: 20, fontSize: 13, zIndex: 1000 }}>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkAdjustScreen({ onBack, user }) {
   const [activeTab, setActiveTab] = useState("대기충당");
   const [diaPhoto, setDiaPhoto] = useState(null);
@@ -23357,6 +23455,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "leave")
     return <LeaveScreen onBack={() => setScreen("home")} user={user} />;
 
+  if (screen === "distance")
+    return <DistanceScreen onBack={() => setScreen("home")} user={user} />;
+
   if (screen === "logbook")
     return <LogbookScreen goBack={() => setScreen("home")} />;
   if (screen === "schedule")
@@ -24606,6 +24707,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   if (item.id === "leave") setScreen("leave");
                   if (item.id === "salary") setScreen("salary");
                   if (item.id === "schedule") setScreen("schedule");
+                  if (item.id === "distance") setScreen("distance");
                 }}
                 style={{
                   background: "none",
