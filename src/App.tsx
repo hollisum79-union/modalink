@@ -18586,7 +18586,9 @@ function LeaveScreen({ onBack, user }) {
     </div>
   );
 }
-const [baseKm, setBaseKm] = useState("");
+
+function DistanceScreen({ onBack, user }) {
+  const [baseKm, setBaseKm] = useState("");
   const [baseDate, setBaseDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
