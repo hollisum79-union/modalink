@@ -24063,7 +24063,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               })()}<span style={{ fontSize: 11, fontWeight: 400 }}>원</span>
             </div>
             {payCompare && payCompare.prev != null && (
-              <div style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: payCompare.curr - payCompare.prev >= 0 ? "#2563EB" : "#DC2626" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: color: payCompare.curr - payCompare.prev >= 0 ? "#16A34A" : "#DC2626" }}>
                 전월 대비 {payCompare.curr - payCompare.prev >= 0 ? "▲" : "▼"}{Math.abs(payCompare.curr - payCompare.prev).toLocaleString("ko-KR")}원
               </div>
             )}
