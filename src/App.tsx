@@ -18211,8 +18211,6 @@ function LeaveScreen({ onBack, user }) {
       bg: "#CCFBF1",
       icon: "🕊️",
     },
-
-    },
   ];
 
   return (
