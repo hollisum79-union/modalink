@@ -19390,15 +19390,28 @@ function WorkAdjustScreen({ onBack, user }) {
                 const same = (a: any, b: any) =>
                   a.주간 === b.주간 && a.야간 === b.야간 && a.비번 === b.비번 && a.휴무 === b.휴무;
 
+                                const startsWithBibeon = (member: any) => {
+                  const w = calcKyobunWork(member, new Date(s), swapRotation);
+                  return !!(w && w.type === "비번");
+                };
+
+                // 내 시작일이 비번이면 교체 불가 (비번 = 아침 퇴근)
+                if (startsWithBibeon(me)) {
+                  showToast("시작일이 비번이에요. 비번은 아침 퇴근이라 교체 시작일로 잡을 수 없어요", "error");
+                  return;
+                }
+
                 const myCount = countTypes(me);
                 const matched = swapMembers
                   .filter((m) => String(m.employee_number) !== String(user?.employee_number))
+                  .filter((m) => !startsWithBibeon(m))
                   .map((m) => ({ member: m, count: countTypes(m) }))
                   .filter((x) => same(x.count, myCount));
 
                 setSwapMatches(matched);
                 setSwapSearched(true);
                 setSwapPartner(null);
+
               }}
               style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: 16 }}
             >
