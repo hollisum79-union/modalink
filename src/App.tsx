@@ -18848,7 +18848,7 @@ function WorkAdjustScreen({ onBack, user }) {
       .order("created_at", { ascending: false });
     if (data) setReceivedSwaps(data);
   };
-  useEffect(() => { loadReceivedSwaps(); }, []);
+  useEffect(() => { if (user?.employee_number) loadReceivedSwaps(); }, [user]);
 
   // 순환표 불러오기 (대공원+도봉 둘 다)
   useEffect(() => {
@@ -21342,8 +21342,8 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     };
     loadCondolences();
   }, []);
-  const [index, setIndex] = React.useState(0);
-  const realIndex = index % 3;
+    const [index, setIndex] = React.useState(1);
+  const realIndex = (index - 1 + 3) % 3;
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
   const [isPaused, setIsPaused] = React.useState(false);
@@ -21359,11 +21359,17 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   }, [isPaused]);
 
   // 무한 루프: index가 3에 도달하면 transition 끄고 0으로 점프
-  React.useEffect(() => {
-    if (index === 3) {
+    React.useEffect(() => {
+    if (index === 4) {
       const timer = setTimeout(() => {
         setTransitionOn(false);
-        setIndex(0);
+        setIndex(1);
+      }, 550);
+      return () => clearTimeout(timer);
+    } else if (index === 0) {
+      const timer = setTimeout(() => {
+        setTransitionOn(false);
+        setIndex(3);
       }, 550);
       return () => clearTimeout(timer);
     } else if (!transitionOn) {
@@ -21385,10 +21391,10 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const handleTouchEnd = () => {
     if (touchStart !== null && touchEnd !== null) {
       const distance = touchStart - touchEnd;
-      if (distance > minSwipeDistance) {
-        setIndex((prev) => (prev + 1) % 3);
+            if (distance > minSwipeDistance) {
+        setIndex((prev) => prev + 1);
       } else if (distance < -minSwipeDistance) {
-        setIndex((prev) => (prev - 1 + 3) % 3);
+        setIndex((prev) => prev - 1);
       }
     }
     // 1초 후 자동 슬라이드 재개
@@ -21472,9 +21478,34 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         );
       })}
     </div>
+    );
+
+  const condolenceCard = (
+    <div
+      onClick={onCondolenceClick}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "12px 16px", cursor: "pointer" }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 16 }}>💐</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>조합원 경조사</span>
+      </div>
+      {condolences.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#6B7280", padding: "4px 0" }}>현재 경조사 안내가 없습니다</div>
+      ) : (
+        condolences.map((c, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, color: "#4C1D95" }}>
+            <span style={{ background: c.type === "결혼" ? "#EC4899" : "#6B7280", color: "#fff", fontSize: 10, fontWeight: 600, borderRadius: 4, padding: "1px 6px" }}>{c.type}</span>
+            <span style={{ flex: 1, fontWeight: 500 }}>{c.name} 조합원</span>
+            <span style={{ fontSize: 11, opacity: 0.7 }}>{c.date}</span>
+          </div>
+        ))
+      )}
+    </div>
   );
+
   return (
     <div style={{ marginBottom: 12 }}>
+
       {/* 캐러셀 컨테이너 */}
       <div
         style={{ overflow: "hidden", borderRadius: 12 }}
@@ -21489,8 +21520,12 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
             transition: transitionOn ? "transform 0.5s ease" : "none",
           }}
         >
+                    {/* ===== 0번: 경조사 복제 (이전 방향 무한용) ===== */}
+          {condolenceCard}
+
           {/* ===== 1번 카드: 공지 (긴급+일반, 최대 4개) ===== */}
           {noticeCard}
+
 
           {/* ====== 2번 카드: 접속포인트 TOP3 ====== */}
           <div
@@ -21581,9 +21616,8 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
             )}
           </div>
 
-          {/* ====== 3번 카드: 경조사 ====== */}
-          <div
-            onClick={onCondolenceClick}
+        {/* ====== 3번 카드: 경조사 ====== */}
+          {condolenceCard}
             style={{
               minWidth: "100%",
               boxSizing: "border-box",
@@ -21667,12 +21701,12 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         }}
       >
         {(() => {
-          const realIndex = index % 3;
-          return [0, 1, 2].map((i) => (
-            <div
-              key={i}
-              onClick={() => {
-                setIndex(i);
+                      const realIndex = (index - 1 + 3) % 3;
+            return [0, 1, 2].map((i) => (
+              <div
+                key={i}
+                onClick={() => {
+                  setIndex(i + 1);
                 setIsPaused(true);
                 setTimeout(() => setIsPaused(false), 3000);
               }}
