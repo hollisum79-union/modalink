@@ -22401,16 +22401,24 @@ export default function App() {
       console.log("⏱️ 1.근무표+다이아:", Math.round(performance.now() - t0), "ms");
 
       const t1 = performance.now();
-      try {
-        const res = await fetch(
-          "/.netlify/functions/read-holidays?year=" + new Date().getFullYear()
-        );
-        const json = await res.json();
-        if (json.holidays) setHomeHolidays(json.holidays);
-      } catch (e) {
-        console.log("공휴일 불러오기 실패", e);
+      const hYear = new Date().getFullYear();
+      const cacheKey = "holidays_" + hYear;
+      const cachedHoli = localStorage.getItem(cacheKey);
+      if (cachedHoli) {
+        setHomeHolidays(JSON.parse(cachedHoli));
+        console.log("⏱️ 2.공휴일(캐시):", Math.round(performance.now() - t1), "ms");
+      } else {
+        fetch("/.netlify/functions/read-holidays?year=" + hYear)
+          .then((r) => r.json())
+          .then((json) => {
+            if (json.holidays) {
+              setHomeHolidays(json.holidays);
+              localStorage.setItem(cacheKey, JSON.stringify(json.holidays));
+            }
+          })
+          .catch((e) => console.log("공휴일 불러오기 실패", e));
+        console.log("⏱️ 2.공휴일(백그라운드):", Math.round(performance.now() - t1), "ms");
       }
-      console.log("⏱️ 2.공휴일(Netlify):", Math.round(performance.now() - t1), "ms");
       const emp = user?.employee_number;
       const t2 = performance.now();
       const now = new Date();
