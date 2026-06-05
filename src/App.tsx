@@ -21618,74 +21618,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
 
         {/* ====== 3번 카드: 경조사 ====== */}
           {condolenceCard}
-            style={{
-              minWidth: "100%",
-              boxSizing: "border-box",
-              background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)",
-              border: "1px solid #C4B5FD",
-              borderRadius: 12,
-              padding: "12px 16px",
-              cursor: "pointer",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 8,
-              }}
-            >
-              <span style={{ fontSize: 16 }}>💐</span>
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: "#5B21B6",
-                }}
-              >
-                조합원 경조사
-              </span>
-            </div>
-
-            {condolences.length === 0 ? (
-              <div style={{ fontSize: 12, color: "#6B7280", padding: "4px 0" }}>
-                현재 경조사 안내가 없습니다
-              </div>
-            ) : (
-              condolences.map((c, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "4px 0",
-                    fontSize: 12,
-                    color: "#4C1D95",
-                  }}
-                >
-                  <span
-                    style={{
-                      background: c.type === "결혼" ? "#EC4899" : "#6B7280",
-                      color: "#fff",
-                      fontSize: 10,
-                      fontWeight: 600,
-                      borderRadius: 4,
-                      padding: "1px 6px",
-                    }}
-                  >
-                    {c.type}
-                  </span>
-                  <span style={{ flex: 1, fontWeight: 500 }}>
-                    {c.name} 조합원
-                  </span>
-                  <span style={{ fontSize: 11, opacity: 0.7 }}>{c.date}</span>
-                </div>
-              ))
-            )}
-          </div>
-
+      
           {/* ====== 4번 카드: 긴급공지 복제본 (무한 루프용) ====== */}
 
           {noticeCard}
