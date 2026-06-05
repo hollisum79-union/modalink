@@ -21689,7 +21689,6 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           {/* ====== 4번 카드: 긴급공지 복제본 (무한 루프용) ====== */}
 
           {noticeCard}
-        </div>
       </div>
       {/* 점 인디케이터 */}
       <div
