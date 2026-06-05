@@ -18586,25 +18586,77 @@ function LeaveScreen({ onBack, user }) {
     </div>
   );
 }
-function DistanceScreen({ onBack, user }) {
-  const [baseKm, setBaseKm] = useState("");
+const [baseKm, setBaseKm] = useState("");
   const [baseDate, setBaseDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
+  const [appKm, setAppKm] = useState(0);
+  const [recent, setRecent] = useState([]);
+  const [computing, setComputing] = useState(true);
+
+  const loadAll = async () => {
+    if (!user?.employee_number) return;
+    setComputing(true);
+    const [meRes, rotRes, diaRes] = await Promise.all([
+      supabase.from("members").select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total").eq("employee_number", user.employee_number).maybeSingle(),
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_dia").select("dia_no, distance_km"),
+    ]);
+    const me = meRes.data || {};
+    const rotationData = rotRes.data || [];
+    const diaTable = diaRes.data || [];
+    setBaseKm(me.base_distance_km != null ? String(me.base_distance_km) : "");
+    const bd = me.base_distance_date || "";
+    setBaseDate(bd);
+
+    let sum = 0;
+    const rec = [];
+    if (bd) {
+      const { data: adj } = await supabase
+        .from("work_adjust")
+        .select("work_date, memo, adjust_type")
+        .eq("employee_number", user.employee_number)
+        .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+        .gt("work_date", bd);
+      const adjustByDate = {};
+      (adj || []).forEach((r) => {
+        const m = (r.memo || "").match(/다이아\s*(\d+)/);
+        if (m) adjustByDate[r.work_date] = m[1];
+      });
+      const distOf = (diaNo) => {
+        const row = diaTable.find((r) => Number(r.dia_no) === Number(diaNo));
+        return row ? Number(row.distance_km) || 0 : 0;
+      };
+      const member = { work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
+      const start = new Date(bd + "T00:00:00");
+      start.setDate(start.getDate() + 1);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        let diaNo = null;
+        if (adjustByDate[ds]) {
+          diaNo = adjustByDate[ds];
+        } else if (me.work_type === "교번") {
+          const w = calcKyobunWork(member, new Date(d), rotationData);
+          if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
+        }
+        if (diaNo != null) {
+          const km = distOf(diaNo);
+          if (km > 0) {
+            sum += km;
+            rec.push({ date: ds, dia: diaNo, km });
+          }
+        }
+      }
+    }
+    setAppKm(sum);
+    setRecent(rec.reverse().slice(0, 10));
+    setComputing(false);
+  };
 
   useEffect(() => {
-    if (!user?.employee_number) return;
-    (async () => {
-      const { data } = await supabase
-        .from("members")
-        .select("base_distance_km, base_distance_date")
-        .eq("employee_number", user.employee_number)
-        .maybeSingle();
-      if (data) {
-        setBaseKm(data.base_distance_km != null ? String(data.base_distance_km) : "");
-        setBaseDate(data.base_distance_date || "");
-      }
-    })();
+    loadAll();
   }, [user]);
 
   const handleSave = async () => {
@@ -18620,11 +18672,11 @@ function DistanceScreen({ onBack, user }) {
     setSaving(false);
     setToast(error ? "저장 실패: " + error.message : "저장됐어요");
     setTimeout(() => setToast(""), 2000);
+    if (!error) loadAll();
   };
 
   const baseNum = Number(baseKm) || 0;
-  const total = baseNum;
-
+  const total = baseNum + appKm;
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 80 }}>
       <div style={{ background: "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)", padding: "52px 20px 24px", borderRadius: 28, display: "flex", alignItems: "center", gap: 12, color: "#fff" }}>
@@ -18653,9 +18705,8 @@ function DistanceScreen({ onBack, user }) {
           </div>
           <div style={{ flex: 1, background: "#fff", borderRadius: 14, padding: 14, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
             <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>앱 누적 (자동)</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: "#0F6E56" }}>준비 중</div>
-            <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>곧 자동 계산</div>
-          </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#0F6E56" }}>{computing ? "계산 중..." : "+" + appKm.toLocaleString("ko-KR") + " km"}</div>
+            <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>기준일 이후 운행분</div>
         </div>
 
         <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
@@ -18673,6 +18724,18 @@ function DistanceScreen({ onBack, user }) {
             {saving ? "저장 중..." : "💾 저장"}
           </button>
         </div>
+
+        {recent.length > 0 && (
+          <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)", marginTop: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>최근 운행 (자동 합산)</div>
+            {recent.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+                <span style={{ color: "#374151" }}>{r.date} · 다이아 {r.dia}번</span>
+                <span style={{ color: "#1F2937", fontWeight: 700 }}>{r.km.toLocaleString("ko-KR")} km</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {toast && (
