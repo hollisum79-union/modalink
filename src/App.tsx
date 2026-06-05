@@ -1522,6 +1522,7 @@ function CanteenScreen({ onBack, user }) {
   const [reviewData, setReviewData] = useState(null);
   const stationColor = { 대공원: "#4F46E5", 도봉: "#0EA5E9", 신풍: "#10B981" };
   const stationPrice = { 대공원: "4,000원", 도봉: "3,500원", 신풍: "3,500원" };
+  const displayPrice = info?.price || stationPrice[station] || "";
   const categoryColor = {
     주식: "#4F46E5",
     국: "#0EA5E9",
@@ -1671,7 +1672,7 @@ function CanteenScreen({ onBack, user }) {
                     marginTop: 3,
                   }}
                 >
-                  식비 {stationPrice[s]}
+                  식비 {(info && s === station ? info.price : null) || stationPrice[s]}
                 </div>
               </button>
             ))}
