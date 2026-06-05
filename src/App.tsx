@@ -14,7 +14,7 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[]) {
   const groupName = member.work_group === "도봉" ? "도봉 41" : "대공원 114";
   const base = new Date("2026-06-01");
   base.setHours(0, 0, 0, 0);
-  const target = new Date(date);
+  const target = new Date(date);for
   target.setHours(0, 0, 0, 0);
   const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
   const pos =
@@ -96,10 +96,18 @@ function computeNetPay(input: any) {
     const lp = new Date(new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 86400000);
     const yy = lp.getFullYear(); const mn = lp.getMonth();
     const dcount = new Date(yy, mn + 1, 0).getDate();
+    const dutyDates = new Set(
+      (dutyRecords || [])
+        .filter((r: any) => r.work_shift === "야간")
+        .map((r: any) => r.work_date)
+    );
     for (let i = 1; i <= dcount; i++) {
       const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData);
-      if (w && Number(w.dia) >= 60) {
-        const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      if (!w) continue;
+      const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      if (String(w.dia).startsWith("대기")) {
+        if (w.type === "야간" && !dutyDates.has(ds)) kyobunNightHours += 4;
+      } else if (Number(w.dia) >= 60) {
         kyobunNightHours += calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays).nightHours;
       }
     }
