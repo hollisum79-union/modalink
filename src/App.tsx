@@ -14,7 +14,7 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[]) {
   const groupName = member.work_group === "도봉" ? "도봉 41" : "대공원 114";
   const base = new Date("2026-06-01");
   base.setHours(0, 0, 0, 0);
-  const target = new Date(date);for
+  const target = new Date(date);
   target.setHours(0, 0, 0, 0);
   const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
   const pos =
