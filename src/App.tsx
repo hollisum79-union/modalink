@@ -16500,6 +16500,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     급식보조비: false,
     가족수당: false,
     열차승무수당: false,
+        승무보조비: false,
     자격면허수당: false,
     기술수당: false,
     대우수당: false,
@@ -16699,11 +16700,19 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     return 0;
   };
 
-  const getGradeSupport = () => {
+    const getGradeSupport = () => {
     if (!selectedGrade) return 0;
     if (selectedGrade === 6 || selectedGrade === 7) return 30000;
     return 0;
   };
+
+  const getSeungmuBojo = () => {
+    if (!selectedGrade) return 0;
+    if (workType === "교번") return 20000;
+    if (String(workType).includes("4조2교대")) return selectedGrade === 3 ? 110000 : 127000;
+    return selectedGrade === 3 ? 135000 : 165000;
+  };
+
 
   const getWorkTypePay = () => {
     if (!basicSalary || !workType) return 0;
@@ -16726,8 +16735,10 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         return getWorkTypePay();
       case "장기근속수당":
         return getLongServicePay();
-      case "직급보조비":
+            case "직급보조비":
         return getGradeSupport();
+      case "승무보조비":
+        return getSeungmuBojo();
       default:
         return manualInputs[item] ?? 0;
     }
@@ -16931,11 +16942,19 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       type: "manual",
       desc: "명세서 확인 후 직접 입력",
     },
-    {
+        {
       id: "열차승무수당",
       label: "열차승무수당",
       type: "manual",
       desc: "기관사10만/운용8만/차장6만",
+    },
+    {
+      id: "승무보조비",
+      label: "승무보조비",
+      type: "auto",
+      desc: selectedGrade
+        ? `${selectedGrade}급 · ${workType || "근무형태"} → 자동계산`
+        : "직급 선택 후 자동계산",
     },
     {
       id: "자격면허수당",
@@ -17541,10 +17560,36 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 </div>
               </div>
               
+                            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
+                    연장근로수당
+                  </div>
+                  <div style={{ fontSize: 12, color: "#9CA3AF" }}>
+                    근무조정에 기록한 지원근무로 자동 계산
+                  </div>
+                </div>
+                {supportOtHours > 0 ? (
+                  <>
+                    <div style={{ background: "#ECFEFF", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
+                      이번 달 지원근무 연장 {supportOtHours.toFixed(2)}시간 (8시간 이하 1.5배 · 초과분 2배)
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#0891B2", textAlign: "right" }}>
+                      {supportPay.toLocaleString("ko-KR")}원
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
+                    이번 달 연장근로 기록이 없어요.
+                  </div>
+                )}
+              </div>
+
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
                     대무충당수당
+
                   </div>
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
                     근무조정에 기록한 대무충당으로 자동 계산
