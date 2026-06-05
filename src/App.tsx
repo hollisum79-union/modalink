@@ -16561,7 +16561,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         supabase.from("worktype_pay_settings").select("*"),
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("night_pay_settings").select("*"),
-        supabase.from("kyobun_dia").select("dia_no, day_type, work_hours, night_hours"),
+        supabase.from("kyobun_dia").select("dia_no, day_type, work_hours, night_hours, start_time, end_time"),
         emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${ty}-${tm}-01`).lte("work_date", `${ty}-${tm}-${String(tEnd).padStart(2, "0")}`) : Promise.resolve({ data: null }),
@@ -16813,8 +16813,19 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   });
   const holidayFillPay = Math.round(hfPaySum);
 
-  const totalGross = tongsangWage + nightPay + overtimePay + holidayFillPay;
+  let supportOtHours = 0;
+  dutyRecords.forEach((rec: any) => {
+    if (rec.adjust_type !== "support") return;
+    if (rec.work_shift === "야간") return;
+    const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
+    if (!sm) return;
+    supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
+  });
+  const within8s = Math.min(supportOtHours, 8);
+  const over8s = Math.max(supportOtHours - 8, 0);
+  const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
 
+  const totalGross = tongsangWage + nightPay + overtimePay + holidayFillPay + supportPay;
   const r = dedRates || {};
   const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
@@ -17633,6 +17644,14 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                           {
                             label: `휴무충당 (${hfCount}회)`,
                             amount: holidayFillPay,
+                          },
+                        ]
+                      : []),
+                    ...(supportPay > 0
+                      ? [
+                          {
+                            label: `연장근로수당 (지원근무)`,
+                            amount: supportPay,
                           },
                         ]
                       : []),
