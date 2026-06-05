@@ -23782,7 +23782,17 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     },
     {
       id: "archive",
-      label:
+      label: "자료실",
+      sub: "합의서·사규",
+      icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
+    },
+    {
+      id: "about",
+      label: "지회 소개",
+      sub: "지회 정보 안내",
+      icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z",
+    },
+  ];
 
   const nowHour = new Date().getHours();
   const currentMealKey =
