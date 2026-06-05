@@ -25057,16 +25057,24 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             padding: "26px 0 12px",
           }}
         >
-          <EmblemImg
+          <img
+            src="/modalink.png"
+            alt="MODALINK"
             style={{
-              width: 56,
-              height: 56,
+              width: 68,
+              height: 68,
               borderRadius: "50%",
               objectFit: "cover",
-              background: "#fff",
               flexShrink: 0,
+              background: "#fff",
+              padding: 3,
+              backgroundImage:
+                "linear-gradient(#fff,#fff), linear-gradient(135deg,#1e3a8a,#0d9488)",
+              backgroundOrigin: "border-box",
+              backgroundClip: "content-box, border-box",
             }}
           />
+
           <div style={{ textAlign: "left" }}>
             <div
               style={{
