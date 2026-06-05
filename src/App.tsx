@@ -18838,7 +18838,7 @@ function WorkAdjustScreen({ onBack, user }) {
   const [swapMatches, setSwapMatches] = useState<any[]>([]);
  const [swapSearched, setSwapSearched] = useState(false);
   const [receivedSwaps, setReceivedSwaps] = useState<any[]>([]);
-
+  const [viewMonth, setViewMonth] = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`; });
   const loadReceivedSwaps = async () => {
     const { data } = await supabase
       .from("kyobun_swap")
@@ -20153,9 +20153,13 @@ appearance: "none",
               </button>
             </div>
 
-           {(() => {
-            const _now = new Date();
-            const _ym = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}`;
+                      {(() => {
+            const _ym = viewMonth;
+            const [_vy, _vm] = _ym.split("-").map(Number);
+            const shiftMonth = (delta: number) => {
+              const d = new Date(_vy, _vm - 1 + delta, 1);
+              setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+            };
             const monthRecords = records.filter((r) => (r.work_date || "").startsWith(_ym));
             return (
             <>
@@ -20170,22 +20174,34 @@ appearance: "none",
             >
               <div
                 style={{
-                  fontSize: 14,
-                  fontWeight: 800,
-                  color: "#1F2937",
                   marginBottom: 16,
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                 }}
               >
-                <span>📋 {_now.getMonth() + 1}월 기록</span>
-                <span
-                  style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 500 }}
+                <button
+                  onClick={() => shiftMonth(-1)}
+                  style={{ background: "#F3F4F6", border: "none", borderRadius: 8, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: "#4F46E5", fontFamily: "inherit" }}
                 >
-           총 {monthRecords.length}건
-                </span>
+                  ‹
+                </button>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>
+                    {_vy}년 {_vm}월 기록
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                    총 {monthRecords.length}건
+                  </div>
+                </div>
+                <button
+                  onClick={() => shiftMonth(1)}
+                  style={{ background: "#F3F4F6", border: "none", borderRadius: 8, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: "#4F46E5", fontFamily: "inherit" }}
+                >
+                  ›
+                </button>
               </div>
+
 
               {loading ? (
                 <div
