@@ -19390,7 +19390,7 @@ function WorkAdjustScreen({ onBack, user }) {
                 const same = (a: any, b: any) =>
                   a.주간 === b.주간 && a.야간 === b.야간 && a.비번 === b.비번 && a.휴무 === b.휴무;
 
-                                const startsWithBibeon = (member: any) => {
+                                                const startsWithBibeon = (member: any) => {
                   const w = calcKyobunWork(member, new Date(s), swapRotation);
                   return !!(w && w.type === "비번");
                 };
@@ -19401,12 +19401,25 @@ function WorkAdjustScreen({ onBack, user }) {
                   return;
                 }
 
+                // 기간 내 매일 근무(다이아 포함)가 나와 완전히 같으면 교체 의미 없음
+                const sameSchedule = (member: any) => {
+                  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+                    const mine = calcKyobunWork(me, new Date(d), swapRotation);
+                    const theirs = calcKyobunWork(member, new Date(d), swapRotation);
+                    const mk = mine ? `${mine.type}:${mine.dia}` : "";
+                    const tk = theirs ? `${theirs.type}:${theirs.dia}` : "";
+                    if (mk !== tk) return false;
+                  }
+                  return true;
+                };
+
                 const myCount = countTypes(me);
                 const matched = swapMembers
                   .filter((m) => String(m.employee_number) !== String(user?.employee_number))
                   .filter((m) => !startsWithBibeon(m))
                   .map((m) => ({ member: m, count: countTypes(m) }))
-                  .filter((x) => same(x.count, myCount));
+                  .filter((x) => same(x.count, myCount))
+                  .filter((x) => !sameSchedule(x.member));
 
                 setSwapMatches(matched);
                 setSwapSearched(true);
