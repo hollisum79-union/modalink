@@ -24023,11 +24023,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           }}
         >
           <div
+            onClick={() => setScreen("salary")}
             style={{
               background: "#fff",
               borderRadius: 16,
               padding: "14px 12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+              cursor: "pointer",
             }}
           >
             <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 1 }}>
