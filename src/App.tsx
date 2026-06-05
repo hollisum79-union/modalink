@@ -18015,6 +18015,13 @@ function LeaveScreen({ onBack, user }) {
 
   // 휴가 사용 모달 state
   const [useModal, setUseModal] = React.useState(null);
+  const [historyModal, setHistoryModal] = React.useState(null);
+  const [historyRows, setHistoryRows] = React.useState([]);
+  React.useEffect(() => {
+    if (!historyModal || !user?.employee_number) { setHistoryRows([]); return; }
+    supabase.from("leave_history").select("*").eq("employee_number", user.employee_number).eq("leave_type", historyModal.id).order("used_date", { ascending: false }).then((res) => setHistoryRows(res.data || []));
+  }, [historyModal]);
+
   const [useDate, setUseDate] = React.useState(
     new Date().toISOString().slice(0, 10)
   );
@@ -18316,19 +18323,38 @@ function LeaveScreen({ onBack, user }) {
               minHeight: 110,
             }}
           >
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                background: item.bg,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 20,
-              }}
-            >
-              {item.icon}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: item.bg,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 20,
+                }}
+              >
+                {item.icon}
+              </div>
+              <div
+                onClick={() => setHistoryModal(item)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  padding: "5px 9px",
+                  borderRadius: 999,
+                  background: "#F3F4F6",
+                  color: "#6B7280",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                📋 사용내역
+              </div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>
               {item.label}
@@ -18476,6 +18502,39 @@ function LeaveScreen({ onBack, user }) {
           </div>
         )}
       </div>
+      {historyModal && (
+        <div
+          onClick={() => setHistoryModal(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1000 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 22, width: "100%", maxWidth: 380, padding: 22, maxHeight: "80vh", overflowY: "auto" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 11, background: historyModal.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21 }}>{historyModal.icon}</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "#1F2937" }}>{historyModal.label} 사용내역</div>
+            </div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", margin: "2px 0 16px 50px" }}>잔여 {historyModal.days}일</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 10, textAlign: "right" }}>총 {historyRows.length}건</div>
+            {historyRows.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "30px 0" }}>사용내역이 없습니다</div>
+            ) : (
+              historyRows.map((h) => (
+                <div key={h.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", borderRadius: 12, background: "#F9FAFB", marginBottom: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{h.used_date}</span>
+                    {h.memo && <span style={{ fontSize: 12, color: "#9CA3AF" }}>{h.memo}</span>}
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: historyModal.color }}>{h.days}일</span>
+                </div>
+              ))
+            )}
+            <button onClick={() => setHistoryModal(null)} style={{ width: "100%", marginTop: 10, padding: 13, background: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+          </div>
+        </div>
+      )}
+
       {/* 휴가 사용 모달 */}
       {useModal && (
         <div
