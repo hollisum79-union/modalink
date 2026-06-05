@@ -18709,7 +18709,9 @@ function DistanceScreen({ onBack, user }) {
             <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}>앱 누적 (자동)</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: "#0F6E56" }}>{computing ? "계산 중..." : "+" + appKm.toLocaleString("ko-KR") + " km"}</div>
             <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>기준일 이후 운행분</div>
+            </div>
         </div>
+          
 
         <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>기준 누적키로 입력</div>
