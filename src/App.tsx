@@ -22708,7 +22708,60 @@ export default function App() {
  const [lastDate, setLastDate] = useState("");
 
   const [homeRotation, setHomeRotation] = useState<any[]>([]);
-  const [homeDia, setHomeDia] = useState<any[]>([]);
+    const [homeDia, setHomeDia] = useState<any[]>([]);
+  const [homeTotalKm, setHomeTotalKm] = useState(0);
+
+  // 무사고 주행키로 총 누적 (DistanceScreen과 동일 로직)
+  useEffect(() => {
+    const calcKm = async () => {
+      if (!user?.employee_number || homeDia.length === 0) return;
+      const { data: me } = await supabase
+        .from("members")
+        .select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total")
+        .eq("employee_number", user.employee_number)
+        .maybeSingle();
+      if (!me) return;
+      const baseNum = Number(me.base_distance_km) || 0;
+      const bd = me.base_distance_date || "";
+      let sum = 0;
+      if (bd) {
+        const { data: adj } = await supabase
+          .from("work_adjust")
+          .select("work_date, memo, adjust_type")
+          .eq("employee_number", user.employee_number)
+          .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+          .gt("work_date", bd);
+        const adjustByDate: any = {};
+        (adj || []).forEach((r: any) => {
+          const m = (r.memo || "").match(/다이아\s*(\d+)/);
+          if (m) adjustByDate[r.work_date] = m[1];
+        });
+        const distOf = (diaNo: any) => {
+          const row = homeDia.find((r: any) => Number(r.dia_no) === Number(diaNo));
+          return row ? Number(row.distance_km) || 0 : 0;
+        };
+        const member = { work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
+        const start = new Date(bd + "T00:00:00");
+        start.setDate(start.getDate() + 1);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+          const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          let diaNo: any = null;
+          if (adjustByDate[ds]) {
+            diaNo = adjustByDate[ds];
+          } else if (me.work_type === "교번") {
+            const w = calcKyobunWork(member, new Date(d), homeRotation);
+            if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
+          }
+          if (diaNo != null) sum += distOf(diaNo);
+        }
+      }
+      setHomeTotalKm(baseNum + sum);
+    };
+    calcKm();
+  }, [homeDia, homeRotation, user]);
+
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
@@ -24467,7 +24520,42 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         </div>
+                {/* 무사고 주행키로 카드 */}
+        <div
+          onClick={() => setScreen("distance")}
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            padding: "16px 18px",
+            boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+            cursor: "pointer",
+            marginBottom: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+            <div style={{ fontSize: 22 }}>🚆</div>
+            <div>
+              <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>
+                무사고 주행키로
+              </div>
+              <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>
+                안전운행 누적
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "#1F2937", letterSpacing: -0.5 }}>
+              {homeTotalKm.toLocaleString("ko-KR")}
+            </div>
+            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>km</span>
+          </div>
+        </div>
+
         {/* 호봉 승급 알림 배너 */}
+
         {promoAlert && (
           <div
             style={{
