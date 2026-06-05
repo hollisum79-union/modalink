@@ -25048,221 +25048,41 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           ))}
         </div>
-        <div
+               <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 14,
-            padding: "16px 0 8px",
+            padding: "26px 0 12px",
           }}
         >
-          <div
+          <EmblemImg
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 2,
+              width: 56,
+              height: 56,
+              borderRadius: "50%",
+              objectFit: "cover",
+              background: "#fff",
+              flexShrink: 0,
             }}
-          >
-            <svg
-              viewBox="0 0 500 420"
-              width="72"
-              height="60"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M250,18 C155,18 72,82 50,170 C36,225 46,272 76,312"
-                stroke="#1e40af"
-                strokeWidth="16"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M250,34 C162,34 86,93 66,178 C54,228 62,272 88,308"
-                stroke="#1e40af"
-                strokeWidth="5"
-                fill="none"
-                strokeLinecap="round"
-                opacity="0.35"
-              />
-              <circle cx="36" cy="178" r="12" fill="#1e40af" opacity="0.85" />
-              <circle cx="36" cy="178" r="5" fill="#ffd700" />
-              <path
-                d="M250,18 C345,18 428,82 450,170 C464,225 454,272 424,312"
-                stroke="#daa520"
-                strokeWidth="16"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M250,34 C338,34 414,93 434,178 C446,228 438,272 412,308"
-                stroke="#daa520"
-                strokeWidth="5"
-                fill="none"
-                strokeLinecap="round"
-                opacity="0.35"
-              />
-              <circle cx="464" cy="178" r="12" fill="#daa520" opacity="0.85" />
-              <circle cx="464" cy="178" r="5" fill="#1e40af" />
-              <circle
-                cx="250"
-                cy="175"
-                r="122"
-                stroke="#1e40af"
-                strokeWidth="2"
-                fill="none"
-                strokeDasharray="7,5"
-                opacity="0.3"
-              />
-              <circle cx="196" cy="112" r="21" fill="#1e40af" />
-              <path
-                d="M165,225 Q168,182 196,172 Q214,177 219,195 L215,228 Z"
-                fill="#1e40af"
-              />
-              <path
-                d="M219,190 Q233,198 244,196"
-                stroke="#1e40af"
-                strokeWidth="11"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M168,192 Q155,202 148,214"
-                stroke="#1e40af"
-                strokeWidth="11"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <circle cx="304" cy="112" r="21" fill="#daa520" />
-              <path
-                d="M335,225 Q332,182 304,172 Q286,177 281,195 L285,228 Z"
-                fill="#daa520"
-              />
-              <path
-                d="M281,190 Q267,198 256,196"
-                stroke="#daa520"
-                strokeWidth="11"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M332,192 Q345,202 352,214"
-                stroke="#daa520"
-                strokeWidth="11"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M244,196 Q250,218 256,196"
-                stroke="#1e40af"
-                strokeWidth="7"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M76,312 Q106,336 140,330 Q163,324 180,312"
-                stroke="#1e40af"
-                strokeWidth="15"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M76,312 Q62,327 66,346 Q71,358 88,352 Q101,346 106,334"
-                stroke="#1e40af"
-                strokeWidth="12"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M66,346 Q58,355 62,366 Q68,374 81,368"
-                stroke="#1e40af"
-                strokeWidth="9"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M424,312 Q394,336 360,330 Q337,324 320,312"
-                stroke="#daa520"
-                strokeWidth="15"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M424,312 Q438,327 434,346 Q429,358 412,352 Q399,346 394,334"
-                stroke="#daa520"
-                strokeWidth="12"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M434,346 Q442,355 438,366 Q432,374 419,368"
-                stroke="#daa520"
-                strokeWidth="9"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M180,312 Q250,296 320,312"
-                stroke="#555"
-                strokeWidth="13"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <path
-                d="M185,309 Q250,294 315,309"
-                stroke="#888"
-                strokeWidth="6"
-                fill="none"
-                strokeLinecap="round"
-              />
-              <text
-                x="65"
-                y="408"
-                fontSize="112"
-                fontWeight="900"
-                fill="#1e3a8a"
-                fontFamily="'Apple SD Gothic Neo','Noto Sans KR',sans-serif"
-              >
-                모
-              </text>
-              <text
-                x="210"
-                y="408"
-                fontSize="112"
-                fontWeight="900"
-                fill="#daa520"
-                fontFamily="'Apple SD Gothic Neo','Noto Sans KR',sans-serif"
-              >
-                U
-              </text>
-              <text
-                x="312"
-                y="408"
-                fontSize="112"
-                fontWeight="900"
-                fill="#1e3a8a"
-                fontFamily="'Apple SD Gothic Neo','Noto Sans KR',sans-serif"
-              >
-                다
-              </text>
-            </svg>
-          </div>
+          />
           <div style={{ textAlign: "left" }}>
             <div
               style={{
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: 800,
                 color: "#1e3a8a",
                 marginBottom: 4,
+                letterSpacing: 0.3,
               }}
             >
-              모U다 플랫폼
+              MODALINK<span style={{ color: "#0d9488" }}>.APP</span>
             </div>
             <div
               style={{
                 display: "flex",
-                gap: 4,
+                gap: 5,
                 fontSize: 11,
                 color: "#555",
                 marginBottom: 6,
@@ -25270,11 +25090,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               }}
             >
               <span>노동</span>
-              <span style={{ color: "#daa520", fontWeight: 900 }}>•</span>
+              <span style={{ color: "#0d9488", fontWeight: 900 }}>•</span>
               <span>권리</span>
-              <span style={{ color: "#daa520", fontWeight: 900 }}>•</span>
+              <span style={{ color: "#0d9488", fontWeight: 900 }}>•</span>
               <span>복지</span>
-              <span style={{ color: "#daa520", fontWeight: 900 }}>•</span>
+              <span style={{ color: "#0d9488", fontWeight: 900 }}>•</span>
               <span>소통</span>
             </div>
             <div style={{ fontSize: 10, color: "#9CA3AF" }}>
@@ -25282,6 +25102,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         </div>
+
       </div>
       <BottomTabBar screen={screen} setScreen={setScreen} />
             
