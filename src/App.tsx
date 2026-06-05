@@ -99,6 +99,7 @@ function computeNetPay(input: any) {
 
   const longService = hobong >= 25 ? 130000 : hobong >= 20 ? 110000 : hobong >= 15 ? 80000 : hobong >= 10 ? 60000 : hobong >= 5 ? 50000 : 0;
   const gradeSupport = (grade === 6 || grade === 7) ? 30000 : 0;
+  const seungmuBojo = (workType === "교번") ? 20000 : String(workType).includes("4조2교대") ? (grade === 3 ? 110000 : 127000) : (grade === 3 ? 135000 : 165000);
   const wtRates: Record<string, number> = {
     통상: 0.1, 변형통상: 0.108, 변형근무: 0.087,
     "4조2교대(비심야)": 0.0675, "4조2교대(심야)": 0.0635,
@@ -111,6 +112,8 @@ function computeNetPay(input: any) {
     if (item === "업무보전수당") return workTypePay;
     if (item === "장기근속수당") return longService;
     if (item === "직급보조비") return gradeSupport;
+    if (item === "승무보조비") return seungmuBojo;
+
     return manualInputs[item] ?? 0;
   };
   const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
