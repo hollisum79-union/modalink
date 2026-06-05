@@ -18205,8 +18205,6 @@ function LeaveScreen({ onBack, user }) {
     },
     {
       id: "petition",
-      {
-      id: "petition",
       label: "청원휴가",
       days: remaining.petition,
       color: "#14B8A6",
