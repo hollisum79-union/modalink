@@ -18006,6 +18006,7 @@ function LeaveScreen({ onBack, user }) {
     substitute: 0,
     study: 0,
     longService: 0,
+    petition: 0,
   });
 
   // 편집 모드 (지금 어떤 휴가를 편집 중인지)
@@ -18106,6 +18107,8 @@ function LeaveScreen({ onBack, user }) {
       substitute: "substitute_remaining",
       study: "study_remaining",
       longService: "longService_remaining",
+      petition: "petition_remaining",
+
     };
     // DB에 저장
     if (user?.employee_number) {
@@ -18129,7 +18132,7 @@ function LeaveScreen({ onBack, user }) {
       const { data, error } = await supabase
         .from("members")
         .select(
-          "annual_remaining, tempAnnual_remaining, promotedAnnual_remaining, substitute_remaining, study_remaining, longService_remaining"
+          "annual_remaining, tempAnnual_remaining, promotedAnnual_remaining, substitute_remaining, study_remaining, longService_remaining, petition_remaining"
         )
         .eq("employee_number", user.employee_number)
         .maybeSingle();
@@ -18145,6 +18148,7 @@ function LeaveScreen({ onBack, user }) {
           substitute: Number(data.substitute_remaining) || 0,
           study: Number(data.study_remaining) || 0,
           longService: Number(data.longService_remaining) || 0,
+          petition: Number(data.petition_remaining) || 0,
         });
       }
     })();
@@ -18198,6 +18202,15 @@ function LeaveScreen({ onBack, user }) {
       color: "#06B6D4",
       bg: "#CFFAFE",
       icon: "🎖️",
+      {
+      id: "petition",
+      label: "청원휴가",
+      days: remaining.petition,
+      color: "#14B8A6",
+      bg: "#CCFBF1",
+      icon: "🕊️",
+    },
+
     },
   ];
 
