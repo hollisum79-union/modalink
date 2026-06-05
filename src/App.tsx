@@ -19390,7 +19390,7 @@ function WorkAdjustScreen({ onBack, user }) {
                 const same = (a: any, b: any) =>
                   a.주간 === b.주간 && a.야간 === b.야간 && a.비번 === b.비번 && a.휴무 === b.휴무;
 
-                                                const startsWithBibeon = (member: any) => {
+                                                                const startsWithBibeon = (member: any) => {
                   const w = calcKyobunWork(member, new Date(s), swapRotation);
                   return !!(w && w.type === "비번");
                 };
@@ -19401,14 +19401,20 @@ function WorkAdjustScreen({ onBack, user }) {
                   return;
                 }
 
-                // 기간 내 매일 근무(다이아 포함)가 나와 완전히 같으면 교체 의미 없음
-                const sameSchedule = (member: any) => {
+                // 기간 내 매일 근무 종류가 나와 같으면 교체 의미 없음 (다이아 번호는 무시)
+                // 주간·대기는 둘 다 '낮 출근'이라 같게 보고, 야간·비번·휴무는 구분
+                const workKind = (w: any) => {
+                  if (!w) return "-";
+                  if (w.type === "휴무") return "휴";
+                  if (w.type === "비번") return "비";
+                  if (w.type === "야간") return "야";
+                  return "주";
+                };
+                const samePattern = (member: any) => {
                   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
                     const mine = calcKyobunWork(me, new Date(d), swapRotation);
                     const theirs = calcKyobunWork(member, new Date(d), swapRotation);
-                    const mk = mine ? `${mine.type}:${mine.dia}` : "";
-                    const tk = theirs ? `${theirs.type}:${theirs.dia}` : "";
-                    if (mk !== tk) return false;
+                    if (workKind(mine) !== workKind(theirs)) return false;
                   }
                   return true;
                 };
@@ -19419,11 +19425,12 @@ function WorkAdjustScreen({ onBack, user }) {
                   .filter((m) => !startsWithBibeon(m))
                   .map((m) => ({ member: m, count: countTypes(m) }))
                   .filter((x) => same(x.count, myCount))
-                  .filter((x) => !sameSchedule(x.member));
+                  .filter((x) => !samePattern(x.member));
 
                 setSwapMatches(matched);
                 setSwapSearched(true);
                 setSwapPartner(null);
+
 
               }}
               style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: 16 }}
