@@ -18016,6 +18016,7 @@ function LeaveScreen({ onBack, user }) {
   // 휴가 사용 모달 state
   const [useModal, setUseModal] = React.useState(null);
   const [historyModal, setHistoryModal] = React.useState(null);
+  const [petitionInfo, setPetitionInfo] = React.useState(false);
   const [historyRows, setHistoryRows] = React.useState([]);
   React.useEffect(() => {
     if (!historyModal || !user?.employee_number) { setHistoryRows([]); return; }
@@ -18338,22 +18339,43 @@ function LeaveScreen({ onBack, user }) {
               >
                 {item.icon}
               </div>
-              <div
-                onClick={() => setHistoryModal(item)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 3,
-                  padding: "5px 9px",
-                  borderRadius: 999,
-                  background: "#F3F4F6",
-                  color: "#6B7280",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                📋 사용내역
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {item.id === "petition" && (
+                  <div
+                    onClick={() => setPetitionInfo(true)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                      padding: "5px 9px",
+                      borderRadius: 999,
+                      background: "#CCFBF1",
+                      color: "#14B8A6",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ℹ️ 안내
+                  </div>
+                )}
+                <div
+                  onClick={() => setHistoryModal(item)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 3,
+                    padding: "5px 9px",
+                    borderRadius: 999,
+                    background: "#F3F4F6",
+                    color: "#6B7280",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  📋 사용내역
+                </div>
               </div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>
@@ -18449,13 +18471,13 @@ function LeaveScreen({ onBack, user }) {
             총 {history.filter((h) => h.status !== "취소").length}건
           </div>
         </div>
-        {history.length === 0 ? (
+        {history.filter((h) => h.status !== "취소").length === 0 ? (
           <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "20px 0" }}>
             아직 사용한 휴가가 없어요
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {history.map((h) => {
+            {history.filter((h) => h.status !== "취소").map((h) => {
               const cancelled = h.status === "취소";
               const typeLabel =
                 leaveItems.find((i) => i.id === h.leave_type)?.label || h.leave_type;
@@ -18535,7 +18557,51 @@ function LeaveScreen({ onBack, user }) {
         </div>
       )}
 
+      {/* 청원휴가 안내 모달 */}
+      {petitionInfo && (
+        <div onClick={() => setPetitionInfo(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1000 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: 22, width: "100%", maxWidth: 420, maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 11, background: "#CCFBF1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21 }}>🕊️</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "#1F2937" }}>청원휴가 안내</div>
+            </div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 16px 50px" }}>대상 및 기간 (단체협약 별표4)</div>
+            {[
+              { cat: "결혼", color: "#EC4899", bg: "#FCE7F3", rows: [["본인", "5일"], ["자녀", "1일"], ["본인 및 배우자의 형제자매", "1일"]] },
+              { cat: "사망", color: "#6B7280", bg: "#F3F4F6", rows: [["배우자", "5일"], ["본인 및 배우자의 부모", "5일"], ["본인 및 배우자의 조부모(외조부모)", "3일"], ["본인 및 배우자의 형제자매", "3일"], ["본인 및 배우자의 형제자매의 배우자", "1일"], ["본인 및 배우자의 부모의 형제자매와 그 형제자매의 배우자", "1일"], ["자녀와 그 자녀의 배우자", "5일"]] },
+              { cat: "기타", color: "#14B8A6", bg: "#CCFBF1", rows: [["배우자 출산", "20일"], ["자녀 입양", "20일"], ["자녀와 자녀의 배우자 출산", "1일"]] },
+            ].map((sec) => (
+              <div key={sec.cat} style={{ marginBottom: 14 }}>
+                <div style={{ display: "inline-block", fontSize: 12, fontWeight: 800, color: sec.color, background: sec.bg, borderRadius: 8, padding: "3px 10px", marginBottom: 6 }}>{sec.cat}</div>
+                {sec.rows.map((r, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 4px", borderBottom: "1px solid #F3F4F6", gap: 10 }}>
+                    <span style={{ fontSize: 13, color: "#374151", lineHeight: 1.4 }}>{r[0]}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#14B8A6", whiteSpace: "nowrap" }}>{r[1]}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: 14, marginTop: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>※ 비고</div>
+              {[
+                "본인 결혼: 사유발생 5일 전부터 90일 사이로 본인이 지정하여 사용 (단, 마지막 휴가일이 90일 이내)",
+                "자녀 결혼: 사유발생 5일 전후로 본인이 지정하여 사용",
+                "배우자 출산: 출산예정일 5일 전부터 출산 후 180일 이내에 3회 분할사용 가능",
+                "입양은 「입양특례법」에 따른 입양에 한함",
+              ].map((t, i) => (
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700 }}>{i + 1}.</span>
+                  <span style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5 }}>{t}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setPetitionInfo(false)} style={{ width: "100%", marginTop: 16, padding: 13, background: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+          </div>
+        </div>
+      )}
+
       {/* 휴가 사용 모달 */}
+
       {useModal && (
         <div
           onClick={() => setUseModal(null)}
