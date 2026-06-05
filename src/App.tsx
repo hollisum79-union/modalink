@@ -9690,11 +9690,15 @@ function AdminScreen({ onBack, user, onNavigate }) {
   // 식당메뉴 입력
   const [canteenStation, setCanteenStation] = useState("대공원");
   const [canteenInfoDone, setCanteenInfoDone] = useState(false);
-  const [canteenHours, setCanteenHours] = useState("");
+  const [canteenTimeB, setCanteenTimeB] = useState("");
+  const [canteenTimeL, setCanteenTimeL] = useState("");
+  const [canteenTimeD, setCanteenTimeD] = useState("");
 const [canteenPrice, setCanteenPrice] = useState("");
 useEffect(() => {
     supabase.from("canteen_info").select("*").eq("station", canteenStation).maybeSingle().then((res) => {
-      setCanteenHours(res.data?.open_hours || "");
+    setCanteenTimeB(res.data?.time_breakfast || "");
+      setCanteenTimeL(res.data?.time_lunch || "");
+      setCanteenTimeD(res.data?.time_dinner || "");
       setCanteenPrice(res.data?.price || "");
     });
   }, [canteenStation]);
@@ -10396,14 +10400,28 @@ useEffect(() => {
       <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>🍽️ 식당 운영정보</div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>운영시간</div>
-        <textarea value={canteenHours} onChange={(e) => setCanteenHours(e.target.value)} placeholder={"조식 07:00 ~ 09:00\n중식 11:30 ~ 13:30\n석식 17:00 ~ 19:00"} style={{ width: "100%", minHeight: 74, padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", resize: "none", lineHeight: 1.5, WebkitAppearance: "none", appearance: "none" }} />
+        <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>식사시간</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <span style={{ width: 40, fontSize: 13, color: "#6B7280", fontWeight: 600, flexShrink: 0 }}>아침</span>
+          <input value={canteenTimeB} onChange={(e) => setCanteenTimeB(e.target.value)} placeholder="07:00 ~ 09:00" style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <span style={{ width: 40, fontSize: 13, color: "#6B7280", fontWeight: 600, flexShrink: 0 }}>점심</span>
+          <input value={canteenTimeL} onChange={(e) => setCanteenTimeL(e.target.value)} placeholder="11:30 ~ 13:30" style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <span style={{ width: 40, fontSize: 13, color: "#6B7280", fontWeight: 600, flexShrink: 0 }}>저녁</span>
+          <input value={canteenTimeD} onChange={(e) => setCanteenTimeD(e.target.value)} placeholder="17:00 ~ 19:00" style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
+        </div>
+        <div style={{ fontSize: 11, color: "#B0B5BD" }}>비워두면 그 시간대는 안 보여요</div>
       </div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>식비</div>
         <input value={canteenPrice} onChange={(e) => setCanteenPrice(e.target.value)} placeholder="4,000원" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }} />
       </div>
       <button onClick={async () => {
-        const { error } = await supabase.from("canteen_info").upsert({ station: canteenStation, open_hours: canteenHours, price: canteenPrice });
+        const { error } = await supabase.from("canteen_info").upsert({ station: canteenStation, time_breakfast: canteenTimeB, time_lunch: canteenTimeL, time_dinner: canteenTimeD, price: canteenPrice });
         if (error) { alert("저장 실패: " + error.message); return; }
         setCanteenInfoDone(true);
         setTimeout(() => setCanteenInfoDone(false), 2000);
