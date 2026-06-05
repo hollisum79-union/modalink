@@ -18598,8 +18598,9 @@ function WorkAdjustScreen({ onBack, user }) {
   // 휴무충당 모드: "기록" 또는 "신청"
   const [holidayMode, setHolidayMode] = useState("기록");
   const [requests, setRequests] = useState([]); // 신청 목록
-  const [confirmModal, setConfirmModal] = useState(null);
+ const [confirmModal, setConfirmModal] = useState(null);
   const [toast, setToast] = useState(null);
+  const [detailModal, setDetailModal] = useState<any>(null);
   // 예쁜 알림창 (toast) - alert 대신 사용
   const showToast = (message, type = "info") => {
     setToast({ message, type: type || "info" });
@@ -19653,11 +19654,11 @@ function WorkAdjustScreen({ onBack, user }) {
                     <span style={{ fontSize: 12, color: "#6B7280" }}>회</span>
                   </div>
                   <div style={{ display: "flex", gap: 8, borderTop: "0.5px solid #EEF0F3", paddingTop: 10 }}>
-                    <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px" }}>
+                    <div onClick={() => setDetailModal({ title: `올해 ${activeTab} · 주간`, list: yearRecs.filter((r) => r.work_shift === "주간") })} style={{ flex: 1, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
                       <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 2 }}>주간</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>{dayCnt}</div>
                     </div>
-                    <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px" }}>
+                    <div onClick={() => setDetailModal({ title: `올해 ${activeTab} · 야간`, list: yearRecs.filter((r) => r.work_shift === "야간") })} style={{ flex: 1, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
                       <div style={{ fontSize: 10, color: "#6B7280", marginBottom: 2 }}>야간</div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>{nightCnt}</div>
                     </div>
@@ -19940,7 +19941,7 @@ appearance: "none",
                   alignItems: "center",
                 }}
               >
-                <span>📋 내 기록</span>
+                <span>📋 {_now.getMonth() + 1}월 기록</span>
                 <span
                   style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 500 }}
                 >
@@ -20055,6 +20056,73 @@ appearance: "none",
           </>
         )}
       </div>
+      {/* 올해 상세 기록 팝업 */}
+      {detailModal && (
+        <div
+          onClick={() => setDetailModal(null)}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 20,
+              padding: "20px",
+              width: "100%",
+              maxWidth: 360,
+              maxHeight: "70vh",
+              overflowY: "auto",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>{detailModal.title}</span>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>총 {detailModal.list.length}건</span>
+            </div>
+            {detailModal.list.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>기록이 없어요 📝</div>
+            ) : (
+              detailModal.list.map((r: any) => (
+                <div key={r.id} style={{ padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>{r.work_date}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: shiftColors[r.work_shift]?.bg || "#E5E7EB", color: shiftColors[r.work_shift]?.color || "#374151" }}>{r.work_shift}</span>
+                  </div>
+                  {r.memo && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{r.memo}</div>}
+                </div>
+              ))
+            )}
+            <button
+              onClick={() => setDetailModal(null)}
+              style={{
+                marginTop: 16,
+                width: "100%",
+                padding: "12px",
+                background: "#4F46E5",
+                color: "#fff",
+                border: "none",
+                borderRadius: 12,
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
       {/* 삭제/취소 확인 모달 */}
       {confirmModal && (
         <div
