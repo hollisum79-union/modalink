@@ -22512,7 +22512,7 @@ export default function App() {
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
-        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp)..in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
       ]);
       console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       let homeNightCount = 0;
