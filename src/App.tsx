@@ -56,6 +56,35 @@ function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTab
   if (!row) return { workHours: 0, nightHours: 0 };
   return { workHours: Number(row.work_hours) || 0, nightHours: Number(row.night_hours) || 0 };
 }
+function calcSupportOvertimeHours(diaNo: any, shift: string, dateStr: string, diaTable: any[], holidays: string[]) {
+  if (!diaNo || !diaTable || diaTable.length === 0) return 0;
+  const date = new Date(dateStr);
+  const isHol = (d: Date) => {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return true;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return (holidays || []).includes(`${y}-${m}-${dd}`);
+  };
+  const dayType = shift === "야간" ? "평평" : (isHol(date) ? "휴일" : "평일");
+  const row = (diaTable || []).find(
+    (r: any) => Number(r.dia_no) === Number(diaNo) && r.day_type === dayType
+  );
+  if (!row || !row.start_time || !row.end_time) return 0;
+  const toHr = (t: any) => {
+    const p = String(t).split(":");
+    return (Number(p[0]) || 0) + (Number(p[1]) || 0) / 60;
+  };
+  const START = 8 + 50 / 60;
+  const END = 18.5;
+  const s = toHr(row.start_time);
+  const e = toHr(row.end_time);
+  let ot = 0;
+  if (s < START) ot += START - s;
+  if (e > END) ot += e - END;
+  return ot;
+}
 function computeNetPay(input: any) {
   const {
     grade, hobong, workType, checkedItems = {}, manualInputs = {},
@@ -135,8 +164,19 @@ function computeNetPay(input: any) {
   });
   const holidayFillPay = Math.round(hfPaySum);
 
-  const totalGross = tongsangWage + nightPay + holidayFillPay;
+  let supportOtHours = 0;
+  dutyRecords.forEach((rec: any) => {
+    if (rec.adjust_type !== "support") return;
+    if (rec.work_shift === "야간") return;
+    const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
+    if (!sm) return;
+    supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
+  });
+  const within8s = Math.min(supportOtHours, 8);
+  const over8s = Math.max(supportOtHours - 8, 0);
+  const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
 
+  const totalGross = tongsangWage + nightPay + holidayFillPay + supportPay;
   const r = dedRates || {};
   const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
@@ -16528,7 +16568,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
-        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
    ]);
 
       if (salaryRes.data) setSalaryTable(salaryRes.data);
@@ -22472,7 +22512,7 @@ export default function App() {
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
-        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp)..in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
       ]);
       console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       let homeNightCount = 0;
