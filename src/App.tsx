@@ -22479,7 +22479,39 @@ export default function App() {
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   useEffect(() => {
-   const loadHomeWork = async () => {
+    if (!homeSalaryData || !homeSalaryData.memberInfo || !user?.employee_number) return;
+    const d = homeSalaryData;
+    const s = d.settings || {};
+    const result = computeNetPay({
+      grade: Number(d.memberInfo.grade) || 0,
+      hobong: Number(d.memberInfo.pay_step) || 0,
+      workType: s.work_type || d.memberInfo.work_type || "",
+      checkedItems: s.checked_items || {},
+      manualInputs: s.manual_inputs || {},
+      nightCount: d.nightCount || 0,
+      dutyRecords: d.dutyRecords || [],
+      salaryTable: d.salaryTable,
+      worktypeSettings: d.worktypeSettings,
+      hfRecords: d.hfRecords,
+      diaTable: homeDia,
+      holidays: homeHolidays,
+      dedRates: d.dedRates,
+      memberInfo: d.memberInfo,
+      rotationData: homeRotation,
+    });
+    if (!result) return;
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    supabase
+      .from("monthly_pay")
+      .upsert(
+        { employee_number: user.employee_number, year_month: ym, net_pay: result.netPay },
+        { onConflict: "employee_number,year_month" }
+      )
+      .then(() => {});
+  }, [homeSalaryData, homeDia, homeHolidays, homeRotation, user]);
+  useEffect(() => {
+    const loadHomeWork = async () => {
       const t0 = performance.now();
       const { data: rot } = await supabase
         .from("schedule_rotation")
