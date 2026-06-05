@@ -22441,6 +22441,34 @@ export default function App() {
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
       ]);
       console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
+      let homeNightCount = 0;
+      const sb = sbRes.data;
+      const wg = meRes.data?.work_group;
+      if (sb && wg && ["A", "B", "C", "D"].includes(wg)) {
+        const cyc = ["주간", "야간", "비번", "휴무"];
+        const bd = new Date(sb.base_date);
+        bd.setHours(0, 0, 0, 0);
+        const baseIdx: any = {
+          A: cyc.indexOf(sb.a_work_type),
+          B: cyc.indexOf(sb.b_work_type),
+          C: cyc.indexOf(sb.c_work_type),
+          D: cyc.indexOf(sb.d_work_type),
+        };
+        const calcSh = (dt: Date) => {
+          const t = new Date(dt);
+          t.setHours(0, 0, 0, 0);
+          const df = Math.round((t.getTime() - bd.getTime()) / 86400000);
+          return cyc[(((baseIdx[wg] + df) % 4) + 4) % 4];
+        };
+        for (let dd = 1; dd <= endDay; dd++) {
+          if (calcSh(new Date(py, lastPrev.getMonth(), dd)) === "야간") homeNightCount++;
+        }
+        for (const lv of (lvRes.data || [])) {
+          if (calcSh(new Date(lv.used_date)) === "야간") homeNightCount -= Number(lv.days) || 0;
+        }
+        homeNightCount = Math.max(0, homeNightCount);
+      }
+      console.log("⏱️ 야간 개수:", homeNightCount, "회");
       setHomeSalaryData({
         salaryTable: salaryRes.data || [],
         worktypeSettings: wtRes.data || [],
@@ -22448,6 +22476,7 @@ export default function App() {
         hfRecords: hfRes.data || [],
         settings: settingsRes.data || null,
         dedRates: dedRes.data || null,
+        nightCount: homeNightCount,
       });
     };
     loadHomeWork();
@@ -23871,7 +23900,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             <div style={{ fontSize: 14, fontWeight: 900, color: "#1F2937" }}>
               {(() => {
                 const d = homeSalaryData;
-                console.log("홈급여데이터:", d);
                 if (!d || !d.memberInfo) return "—";
                 const s = d.settings || {};
                 const result = computeNetPay({
@@ -23880,7 +23908,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   workType: s.work_type || d.memberInfo.work_type || "",
                   checkedItems: s.checked_items || {},
                   manualInputs: s.manual_inputs || {},
-                  nightCount: 0,
+                  nightCount: d.nightCount || 0,
                   salaryTable: d.salaryTable,
                   worktypeSettings: d.worktypeSettings,
                   hfRecords: d.hfRecords,
