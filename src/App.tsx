@@ -18020,7 +18020,7 @@ function LeaveScreen({ onBack, user }) {
   const [historyRows, setHistoryRows] = React.useState([]);
   React.useEffect(() => {
     if (!historyModal || !user?.employee_number) { setHistoryRows([]); return; }
-    supabase.from("leave_history").select("*").eq("employee_number", user.employee_number).eq("leave_type", historyModal.id).order("used_date", { ascending: false }).then((res) => setHistoryRows(res.data || []));
+    supabase.from("leave_history").select("*").eq("leave_type", historyModal.id).neq("status", "취소").order("used_date", { ascending: false }).then((res) => setHistoryRows(res.data || []));
   }, [historyModal]);
 
   const [useDate, setUseDate] = React.useState(
