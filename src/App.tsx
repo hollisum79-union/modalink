@@ -18843,6 +18843,13 @@ function DistanceScreen({ onBack, user }) {
         .eq("employee_number", user.employee_number)
         .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
         .gt("work_date", bd);
+      const { data: lvData } = await supabase
+        .from("leave_history")
+        .select("used_date")
+        .eq("employee_number", user.employee_number)
+        .neq("status", "취소")
+        .gt("used_date", bd);
+      const leaveDates = new Set((lvData || []).map((r) => r.used_date));
       const adjustByDate = {};
       (adj || []).forEach((r) => {
         const m = (r.memo || "").match(/다이아\s*(\d+)/);
@@ -18858,7 +18865,8 @@ function DistanceScreen({ onBack, user }) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
-        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+       const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (leaveDates.has(ds)) continue;
         let diaNo = null;
         if (adjustByDate[ds]) {
           diaNo = adjustByDate[ds];
@@ -22970,6 +22978,13 @@ export default function App() {
           .eq("employee_number", user.employee_number)
           .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
           .gt("work_date", bd);
+       const { data: lvData } = await supabase
+          .from("leave_history")
+          .select("used_date")
+          .eq("employee_number", user.employee_number)
+          .neq("status", "취소")
+          .gt("used_date", bd);
+        const leaveDates = new Set((lvData || []).map((r: any) => r.used_date));
         const adjustByDate: any = {};
         (adj || []).forEach((r: any) => {
           const m = (r.memo || "").match(/다이아\s*(\d+)/);
@@ -22986,6 +23001,7 @@ export default function App() {
         today.setHours(0, 0, 0, 0);
         for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
           const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                    if (leaveDates.has(ds)) continue;
           let diaNo: any = null;
           if (adjustByDate[ds]) {
             diaNo = adjustByDate[ds];
