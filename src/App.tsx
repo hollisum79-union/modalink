@@ -22976,6 +22976,10 @@ export default function App() {
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [adjustCount, setAdjustCount] = useState(0);
   const [newNoticeCount, setNewNoticeCount] = useState(0);
+  const [newVoteCount, setNewVoteCount] = useState(0);
+  const [newInquiryCount, setNewInquiryCount] = useState(0);
+  const [newVoteCount, setNewVoteCount] = useState(0);
+  const [newInquiryCount, setNewInquiryCount] = useState(0);
  const [lastDate, setLastDate] = useState("");
 
   const [homeRotation, setHomeRotation] = useState<any[]>([]);
@@ -22992,7 +22996,34 @@ export default function App() {
         .gt("created_at", lastSeen);
       setNewNoticeCount(count || 0);
     };
-    checkNewNotice();
+   checkNewNotice();
+    const checkNewPost = async () => {
+      const lastSeen = localStorage.getItem("lastSeen_post") || "2000-01-01";
+      const { count } = await supabase
+        .from("posts")
+        .select("id", { count: "exact", head: true })
+        .gt("created_at", lastSeen);
+      setNewPostCount(count || 0);
+    };
+   checkNewPost();
+    const checkNewVote = async () => {
+      const lastSeen = localStorage.getItem("lastSeen_vote") || "2000-01-01";
+      const { count } = await supabase
+        .from("votes")
+        .select("id", { count: "exact", head: true })
+        .gt("created_at", lastSeen);
+      setNewVoteCount(count || 0);
+    };
+    checkNewVote();
+    const checkNewInquiry = async () => {
+      const lastSeen = localStorage.getItem("lastSeen_inquiry") || "2000-01-01";
+      const { count } = await supabase
+        .from("inquiries")
+        .select("id", { count: "exact", head: true })
+        .gt("created_at", lastSeen);
+      setNewInquiryCount(count || 0);
+    };
+    checkNewInquiry();
   }, [screen]);
   useEffect(() => {
     const calcKm = async () => {
@@ -25142,7 +25173,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 onClick={() => {
                   if (item.id === "notice") { localStorage.setItem("lastSeen_notice", new Date().toISOString()); setNewNoticeCount(0); setScreen("noticeList"); }
                   if (item.id === "canteen") setScreen("canteen");
-                  if (item.id === "board") { setBoardTab("전체"); setScreen("board"); }
+                  if (item.id === "board") { localStorage.setItem("lastSeen_post", new Date().toISOString()); setNewPostCount(0); setBoardTab("전체"); setScreen("board"); }
                   if (item.id === "inquiry") setScreen("inquiry");
                   if (item.id === "welfare") setScreen("welfare");
                   if (item.id === "vote") setScreen("vote");
@@ -25200,6 +25231,52 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                       {newNoticeCount > 99 ? "99+" : newNoticeCount}
                     </div>
                   )}
+                  {item.id === "board" && newPostCount > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: -4,
+                        right: -4,
+                        minWidth: 18,
+                        height: 18,
+                        padding: "0 5px",
+                        borderRadius: 9,
+                        background: "#EF4444",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {newPostCount > 99 ? "99+" : newPostCount}
+                    </div>
+                  )}
+                  )}
+                  {item.id === "board" && newPostCount > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: -4,
+                        right: -4,
+                        minWidth: 18,
+                        height: 18,
+                        padding: "0 5px",
+                        borderRadius: 9,
+                        background: "#EF4444",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {newPostCount > 99 ? "99+" : newPostCount}
+                    </div>
+                  )}
+                  {item.emoji ? (
                   {item.emoji ? (
                     <span
                       style={{
