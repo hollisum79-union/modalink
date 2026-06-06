@@ -25251,8 +25251,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                       {newPostCount > 99 ? "99+" : newPostCount}
                     </div>
                   )}
-                  )}
-                  {item.id === "board" && newPostCount > 0 && (
+                  {item.id === "vote" && newVoteCount > 0 && (
                     <div
                       style={{
                         position: "absolute",
@@ -25271,7 +25270,29 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                         justifyContent: "center",
                       }}
                     >
-                      {newPostCount > 99 ? "99+" : newPostCount}
+                      {newVoteCount > 99 ? "99+" : newVoteCount}
+                    </div>
+                  )}
+                  {item.id === "inquiry" && newInquiryCount > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: -4,
+                        right: -4,
+                        minWidth: 18,
+                        height: 18,
+                        padding: "0 5px",
+                        borderRadius: 9,
+                        background: "#EF4444",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {newInquiryCount > 99 ? "99+" : newInquiryCount}
                     </div>
                   )}
                   {item.emoji ? (
