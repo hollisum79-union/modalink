@@ -22976,6 +22976,7 @@ export default function App() {
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [adjustCount, setAdjustCount] = useState(0);
   const [newNoticeCount, setNewNoticeCount] = useState(0);
+  const [newPostCount, setNewPostCount] = useState(0);
   const [newVoteCount, setNewVoteCount] = useState(0);
   const [newInquiryCount, setNewInquiryCount] = useState(0);
  const [lastDate, setLastDate] = useState("");
