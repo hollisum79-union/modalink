@@ -9737,6 +9737,7 @@ useEffect(() => {
   const [voteDesc, setVoteDesc] = useState("");
   const [voteDeadline, setVoteDeadline] = useState("");
   const [voteOptions, setVoteOptions] = useState(["", ""]);
+  const [voteAnonymous, setVoteAnonymous] = useState(false);
   const [voteDone, setVoteDone] = useState(false);
 
   const adminMenus = [
@@ -10844,6 +10845,29 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                     </button>
                   ))}
                 </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                  {[{ v: false, label: "실명" }, { v: true, label: "익명" }].map((o) => (
+                    <button
+                      key={o.label}
+                      onClick={() => setVoteAnonymous(o.v)}
+                      style={{
+                        flex: 1,
+                        padding: "12px",
+                        borderRadius: 10,
+                        border: "1.5px solid",
+                        borderColor: voteAnonymous === o.v ? "#4F46E5" : "#E5E7EB",
+                        background: voteAnonymous === o.v ? "#EEF0FF" : "#fff",
+                        color: voteAnonymous === o.v ? "#4F46E5" : "#6B7280",
+                        fontWeight: voteAnonymous === o.v ? 700 : 400,
+                        fontSize: 14,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
                 <input
                   value={voteTitle}
                   onChange={(e) => setVoteTitle(e.target.value)}
@@ -11015,6 +11039,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                       deadline: voteDeadline || null,
                       total_members: 0,
                       options: voteOptions.filter((o) => o.trim()),
+                      is_anonymous: voteAnonymous,
                     };
                     supabase
                       .from("votes")
@@ -25173,9 +25198,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   if (item.id === "notice") { localStorage.setItem("lastSeen_notice", new Date().toISOString()); setNewNoticeCount(0); setScreen("noticeList"); }
                   if (item.id === "canteen") setScreen("canteen");
                   if (item.id === "board") { localStorage.setItem("lastSeen_post", new Date().toISOString()); setNewPostCount(0); setBoardTab("전체"); setScreen("board"); }
-                  if (item.id === "inquiry") setScreen("inquiry");
+                 if (item.id === "inquiry") { localStorage.setItem("lastSeen_inquiry", new Date().toISOString()); setNewInquiryCount(0); setScreen("inquiry"); }
                   if (item.id === "welfare") setScreen("welfare");
-                  if (item.id === "vote") setScreen("vote");
+                  if (item.id === "vote") { localStorage.setItem("lastSeen_vote", new Date().toISOString()); setNewVoteCount(0); setScreen("vote"); }
                   if (item.id === "anonymous") setScreen("anonymous");
                   if (item.id === "archive") setScreen("archive");
                   if (item.id === "about") setScreen("about");
