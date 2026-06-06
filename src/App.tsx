@@ -15908,19 +15908,11 @@ function MySettingsScreen({
                   },
                   { label: "직급", value: savedWorkData.grade },
                   {
-                    label: "입사년월일",
-                    value:
-                      savedWorkData.joinConsent === true &&
-                      savedWorkData.joinDate
-                        ? `${savedWorkData.joinDate.slice(
-                            0,
-                            4
-                          )}.${savedWorkData.joinDate.slice(
-                            4,
-                            6
-                          )}.${savedWorkData.joinDate.slice(6, 8)}`
-                        : "미제공",
-                  },
+                  label: "입사년도",
+                  value: savedWorkData.joinYear
+                    ? `${savedWorkData.joinYear}년`
+                    : "미제공",
+                },
                   {
                     label: "출생연도",
                     value:
