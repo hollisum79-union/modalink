@@ -18066,6 +18066,14 @@ function LeaveScreen({ onBack, user }) {
       alert("사용 일수를 입력해주세요.");
       return;
     }
+    if (item.id === "tempAnnual") {
+      const annualLeft = (remaining as any).annual || 0;
+      const promotedLeft = (remaining as any).promotedAnnual || 0;
+      if (annualLeft > 0 || promotedLeft > 0) {
+        alert(`연차(${annualLeft}일)·촉진연차(${promotedLeft}일)를 먼저 모두 사용한 뒤에 가연차를 사용할 수 있습니다.`);
+        return;
+      }
+    }
     if (item.id !== "petition" && days > item.days) {
       alert(`잔여일수(${item.days}일)보다 많이 사용할 수 없습니다.`);
       return;
@@ -18387,6 +18395,11 @@ function LeaveScreen({ onBack, user }) {
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>
               {item.label}
             </div>
+            {item.id === "annual" && (
+              <div style={{ fontSize: 10, color: "#854F0B", lineHeight: 1.4, marginTop: 2 }}>
+                💡 연차수당 받으셨으면 잔여일을 직접 수정해주세요
+              </div>
+            )}
             {editingId === item.id ? (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
@@ -18681,33 +18694,32 @@ function LeaveScreen({ onBack, user }) {
                 }}
               >
                 사용 일수
-              </div>
-              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                {["0.25", "0.5", "1"].map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setUseDays(d)}
-                    style={{
-                      flex: 1,
-                      padding: "8px",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: useDays === d ? useModal.color : "#F3F4F6",
-                      color: useDays === d ? "#fff" : "#6B7280",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {d === "0.25" ? "반반차" : d === "0.5" ? "반차" : "연차"}
-                    <div
-                      style={{ fontSize: 10, fontWeight: 400, marginTop: 2 }}
+             {(useModal.id === "annual" || useModal.id === "promotedAnnual") && (
+                <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  {["0.25", "0.5", "1"].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setUseDays(d)}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: useDays === d ? useModal.color : "#F3F4F6",
+                        color: useDays === d ? "#fff" : "#6B7280",
+                        border: "none",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                      }}
                     >
-                      {d}일
-                    </div>
-                  </button>
-                ))}
-              </div>
+                      {d === "0.25" ? "반반차" : d === "0.5" ? "반차" : "연차"}
+                      <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2 }}>
+                        {d}일
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )} 
               <input
                 type="number"
                 step="0.25"
