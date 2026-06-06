@@ -25275,7 +25275,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     </div>
                   )}
                   {item.emoji ? (
-                  {item.emoji ? (
                     <span
                       style={{
                         fontSize: 20,
