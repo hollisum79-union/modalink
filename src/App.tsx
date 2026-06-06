@@ -19842,7 +19842,18 @@ function WorkAdjustScreen({ onBack, user }) {
                 );
                 if (!me) { showToast("내 정보를 찾을 수 없어요", "error"); return; }
                 const s = new Date(swapStart), e = new Date(swapEnd);
-                if (e < s) { showToast("종료일이 시작일보다 빠를 수 없어요", "error"); return; }
+                if (swapMode === "oneday") {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const pick = new Date(swapStart);
+                  pick.setHours(0, 0, 0, 0);
+                  if (pick < today) {
+                    showToast("지난 날짜는 교체할 수 없어요. 오늘 이후로 골라주세요", "error");
+                    return;
+                  }
+                } else {
+                  if (e < s) { showToast("종료일이 시작일보다 빠를 수 없어요", "error"); return; }
+                }
 
                 // 갯수 세는 함수
                 const countTypes = (member: any) => {
