@@ -1086,6 +1086,13 @@ function BoardDetail({ post, onBack, user }) {
         <p style={{ fontSize: 15, color: "#374151", lineHeight: 1.8 }}>
           {post.content}
         </p>
+        {post.image_url && (
+          <img
+            src={post.image_url}
+            alt="첨부 사진"
+            style={{ width: "100%", borderRadius: 12, marginTop: 16, display: "block" }}
+          />
+        )}
       </div>
       <div
         style={{
