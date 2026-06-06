@@ -984,7 +984,17 @@ function BoardDetail({ post, onBack, user }) {
         }
       });
   };
+const handleDeletePost = async () => {
+    if (!window.confirm("이 글을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    if (post.image_path) {
+      await supabase.storage.from("archive").remove([post.image_path]);
+    }
+    await supabase.from("posts").delete().eq("id", post.id);
+    onBack();
+  };
 
+  const canDelete =
+    post.author_emp === user?.employee_number || user?.is_admin;
   return (
     <div
       style={{
@@ -1017,9 +1027,26 @@ function BoardDetail({ post, onBack, user }) {
         >
           <Icon path="M15 19l-7-7 7-7" color="#1F2937" size={24} />
         </button>
-        <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
+       <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
           자유게시판
         </span>
+        {canDelete && (
+          <button
+            onClick={handleDeletePost}
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "none",
+              color: "#EF4444",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            삭제
+          </button>
+        )}
       </div>
       <div
         style={{ background: "#fff", padding: "24px 20px", marginBottom: 8 }}
