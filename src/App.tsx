@@ -18400,6 +18400,15 @@ function LeaveScreen({ onBack, user }) {
                 💡 연차수당 받으셨으면 잔여일을 직접 수정해주세요
               </div>
             )}
+            {item.id === "longService" && user?.join_year && (() => {
+              const yrs = new Date().getFullYear() - Number(user.join_year);
+              const target = yrs >= 20 ? 25 : yrs >= 10 ? 15 : yrs >= 5 ? 5 : 0;
+              return (
+                <div style={{ fontSize: 10, color: target > 0 ? "#0F6E56" : "#888", lineHeight: 1.4, marginTop: 2 }}>
+                  🎖️ 재직 약 {yrs}년차 · {target > 0 ? `장기재직휴가 ${target}일 대상 (도달 시 1회)` : "5년 이상부터 대상"}
+                </div>
+              );
+            })()}
             {editingId === item.id ? (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
@@ -18694,6 +18703,7 @@ function LeaveScreen({ onBack, user }) {
                 }}
               >
                 사용 일수
+                </div>
              {(useModal.id === "annual" || useModal.id === "promotedAnnual") && (
                 <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                   {["0.25", "0.5", "1"].map((d) => (
