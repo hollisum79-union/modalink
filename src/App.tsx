@@ -19799,7 +19799,7 @@ function WorkAdjustScreen({ onBack, user }) {
               ))}
             </div>
 
-            {swapMode === "oneday" && (
+            {(
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>소속</div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -19907,6 +19907,7 @@ function WorkAdjustScreen({ onBack, user }) {
                 const myCount = countTypes(me);
                 const matched = swapMembers
                   .filter((m) => String(m.employee_number) !== String(user?.employee_number))
+                  .filter((m) => m.work_group === swapStation)
                   .filter((m) => !startsWithBibeon(m))
                   .map((m) => ({ member: m, count: countTypes(m) }))
                   .filter((x) => same(x.count, myCount))
@@ -19915,7 +19916,6 @@ function WorkAdjustScreen({ onBack, user }) {
                 setSwapMatches(matched);
                 setSwapSearched(true);
                 setSwapPartner(null);
-
 
               }}
               style={{ width: "100%", padding: "13px", borderRadius: 12, border: "none", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: 16 }}
