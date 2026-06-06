@@ -19233,6 +19233,8 @@ function WorkAdjustScreen({ onBack, user }) {
     new Date().toISOString().split("T")[0]
   );
   const [swapMatches, setSwapMatches] = useState<any[]>([]);
+  const [swapMode, setSwapMode] = useState("period");
+  const [swapStation, setSwapStation] = useState("대공원");
  const [swapSearched, setSwapSearched] = useState(false);
   const [receivedSwaps, setReceivedSwaps] = useState<any[]>([]);
   const [viewMonth, setViewMonth] = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`; });
@@ -19779,31 +19781,58 @@ function WorkAdjustScreen({ onBack, user }) {
             )}
               🔄 교번교체 요청
             </div>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16, lineHeight: 1.5 }}>
-              교체할 기간을 정하면, 그 기간에 나와 주·야·비·휴 갯수가 같은 기관사를 찾아드려요.
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14, lineHeight: 1.5 }}>
+              {swapMode === "period"
+                ? "교체할 기간을 정하면, 그 기간에 나와 주·야·비·휴 갯수가 같은 기관사를 찾아드려요."
+                : "교체할 날짜를 정하면, 그 날 나와 근무형태(주간·야간)가 같은 기관사를 찾아드려요."}
             </div>
 
-            {/* 기간 */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>시작일</div>
-                <input
-                  type="date"
-                  value={swapStart}
-                  onChange={(e) => setSwapStart(e.target.value)}
-                  style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", fontFamily: "inherit" }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>종료일</div>
-                <input
-                  type="date"
-                  value={swapEnd}
-                  onChange={(e) => setSwapEnd(e.target.value)}
-                  style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", fontFamily: "inherit" }}
-                />
-              </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              {[{ v: "period", label: "기간 교체" }, { v: "oneday", label: "하루 교체" }].map((o) => (
+                <button
+                  key={o.v}
+                  onClick={() => { setSwapMode(o.v); setSwapSearched(false); setSwapMatches([]); }}
+                  style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: swapMode === o.v ? "#4F46E5" : "#F3F4F6", color: swapMode === o.v ? "#fff" : "#6B7280", fontSize: 13, fontWeight: swapMode === o.v ? 700 : 400, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  {o.label}
+                </button>
+              ))}
             </div>
+
+            {swapMode === "oneday" && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>소속</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["대공원", "도봉"].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => { setSwapStation(st); setSwapSearched(false); setSwapMatches([]); }}
+                      style={{ flex: 1, padding: "9px", borderRadius: 8, border: swapStation === st ? "1.5px solid #4F46E5" : "1px solid #E5E7EB", background: swapStation === st ? "#EEF2FF" : "#fff", color: swapStation === st ? "#4F46E5" : "#6B7280", fontSize: 13, fontWeight: swapStation === st ? 700 : 400, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {swapMode === "period" ? (
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>시작일</div>
+                  <input type="date" value={swapStart} onChange={(e) => setSwapStart(e.target.value)} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", fontFamily: "inherit" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>종료일</div>
+                  <input type="date" value={swapEnd} onChange={(e) => setSwapEnd(e.target.value)} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", fontFamily: "inherit" }} />
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>교체할 날짜</div>
+                <input type="date" value={swapStart} onChange={(e) => setSwapStart(e.target.value)} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", fontFamily: "inherit" }} />
+              </div>
+            )}
 
             {/* 매칭 찾기 버튼 */}
             <button
@@ -19856,6 +19885,25 @@ function WorkAdjustScreen({ onBack, user }) {
                   return true;
                 };
 
+               if (swapMode === "oneday") {
+                  const myW = calcKyobunWork(me, new Date(s), swapRotation);
+                  const myKind = workKind(myW);
+                  if (myKind !== "주" && myKind !== "야") {
+                    showToast("그 날은 주간/야간 근무가 아니라 하루 교체 대상이 아니에요", "error");
+                    return;
+                  }
+                  const matchedOne = swapMembers
+                    .filter((m) => String(m.employee_number) !== String(user?.employee_number))
+                    .filter((m) => m.work_group === swapStation)
+                    .map((m) => ({ member: m, theirW: calcKyobunWork(m, new Date(s), swapRotation) }))
+                    .filter((x) => workKind(x.theirW) === myKind)
+                    .map((x) => ({ member: x.member, myDia: myW, theirDia: x.theirW }));
+                  setSwapMatches(matchedOne);
+                  setSwapSearched(true);
+                  setSwapPartner(null);
+                  return;
+                }
+
                 const myCount = countTypes(me);
                 const matched = swapMembers
                   .filter((m) => String(m.employee_number) !== String(user?.employee_number))
@@ -19891,6 +19939,54 @@ function WorkAdjustScreen({ onBack, user }) {
                     const me = swapMembers.find(
                       (m) => String(m.employee_number) === String(user?.employee_number)
                     );
+                    if (swapMode === "oneday") {
+                      const diaTxt = (w: any) =>
+                        !w ? "-" : w.type === "휴무" ? "휴무" : w.type === "비번" ? "비번" : `${w.dia} (${workKind(w) === "야" ? "야간" : "주간"})`;
+                      return (
+                        <div key={x.member.employee_number} style={{ marginBottom: 8, borderRadius: 12, border: "1px solid #E5E7EB", background: "#fff", overflow: "hidden" }}>
+                          <div style={{ padding: "12px 14px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#4F46E5", flexShrink: 0 }}>
+                                {x.member.name?.charAt(0)}
+                              </div>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>
+                                {x.member.name} <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 400 }}>({x.member.work_group})</span>
+                              </span>
+                            </div>
+                            <div style={{ marginTop: 10, fontSize: 13 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderTop: "1px solid #F3F4F6" }}>
+                                <span style={{ color: "#9CA3AF" }}>내 다이아</span>
+                                <span style={{ fontWeight: 600, color: "#1F2937" }}>{diaTxt(x.myDia)}</span>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0" }}>
+                                <span style={{ color: "#9CA3AF" }}>상대 다이아</span>
+                                <span style={{ fontWeight: 600, color: "#4F46E5" }}>{diaTxt(x.theirDia)}</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                const { error } = await supabase.from("kyobun_swap").insert([{
+                                  swap_date: swapStart,
+                                  a_employee_number: String(user?.employee_number),
+                                  a_name: user?.name,
+                                  b_employee_number: String(x.member.employee_number),
+                                  b_name: x.member.name,
+                                  status: "대기",
+                                }]);
+                                if (error) { showToast("요청 실패: " + error.message, "error"); return; }
+                                showToast("교체 요청을 보냈어요", "success");
+                                setSwapPartner(null);
+                                setSwapSearched(false);
+                                setSwapMatches([]);
+                              }}
+                              style={{ width: "100%", marginTop: 10, padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(90deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                            >
+                              🔄 교체 요청 보내기
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
                     const days: any[] = [];
                     if (isOpen && me) {
                       const s = new Date(swapStart), e = new Date(swapEnd);
