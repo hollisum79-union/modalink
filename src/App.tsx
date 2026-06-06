@@ -118,7 +118,7 @@ function computeNetPay(input: any) {
   };
   const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
 
-  const tongsangWage = (basicSalary ?? 0) + totalAllowance;
+  const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   const isKyobun = memberInfo?.work_type === "교번" && (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
@@ -17008,7 +17008,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     0
   );
 
-  const tongsangWage = (basicSalary ?? 0) + totalAllowance;
+  const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   const nightHoursPerShift =
