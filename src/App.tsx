@@ -669,6 +669,9 @@ function BoardWrite({ onBack, onSubmit, user }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("자유");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imagePath, setImagePath] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const categories = [
     { name: "자유", color: "#4F46E5", bg: "#EEF0FF" },
@@ -677,9 +680,27 @@ function BoardWrite({ onBack, onSubmit, user }) {
     { name: "팝니다", color: "#F59E0B", bg: "#FEF3C7" },
   ];
 
+  const handleImagePick = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `posts/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("archive").upload(path, file);
+    if (error) {
+      alert("사진 업로드 실패: " + error.message);
+      setUploading(false);
+      return;
+    }
+    const { data } = supabase.storage.from("archive").getPublicUrl(path);
+    setImageUrl(data.publicUrl);
+    setImagePath(path);
+    setUploading(false);
+  };
+
   const handleSubmit = () => {
     if (!title.trim() || !content.trim()) return;
-    onSubmit({ title, content, category });
+    onSubmit({ title, content, category, image_url: imageUrl, image_path: imagePath });
   };
 
   return (
@@ -812,6 +833,60 @@ function BoardWrite({ onBack, onSubmit, user }) {
               resize: "none",
             }}
           />
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
+            {imageUrl ? (
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <img
+                  src={imageUrl}
+                  alt="첨부 사진"
+                  style={{ maxWidth: "100%", borderRadius: 12, display: "block" }}
+                />
+                <button
+                  onClick={() => { setImageUrl(""); setImagePath(""); }}
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    border: "none",
+                    background: "rgba(0,0,0,0.6)",
+                    color: "#fff",
+                    fontSize: 16,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  border: "1.5px solid #E5E7EB",
+                  background: "#fff",
+                  color: "#6B7280",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {uploading ? "올리는 중..." : "📷 사진 첨부"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImagePick}
+                  disabled={uploading}
+                  style={{ display: "none" }}
+                />
+              </label>
+            )}
+          </div>
         </div>
       </div>
     </div>
