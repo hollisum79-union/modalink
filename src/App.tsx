@@ -22975,6 +22975,7 @@ export default function App() {
   const [showOnlineModal, setShowOnlineModal] = useState(false);
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [adjustCount, setAdjustCount] = useState(0);
+  const [newNoticeCount, setNewNoticeCount] = useState(0);
  const [lastDate, setLastDate] = useState("");
 
   const [homeRotation, setHomeRotation] = useState<any[]>([]);
@@ -22982,6 +22983,17 @@ export default function App() {
   const [homeTotalKm, setHomeTotalKm] = useState(0);
 
   // 무사고 주행키로 총 누적 (DistanceScreen과 동일 로직)
+  useEffect(() => {
+    const checkNewNotice = async () => {
+      const lastSeen = localStorage.getItem("lastSeen_notice") || "2000-01-01";
+      const { count } = await supabase
+        .from("notices")
+        .select("id", { count: "exact", head: true })
+        .gt("created_at", lastSeen);
+      setNewNoticeCount(count || 0);
+    };
+    checkNewNotice();
+  }, [screen]);
   useEffect(() => {
     const calcKm = async () => {
       if (!user?.employee_number || homeDia.length === 0) return;
@@ -25128,7 +25140,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               <button
                 key={item.id}
                 onClick={() => {
-                  if (item.id === "notice") setScreen("noticeList");
+                  if (item.id === "notice") { localStorage.setItem("lastSeen_notice", new Date().toISOString()); setNewNoticeCount(0); setScreen("noticeList"); }
                   if (item.id === "canteen") setScreen("canteen");
                   if (item.id === "board") { setBoardTab("전체"); setScreen("board"); }
                   if (item.id === "inquiry") setScreen("inquiry");
@@ -25160,11 +25172,34 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     height: 44,
                     borderRadius: 12,
                     background: "#F4F3FF",
+                    position: "relative",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
+                  {item.id === "notice" && newNoticeCount > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: -4,
+                        right: -4,
+                        minWidth: 18,
+                        height: 18,
+                        padding: "0 5px",
+                        borderRadius: 9,
+                        background: "#EF4444",
+                        color: "#fff",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {newNoticeCount > 99 ? "99+" : newNoticeCount}
+                    </div>
+                  )}
                   {item.emoji ? (
                     <span
                       style={{
