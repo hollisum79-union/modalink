@@ -14399,6 +14399,9 @@ function MySettingsScreen({
     user?.pay_step_next_date || ""
   );
   const [editJoinYear, setEditJoinYear] = useState(user?.join_year || "");
+  const [editTongsangWage, setEditTongsangWage] = useState<number | null>(
+    user?.tongsang_wage ?? null
+  );
   const [joinConsent, setJoinConsent] = useState(user?.join_date ? true : null);
   const [birthConsent, setBirthConsent] = useState(
     user?.birth_year ? true : null
@@ -14432,6 +14435,7 @@ function MySettingsScreen({
         if (data.pay_step_next_date)
           setEditPayStepNextDate(data.pay_step_next_date);
         if (data.join_year) setEditJoinYear(data.join_year);
+        if (data.tongsang_wage != null) setEditTongsangWage(data.tongsang_wage);
         if (data.birth_year) setEditBirthYear(data.birth_year);
         if (data.phone) setEditPhone(data.phone);
 
@@ -15459,6 +15463,31 @@ function MySettingsScreen({
                   ℹ️ 다음 승급일이 지나면 자동으로 +1호봉 됩니다
                 </div>
 
+                {/* 통상임금 수기 입력 */}
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>
+                    통상임금
+                  </div>
+                  {user?.tongsang_hobong != null && Number(user.tongsang_hobong) !== Number(editPayStep) && (
+                    <div style={{ padding: "8px 10px", borderRadius: 8, background: "#FFF7ED", border: "1px solid #FED7AA", fontSize: 11, color: "#C2410C", lineHeight: 1.5, marginBottom: 6 }}>
+                      호봉이 {user.tongsang_hobong} → {editPayStep}호봉으로 올랐어요. 통상임금을 다시 확인해 주세요
+                    </div>
+                  )}
+                  <input
+                    type="tel"
+                    value={editTongsangWage != null ? editTongsangWage.toLocaleString() : ""}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      setEditTongsangWage(raw === "" ? null : Number(raw));
+                    }}
+                    placeholder="예: 3200000"
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                  />
+                  <div style={{ fontSize: 11, color: "#6B7280", marginTop: 6, lineHeight: 1.5 }}>
+                    급여명세서의 통상임금을 입력하세요
+                  </div>
+                </div>
+
                 {/* 입사년도 */}
 
                 <div style={{ marginBottom: 10 }}>
@@ -15993,6 +16022,8 @@ function MySettingsScreen({
                     pay_step: editPayStep || null,
                     pay_step_next_date: editPayStepNextDate || null,
                     join_year: editJoinYear || null,
+                    tongsang_wage: editTongsangWage,
+                    tongsang_hobong: editTongsangWage != null ? (editPayStep || null) : null,
                     birth_year: editBirthYear || null,
                   })
                   .eq("employee_number", user.employee_number)
