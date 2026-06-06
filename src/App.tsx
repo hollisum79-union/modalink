@@ -19886,10 +19886,15 @@ function WorkAdjustScreen({ onBack, user }) {
                 };
 
                if (swapMode === "oneday") {
+                  const isStandby = (w: any) => !!(w && String(w.dia).startsWith("대기"));
                   const myW = calcKyobunWork(me, new Date(s), swapRotation);
                   const myKind = workKind(myW);
                   if (myKind !== "주" && myKind !== "야") {
                     showToast("그 날은 주간/야간 근무가 아니라 하루 교체 대상이 아니에요", "error");
+                    return;
+                  }
+                  if (isStandby(myW)) {
+                    showToast("그 날은 대기(비번)라 교체할 수 없어요", "error");
                     return;
                   }
                   const matchedOne = swapMembers
@@ -19897,6 +19902,7 @@ function WorkAdjustScreen({ onBack, user }) {
                     .filter((m) => m.work_group === swapStation)
                     .map((m) => ({ member: m, theirW: calcKyobunWork(m, new Date(s), swapRotation) }))
                     .filter((x) => workKind(x.theirW) === myKind)
+                    .filter((x) => !isStandby(x.theirW))
                     .map((x) => ({ member: x.member, myDia: myW, theirDia: x.theirW }));
                   setSwapMatches(matchedOne);
                   setSwapSearched(true);
