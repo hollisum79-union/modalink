@@ -22978,8 +22978,6 @@ export default function App() {
   const [newNoticeCount, setNewNoticeCount] = useState(0);
   const [newVoteCount, setNewVoteCount] = useState(0);
   const [newInquiryCount, setNewInquiryCount] = useState(0);
-  const [newVoteCount, setNewVoteCount] = useState(0);
-  const [newInquiryCount, setNewInquiryCount] = useState(0);
  const [lastDate, setLastDate] = useState("");
 
   const [homeRotation, setHomeRotation] = useState<any[]>([]);
