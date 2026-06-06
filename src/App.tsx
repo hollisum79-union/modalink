@@ -4833,6 +4833,19 @@ const [nameMap, setNameMap] = useState({});
             >
               ✅ 참여 완료! 결과는 투표 마감 후 공개됩니다.
             </div>
+            <div
+              style={{
+                background: "#F9FAFB",
+                borderRadius: 12,
+                padding: "12px 14px",
+                fontSize: 12,
+                color: "#6B7280",
+                lineHeight: 1.7,
+                marginBottom: 10,
+              }}
+            >
+              🔒 공정한 투표를 위해 진행 중에는 결과를 공개하지 않습니다. 중간 현황이 보이면 소신과 다르게 분위기에 휩쓸릴 수 있어, 마감 후 한 번에 공개합니다.
+            </div>
             {vote.status === "진행중" && (
               <button
                 onClick={handleRevote}
