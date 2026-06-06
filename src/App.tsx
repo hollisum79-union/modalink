@@ -23804,7 +23804,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         </div>
       </div>
     );
-    );
   if (screen === "noticeList")
     return (
       <>
