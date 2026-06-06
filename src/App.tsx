@@ -15255,12 +15255,7 @@ function MySettingsScreen({
                         appearance: "none",
                       }}
                     />
-                    <style>{`
-                      input[type="date"]::-webkit-calendar-picker-indicator {
-                        display: none;
-                        -webkit-appearance: none;
-                      }
-                    `}</style>
+                    
                   </div>
                 </div>
 
