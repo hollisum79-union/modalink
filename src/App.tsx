@@ -3752,7 +3752,15 @@ function WelfareDetail({ item, category, onBack }) {
             {item.title}
           </div>
           <div style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
-            {item.description}
+           {(item.description || "").split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+              /^https?:\/\//.test(part) ? (
+                <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: cat.color, textDecoration: "underline", wordBreak: "break-all" }}>
+                  {part}
+                </a>
+              ) : (
+                part
+              )
+            )}
           </div>
         </div>
         <div
