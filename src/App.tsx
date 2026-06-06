@@ -4487,7 +4487,7 @@ function VoteDetail({ vote, onBack, user }) {
   const [results, setResults] = useState([]);
   const [myVote, setMyVote] = useState(null);
   const [submitted, setSubmitted] = useState(false);
-
+const [nameMap, setNameMap] = useState({});
   const loadResults = () => {
     supabase
       .from("vote_results")
@@ -4507,6 +4507,22 @@ function VoteDetail({ vote, onBack, user }) {
   useEffect(() => {
     loadResults();
   }, [vote.id]);
+
+  useEffect(() => {
+    supabase
+      .from("members")
+      .select("employee_number, id, name")
+      .then(({ data }) => {
+        if (data) {
+          const m = {};
+          data.forEach((x) => {
+            if (x.employee_number != null) m[String(x.employee_number)] = x.name;
+            if (x.id != null) m[String(x.id)] = x.name;
+          });
+          setNameMap(m);
+        }
+      });
+  }, []);
 
   const countOf = (label) => results.filter((r) => r.choice === label).length;
   const totalVotes = results.length;
@@ -4751,6 +4767,26 @@ function VoteDetail({ vote, onBack, user }) {
                         transition: "width 0.5s",
                       }}
                     />
+                  </div>
+                )}
+                {showResult && !vote.is_anonymous && (
+                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {results
+                      .filter((r) => r.choice === label)
+                      .map((r, idx) => (
+                        <span
+                          key={idx}
+                          style={{
+                            fontSize: 11,
+                            color: "#6B7280",
+                            background: "#F3F4F6",
+                            borderRadius: 6,
+                            padding: "2px 8px",
+                          }}
+                        >
+                          {nameMap[String(r.member_id)] || "알 수 없음"}
+                        </span>
+                      ))}
                   </div>
                 )}
               </div>
