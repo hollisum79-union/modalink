@@ -23736,20 +23736,74 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     return <RegisterScreen onBack={() => setScreen("login")} />;
   if (screen === "noticeDetail" && selectedNotice)
     return (
-      <div style={{ padding: "calc(env(safe-area-inset-top) + 24px) 16px 40px", maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: "#fff" }}>
-        <button
-          onClick={() => setScreen("noticeList")}
-          style={{ marginBottom: 16, padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", cursor: "pointer", fontFamily: "inherit" }}
+      <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 80 }}>
+        <div
+          style={{
+            background: "linear-gradient(135deg, #3730A3, #4F46E5, #6D28D9)",
+            borderRadius: 28,
+            padding: "52px 20px 24px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
         >
-          ← 목록으로
-        </button>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>
-          {(selectedNotice as any)?.title || "공지"}
-        </h2>
-        <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-          {(selectedNotice as any)?.content || "내용 준비 중입니다."}
+          <button
+            onClick={() => setScreen("noticeList")}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              border: "none",
+              background: "rgba(255,255,255,0.2)",
+              color: "#fff",
+              fontSize: 18,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            ←
+          </button>
+          <span style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>
+            공지사항
+          </span>
+        </div>
+        <div style={{ padding: "20px 16px" }}>
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: "20px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", margin: 0 }}>
+              {(selectedNotice as any)?.title || "공지"}
+            </h2>
+            {(selectedNotice as any)?.created_at && (
+              <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+                {(selectedNotice as any).created_at.slice(0, 10)}
+              </div>
+            )}
+            <div
+              style={{
+                fontSize: 14,
+                color: "#374151",
+                lineHeight: 1.7,
+                whiteSpace: "pre-wrap",
+                marginTop: 16,
+                paddingTop: 16,
+                borderTop: "1px solid #F3F4F6",
+              }}
+            >
+              {(selectedNotice as any)?.content || "내용 준비 중입니다."}
+            </div>
+          </div>
         </div>
       </div>
+    );
     );
   if (screen === "noticeList")
     return (
