@@ -18349,17 +18349,19 @@ function LeaveScreen({ onBack, user }) {
                       display: "flex",
                       alignItems: "center",
                       gap: 3,
-                      padding: "5px 9px",
+                      padding: "4px 7px",
                       borderRadius: 999,
                       background: "#CCFBF1",
                       color: "#14B8A6",
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: 700,
+                      whiteSpace: "nowrap",
                       cursor: "pointer",
                     }}
                   >
                     ℹ️ 안내
                   </div>
+
                 )}
                 <div
                   onClick={() => setHistoryModal(item)}
@@ -18367,17 +18369,19 @@ function LeaveScreen({ onBack, user }) {
                     display: "flex",
                     alignItems: "center",
                     gap: 3,
-                    padding: "5px 9px",
+                    padding: "4px 7px",
                     borderRadius: 999,
                     background: "#F3F4F6",
                     color: "#6B7280",
-                    fontSize: 10,
+                    fontSize: 9,
                     fontWeight: 700,
+                    whiteSpace: "nowrap",
                     cursor: "pointer",
                   }}
                 >
                   📋 사용내역
                 </div>
+
               </div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>
