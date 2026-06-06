@@ -12679,7 +12679,8 @@ const getKyobunWork = (member: any, date: Date) => {
 
     const swap = swapData.find(
       (s) =>
-        s.swap_date === dateStr &&
+        s.swap_date <= dateStr &&
+        (s.swap_end || s.swap_date) >= dateStr &&
         (String(s.a_employee_number) === emp ||
           String(s.b_employee_number) === emp)
     );
@@ -19984,6 +19985,7 @@ function WorkAdjustScreen({ onBack, user }) {
                               onClick={async () => {
                                 const { error } = await supabase.from("kyobun_swap").insert([{
                                   swap_date: swapStart,
+                                  swap_end: swapStart,
                                   a_employee_number: String(user?.employee_number),
                                   a_name: user?.name,
                                   b_employee_number: String(x.member.employee_number),
@@ -20085,6 +20087,7 @@ function WorkAdjustScreen({ onBack, user }) {
                               onClick={async () => {
                                 const { error } = await supabase.from("kyobun_swap").insert([{
                                   swap_date: swapStart,
+                                  swap_end: swapEnd,
                                   a_employee_number: String(user?.employee_number),
                                   a_name: user?.name,
                                   b_employee_number: String(x.member.employee_number),
