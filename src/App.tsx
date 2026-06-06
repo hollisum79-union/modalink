@@ -23930,6 +23930,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             author_emp: user?.employee_number,
             is_anonymous: false,
             views: 0,
+            image_url: post.image_url || null,
+            image_path: post.image_path || null,
           };
           supabase
             .from("posts")
