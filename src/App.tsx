@@ -699,10 +699,8 @@ function BoardWrite({ onBack, onSubmit, user }) {
   };
 
   const handleSubmit = () => {
-    if (!title.trim() || !content.trim()) return;
+    if (!title.trim() || (!content.trim() && !imageUrl)) return;
     onSubmit({ title, content, category, image_url: imageUrl, image_path: imagePath });
-  };
-
   return (
     <div
       style={{
@@ -3036,7 +3034,7 @@ function InquiryWrite({ onBack, onSubmit, user }) {
   const [content, setContent] = useState("");
 
   const handleSubmit = () => {
-    if (!title.trim() || (!content.trim() && !imageUrl)) return;
+    if (!title.trim() || !content.trim()) return;
     onSubmit({ title, content });
   };
 
