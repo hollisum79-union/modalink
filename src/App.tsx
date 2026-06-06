@@ -19941,7 +19941,7 @@ function WorkAdjustScreen({ onBack, user }) {
                     );
                     if (swapMode === "oneday") {
                       const diaTxt = (w: any) =>
-                        !w ? "-" : w.type === "휴무" ? "휴무" : w.type === "비번" ? "비번" : `${w.dia} (${workKind(w) === "야" ? "야간" : "주간"})`;
+                        !w ? "-" : w.type === "휴무" ? "휴무" : w.type === "비번" ? "비번" : `${w.dia} (${w.type === "야간" ? "야간" : "주간"})`;
                       return (
                         <div key={x.member.employee_number} style={{ marginBottom: 8, borderRadius: 12, border: "1px solid #E5E7EB", background: "#fff", overflow: "hidden" }}>
                           <div style={{ padding: "12px 14px" }}>
