@@ -19249,6 +19249,12 @@ function WorkAdjustScreen({ onBack, user }) {
   const [formFillType, setFormFillType] = useState("다이아");
   const [formDiaNum, setFormDiaNum] = useState("");
   const [formMemo, setFormMemo] = useState("");
+  const [formIsTemp, setFormIsTemp] = useState(false);
+  const [showTempModal, setShowTempModal] = useState(false);
+  const [tempStart, setTempStart] = useState("");
+  const [tempEnd, setTempEnd] = useState("");
+  const [tempWorkHours, setTempWorkHours] = useState("");
+  const [tempDistance, setTempDistance] = useState("");
   // 교번교체용 상태
   const [swapMembers, setSwapMembers] = useState<any[]>([]);
   const [swapDate, setSwapDate] = useState(
@@ -19374,7 +19380,7 @@ function WorkAdjustScreen({ onBack, user }) {
       showToast("날짜를 선택해주세요.");
       return;
     }
-    if (formFillType === "다이아") {
+    if (formFillType === "다이아" && !formIsTemp) {
       if (!formDiaNum) {
         showToast("다이아 번호를 입력해주세요.");
         return;
@@ -19384,10 +19390,26 @@ function WorkAdjustScreen({ onBack, user }) {
         return;
       }
     }
+    if (formIsTemp && (!tempStart || !tempEnd || !tempWorkHours)) {
+      showToast("임시 다이아 시간을 입력해주세요.");
+      return;
+    }
 
     const isNight = formShift === "야간";
-    const fillInfo =
-      formFillType === "다이아" ? `다이아 ${formDiaNum}번` : "취급실";
+
+    let tempNightHours = 0;
+    if (formIsTemp) {
+      const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+      let st = toMin(tempStart), en = toMin(tempEnd);
+      if (en <= st) en += 1440;
+      const ov = (s1: number, e1: number, s2: number, e2: number) => Math.max(0, Math.min(e1, e2) - Math.max(s1, s2));
+      const nightMin = ov(st, en, 0, 360) + ov(st, en, 1320, 1800) + ov(st, en, 2760, 2880);
+      tempNightHours = Math.round(nightMin / 6) / 10;
+    }
+
+    const fillInfo = formIsTemp
+      ? `임시 ${tempStart}~${tempEnd}`
+      : formFillType === "다이아" ? `다이아 ${formDiaNum}번` : "취급실";
     const fullMemo = formMemo ? `${fillInfo} · ${formMemo}` : fillInfo;
 
     const { error } = await supabase.from("work_adjust").insert([
@@ -19398,6 +19420,12 @@ function WorkAdjustScreen({ onBack, user }) {
         work_shift: formShift,
         memo: fullMemo,
         is_night: isNight,
+        is_temp_dia: formIsTemp,
+        temp_start_time: formIsTemp ? tempStart : null,
+        temp_end_time: formIsTemp ? tempEnd : null,
+        temp_work_hours: formIsTemp ? Number(tempWorkHours) : null,
+        temp_night_hours: formIsTemp ? tempNightHours : null,
+        temp_distance_km: formIsTemp ? (Number(tempDistance) || 0) : null,
       },
     ]);
 
@@ -19409,6 +19437,8 @@ function WorkAdjustScreen({ onBack, user }) {
     showToast("저장되었습니다!", "success");
     setFormMemo("");
     setFormDiaNum("");
+    setFormIsTemp(false);
+    setTempStart(""); setTempEnd(""); setTempWorkHours(""); setTempDistance("");
 
     const { data } = await supabase
       .from("work_adjust")
@@ -20584,7 +20614,7 @@ appearance: "none",
               </div>
 
               {/* 다이아 번호 */}
-              {formFillType === "다이아" && (
+             {formFillType === "다이아" && (
                 <div style={{ marginBottom: 14 }}>
                   <div
                     style={{
@@ -20597,50 +20627,182 @@ appearance: "none",
                     }}
                   >
                     <span>다이아 번호</span>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: "#9CA3AF",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {formShift} 범위: {diaRange}번
+                    <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500 }}>
+                      {formIsTemp ? "임시 다이아" : `${formShift} 범위: ${diaRange}번`}
                     </span>
                   </div>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={diaMin}
-                    max={diaMax}
-                    value={formDiaNum}
-                    onChange={(e) => setFormDiaNum(e.target.value)}
-                    placeholder={`${diaMin} ~ ${diaMax}`}
-                    style={{
-                      width: "100%",
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      border:
-                        formDiaNum && !diaNumValid
-                          ? "1.5px solid #EF4444"
-                          : "1.5px solid #E5E7EB",
-                      fontSize: 14,
-                      outline: "none",
-                      boxSizing: "border-box",
-                      fontFamily: "inherit",
-                      color: "#1F2937",
-                    }}
-                  />
-                  {formDiaNum && !diaNumValid && (
-                    <div
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {formIsTemp ? (
+                      <div
+                        style={{
+                          flex: 1,
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          border: "1.5px solid #6366F1",
+                          background: "#EEF2FF",
+                          fontSize: 14,
+                          color: "#4338CA",
+                          fontWeight: 600,
+                        }}
+                      >
+                        임시 ({tempStart || "--:--"}~{tempEnd || "--:--"})
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={diaMin}
+                        max={diaMax}
+                        value={formDiaNum}
+                        onChange={(e) => setFormDiaNum(e.target.value)}
+                        placeholder={`${diaMin} ~ ${diaMax}`}
+                        style={{
+                          flex: 1,
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          border:
+                            formDiaNum && !diaNumValid
+                              ? "1.5px solid #EF4444"
+                              : "1.5px solid #E5E7EB",
+                          fontSize: 14,
+                          outline: "none",
+                          boxSizing: "border-box",
+                          fontFamily: "inherit",
+                          color: "#1F2937",
+                        }}
+                      />
+                    )}
+                    <button
+                      onClick={() => {
+                        if (formIsTemp) {
+                          setFormIsTemp(false);
+                          setTempStart(""); setTempEnd(""); setTempWorkHours(""); setTempDistance("");
+                        } else {
+                          setShowTempModal(true);
+                        }
+                      }}
                       style={{
-                        fontSize: 11,
-                        color: "#EF4444",
-                        marginTop: 5,
+                        padding: "12px 16px",
+                        borderRadius: 12,
+                        border: formIsTemp ? "1.5px solid #E5E7EB" : "1.5px solid #6366F1",
+                        background: formIsTemp ? "#fff" : "#EEF2FF",
+                        color: formIsTemp ? "#6B7280" : "#4338CA",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        whiteSpace: "nowrap",
                       }}
                     >
+                      {formIsTemp ? "취소" : "임시"}
+                    </button>
+                  </div>
+                  {!formIsTemp && formDiaNum && !diaNumValid && (
+                    <div style={{ fontSize: 11, color: "#EF4444", marginTop: 5 }}>
                       ⚠️ {formShift}은(는) {diaRange}번 범위입니다.
                     </div>
                   )}
+                </div>
+              )}
+
+              {showTempModal && (
+                <div
+                  onClick={() => setShowTempModal(false)}
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "rgba(17,24,39,0.45)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000,
+                    padding: 20,
+                  }}
+                >
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      width: "100%",
+                      maxWidth: 380,
+                      background: "#fff",
+                      borderRadius: 18,
+                      padding: 20,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>임시 다이아 입력</div>
+                      <div onClick={() => setShowTempModal(false)} style={{ fontSize: 20, color: "#9CA3AF", cursor: "pointer" }}>✕</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>출근 시간</div>
+                        <input
+                          type="time"
+                          value={tempStart}
+                          onChange={(e) => setTempStart(e.target.value)}
+                          style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>퇴근 시간</div>
+                        <input
+                          type="time"
+                          value={tempEnd}
+                          onChange={(e) => setTempEnd(e.target.value)}
+                          style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>
+                        인정시간 (시간) <span style={{ color: "#9CA3AF", fontWeight: 400, fontSize: 11 }}>· 보수 기준</span>
+                      </div>
+                      <input
+                        type="number"
+                        step="0.1"
+                        inputMode="decimal"
+                        value={tempWorkHours}
+                        onChange={(e) => setTempWorkHours(e.target.value)}
+                        placeholder="예: 8.5"
+                        style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>주행키로 (km)</div>
+                      <input
+                        type="number"
+                        step="0.1"
+                        inputMode="decimal"
+                        value={tempDistance}
+                        onChange={(e) => setTempDistance(e.target.value)}
+                        placeholder="예: 85"
+                        style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => setShowTempModal(false)}
+                        style={{ flex: 1, padding: 12, borderRadius: 10, border: "1.5px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        취소
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!tempStart || !tempEnd || !tempWorkHours) {
+                            showToast("출근·퇴근 시간과 인정시간을 입력해주세요.");
+                            return;
+                          }
+                          setFormIsTemp(true);
+                          setFormDiaNum("");
+                          setShowTempModal(false);
+                        }}
+                        style={{ flex: 1, padding: 12, borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        적용
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
