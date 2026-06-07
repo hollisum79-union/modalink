@@ -12282,7 +12282,6 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
     "대공원" | "도봉" | null
   >(null);
   const [selectedMember, setSelectedMember] = React.useState<any>(null);
-  const [selectedMember, setSelectedMember] = React.useState<any>(null);
   React.useEffect(() => {
     if (!user?.employee_number) return;
     if (user.work_group === "대공원" || user.work_group === "도봉") return;
