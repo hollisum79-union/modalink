@@ -12431,7 +12431,6 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
 if (data) {
         setMembers(data);
         if (
-          user?.work_type === "교번" &&
           user?.employee_number &&
           selectedGroup === user?.work_group
         ) {
