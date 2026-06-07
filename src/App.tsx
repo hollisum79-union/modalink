@@ -16066,6 +16066,10 @@ function MySettingsScreen({
           )}
           <button
             onClick={async () => {
+              if (!editWorkGroup || !editWorkType) {
+                alert("근무유형과 소속을 모두 선택해주세요.");
+                return;
+              }
               setSavedWorkData({
                 workType: editWorkType,
                 workGroup: editWorkGroup,
@@ -24007,16 +24011,40 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   const [activeVote, setActiveVote] = useState(null);
   const [myNotifCount, setMyNotifCount] = useState(0);
   useEffect(() => {
-    supabase
-      .from("votes")
-      .select("*")
-      .eq("status", "진행중")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        setActiveVote(data && data[0] ? data[0] : null);
-      });
-  }, []);
+    const loadActiveVote = async () => {
+      const { data: vd } = await supabase
+        .from("votes")
+        .select("*")
+        .eq("status", "진행중")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const av = vd && vd[0] ? vd[0] : null;
+      setActiveVote(av);
+      if (av) {
+        const { count: votedCount } = await supabase
+          .from("vote_results")
+          .select("*", { count: "exact", head: true })
+          .eq("vote_id", av.id);
+        const { count: totalCount } = await supabase
+          .from("members")
+          .select("*", { count: "exact", head: true })
+          .eq("is_union", true);
+        const myId = String(user?.emp_id || user?.id || "");
+        const { data: mineData } = await supabase
+          .from("vote_results")
+          .select("id")
+          .eq("vote_id", av.id)
+          .eq("member_id", myId)
+          .limit(1);
+        setVoteStats({
+          voted: votedCount || 0,
+          total: totalCount || 0,
+          mine: !!(mineData && mineData.length > 0),
+        });
+      }
+    };
+    loadActiveVote();
+  }, [user]);
   useEffect(() => {
     if (!user?.employee_number) return;
     supabase
@@ -25794,12 +25822,25 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   }}
                 >
                   참여율{" "}
-                  {Math.round((activeVote.voted / activeVote.total) * 100)}%
+                  {voteStats.total > 0
+                    ? Math.round((voteStats.voted / voteStats.total) * 100)
+                    : 0}
+                  %
                   <span
                     style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 400 }}
                   >
                     {" "}
-                    ({activeVote.voted}명)
+                    ({voteStats.voted}/{voteStats.total}명)
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      marginLeft: 6,
+                      color: voteStats.mine ? "#16A34A" : "#DC2626",
+                    }}
+                  >
+                    {voteStats.mine ? "✓ 참여함" : "미참여"}
                   </span>
                 </div>
                 <div
@@ -25815,9 +25856,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                       height: "100%",
                       background: "linear-gradient(90deg, #4F46E5, #6D28D9)",
                       borderRadius: 10,
-                      width: `${Math.round(
-                        (activeVote.voted / activeVote.total) * 100
-                      )}%`,
+                     width: `${
+                        voteStats.total > 0
+                          ? Math.round(
+                              (voteStats.voted / voteStats.total) * 100
+                            )
+                          : 0
+                      }%`,
                     }}
                   />
                 </div>
