@@ -12435,13 +12435,18 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
         .order("name");
 if (data) {
         setMembers(data);
-        if (
-          user?.employee_number &&
-          selectedGroup === user?.work_group
-        ) {
-          const me = data.find(
+        if (user?.employee_number) {
+          let me = data.find(
             (m) => String(m.employee_number) === String(user.employee_number)
           );
+          if (!me) {
+            const { data: own } = await supabase
+              .from("members")
+              .select("id, name, employee_number, work_group, start_position, schedule_total")
+              .eq("employee_number", user.employee_number)
+              .maybeSingle();
+            if (own) me = own;
+          }
           if (me) setSelectedMember(me);
         }
       }
