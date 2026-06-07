@@ -12285,6 +12285,7 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   React.useEffect(() => {
     if (!user?.employee_number) return;
     if (user.work_group === "대공원" || user.work_group === "도봉") return;
+    console.log("🟢 work_group:", user.work_group, "/ emp:", user.employee_number);
     setSelectedMember(user);
   }, [user]);
   const [members, setMembers] = React.useState<any[]>([]);
