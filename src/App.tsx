@@ -12285,7 +12285,6 @@ function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; use
   React.useEffect(() => {
     if (!user?.employee_number) return;
     if (user.work_group === "대공원" || user.work_group === "도봉") return;
-    console.log("🟢 work_group:", user.work_group, "/ emp:", user.employee_number);
     setSelectedMember(user);
   }, [user]);
   const [members, setMembers] = React.useState<any[]>([]);
@@ -12315,7 +12314,6 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
         .from("work_adjust")
         .select("*")
         .eq("employee_number", selectedMember.employee_number);
-      console.log("🟢 배지 work_adjust:", { data, error });
       if (data) setAdjustRecords(data);
     };
     loadAdjust();
@@ -12671,7 +12669,6 @@ React.useEffect(() => {
         .from("work_adjust")
         .select("*")
         .eq("employee_number", selectedMember.employee_number);
-      console.log("🟢 배지 work_adjust:", { data, error });
       if (data) setAdjustRecords(data);
     };
     loadAdjust();
