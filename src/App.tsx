@@ -24009,6 +24009,7 @@ export default function App() {
 const [unreadPostCount, setUnreadPostCount] = useState(0);
 const [unreadReportCount, setUnreadReportCount] = useState(0);
   const [activeVote, setActiveVote] = useState(null);
+  const [voteStats, setVoteStats] = useState({ voted: 0, total: 0, mine: false });
   const [myNotifCount, setMyNotifCount] = useState(0);
   useEffect(() => {
     const loadActiveVote = async () => {
