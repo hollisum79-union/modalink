@@ -737,7 +737,7 @@ function BoardWrite({ onBack, onSubmit, user }) {
     >
       <div
         style={{
-          display: "flex",
+          display: "flex",(activeVote.voted / activeVote.total) * 100
           alignItems: "center",
           justifyContent: "space-between",
           padding: "56px 20px 16px",
