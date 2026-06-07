@@ -737,7 +737,7 @@ function BoardWrite({ onBack, onSubmit, user }) {
     >
       <div
         style={{
-          display: "flex",(activeVote.voted / activeVote.total) * 100
+          display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "56px 20px 16px",
@@ -4928,6 +4928,18 @@ function VoteScreen({ onBack, user }) {
   const [votes, setVotes] = useState([]);
   const [editVote, setEditVote] = useState(null);
   const isAdmin = user?.is_admin;
+  const [myVotedIds, setMyVotedIds] = useState([]);
+  useEffect(() => {
+    const myId = String(user?.emp_id || user?.id || "");
+    if (!myId) return;
+    supabase
+      .from("vote_results")
+      .select("vote_id")
+      .eq("member_id", myId)
+      .then(({ data }) => {
+        if (data) setMyVotedIds(data.map((r) => r.vote_id));
+      });
+  }, [user]);
 
   const loadVotes = () => {
     supabase
@@ -5151,10 +5163,31 @@ function VoteScreen({ onBack, user }) {
               >
                 {vote.title}
               </div>
-              <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                {vote.status === "진행중"
-                  ? "참여하려면 눌러주세요"
-                  : "결과를 보려면 눌러주세요"}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12,
+                  color: "#9CA3AF",
+                }}
+              >
+                <span>
+                  {vote.status === "진행중"
+                    ? "참여하려면 눌러주세요"
+                    : "결과를 보려면 눌러주세요"}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: myVotedIds.includes(vote.id)
+                      ? "#16A34A"
+                      : "#DC2626",
+                  }}
+                >
+                  {myVotedIds.includes(vote.id) ? "✓ 참여함" : "미참여"}
+                </span>
               </div>
             </div>
             {isAdmin && (
