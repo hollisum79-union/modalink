@@ -157,9 +157,17 @@ function computeNetPay(input: any) {
 
   let hfPaySum = 0;
   hfRecords.forEach((rec: any) => {
-    const m = (rec.memo || "").match(/다이아\s*(\d+)/);
-    if (!m) return;
-    const { workHours, nightHours } = calcHolidayFillHours(m[1], rec.work_shift, rec.work_date, diaTable, holidays);
+    let workHours = 0, nightHours = 0;
+    if (rec.is_temp_dia) {
+      workHours = Number(rec.temp_work_hours) || 0;
+      nightHours = Number(rec.temp_night_hours) || 0;
+    } else {
+      const m = (rec.memo || "").match(/다이아\s*(\d+)/);
+      if (!m) return;
+      const hres = calcHolidayFillHours(m[1], rec.work_shift, rec.work_date, diaTable, holidays);
+      workHours = hres.workHours;
+      nightHours = hres.nightHours;
+    }
     if (workHours <= 0) return;
     const within8 = Math.min(workHours, 8);
     const over8 = Math.max(workHours - 8, 0);
@@ -17063,15 +17071,17 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   let hfAutoCount = 0;
   let hfPaySum = 0;
   hfRecords.forEach((rec: any) => {
-    const m = (rec.memo || "").match(/다이아\s*(\d+)/);
-    if (!m) return;
-    const { workHours, nightHours } = calcHolidayFillHours(
-      m[1],
-      rec.work_shift,
-      rec.work_date,
-      diaTable,
-      holidays
-    );
+    let workHours = 0, nightHours = 0;
+    if (rec.is_temp_dia) {
+      workHours = Number(rec.temp_work_hours) || 0;
+      nightHours = Number(rec.temp_night_hours) || 0;
+    } else {
+      const m = (rec.memo || "").match(/다이아\s*(\d+)/);
+      if (!m) return;
+      const hres = calcHolidayFillHours(m[1], rec.work_shift, rec.work_date, diaTable, holidays);
+      workHours = hres.workHours;
+      nightHours = hres.nightHours;
+    }
     if (workHours <= 0) return;
     const within8 = Math.min(workHours, 8);
     const over8 = Math.max(workHours - 8, 0);
@@ -19077,7 +19087,7 @@ function DistanceScreen({ onBack, user }) {
     if (bd) {
       const { data: adj } = await supabase
         .from("work_adjust")
-        .select("work_date, memo, adjust_type")
+        .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
         .eq("employee_number", user.employee_number)
         .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
         .gt("work_date", bd);
@@ -19089,9 +19099,14 @@ function DistanceScreen({ onBack, user }) {
         .gt("used_date", bd);
       const leaveDates = new Set((lvData || []).map((r) => r.used_date));
       const adjustByDate = {};
+      const tempKmByDate = {};
       (adj || []).forEach((r) => {
-        const m = (r.memo || "").match(/다이아\s*(\d+)/);
-        if (m) adjustByDate[r.work_date] = m[1];
+        if (r.is_temp_dia) {
+          tempKmByDate[r.work_date] = Number(r.temp_distance_km) || 0;
+        } else {
+          const m = (r.memo || "").match(/다이아\s*(\d+)/);
+          if (m) adjustByDate[r.work_date] = m[1];
+        }
       });
       const distOf = (diaNo) => {
         const row = diaTable.find((r) => Number(r.dia_no) === Number(diaNo));
@@ -19105,6 +19120,11 @@ function DistanceScreen({ onBack, user }) {
       for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         if (leaveDates.has(ds)) continue;
+        if (tempKmByDate[ds] != null) {
+          const km = tempKmByDate[ds];
+          if (km > 0) { sum += km; rec.push({ date: ds, dia: "임시", km }); }
+          continue;
+        }
         let diaNo = null;
         if (adjustByDate[ds]) {
           diaNo = adjustByDate[ds];
@@ -23543,7 +23563,7 @@ export default function App() {
       if (bd) {
         const { data: adj } = await supabase
           .from("work_adjust")
-          .select("work_date, memo, adjust_type")
+          .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
           .eq("employee_number", user.employee_number)
           .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
           .gt("work_date", bd);
@@ -23555,9 +23575,14 @@ export default function App() {
           .gt("used_date", bd);
         const leaveDates = new Set((lvData || []).map((r: any) => r.used_date));
         const adjustByDate: any = {};
+        const tempKmByDate: any = {};
         (adj || []).forEach((r: any) => {
-          const m = (r.memo || "").match(/다이아\s*(\d+)/);
-          if (m) adjustByDate[r.work_date] = m[1];
+          if (r.is_temp_dia) {
+            tempKmByDate[r.work_date] = Number(r.temp_distance_km) || 0;
+          } else {
+            const m = (r.memo || "").match(/다이아\s*(\d+)/);
+            if (m) adjustByDate[r.work_date] = m[1];
+          }
         });
         const distOf = (diaNo: any) => {
           const row = homeDia.find((r: any) => Number(r.dia_no) === Number(diaNo));
@@ -23571,6 +23596,10 @@ export default function App() {
         for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
           const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
                     if (leaveDates.has(ds)) continue;
+          if (tempKmByDate[ds] != null) {
+            sum += tempKmByDate[ds];
+            continue;
+          }
           let diaNo: any = null;
           if (adjustByDate[ds]) {
             diaNo = adjustByDate[ds];
