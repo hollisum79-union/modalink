@@ -12311,10 +12311,11 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   React.useEffect(() => {
     if (!selectedMember?.employee_number) { setAdjustRecords([]); return; }
     const loadAdjust = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("work_adjust")
         .select("*")
         .eq("employee_number", selectedMember.employee_number);
+      console.log("🟢 배지 work_adjust:", { data, error });
       if (data) setAdjustRecords(data);
     };
     loadAdjust();
@@ -12666,10 +12667,11 @@ if (data) {
 React.useEffect(() => {
     if (!selectedMember?.employee_number) { setAdjustRecords([]); return; }
     const loadAdjust = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("work_adjust")
         .select("*")
         .eq("employee_number", selectedMember.employee_number);
+      console.log("🟢 배지 work_adjust:", { data, error });
       if (data) setAdjustRecords(data);
     };
     loadAdjust();
