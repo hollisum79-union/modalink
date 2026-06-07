@@ -4928,8 +4928,8 @@ function VoteScreen({ onBack, user }) {
   const [votes, setVotes] = useState([]);
   const [editVote, setEditVote] = useState(null);
   const isAdmin = user?.is_admin;
-  const [myVotedIds, setMyVotedIds] = useState([]);
-  useEffect(() => {
+   const [myVotedIds, setMyVotedIds] = useState([]);
+  const loadMyVotes = () => {
     const myId = String(user?.emp_id || user?.id || "");
     if (!myId) return;
     supabase
@@ -4939,6 +4939,9 @@ function VoteScreen({ onBack, user }) {
       .then(({ data }) => {
         if (data) setMyVotedIds(data.map((r) => r.vote_id));
       });
+  };
+  useEffect(() => {
+    loadMyVotes();
   }, [user]);
 
   const loadVotes = () => {
@@ -4992,7 +4995,12 @@ function VoteScreen({ onBack, user }) {
     return (
       <VoteDetail
         vote={selectedVote}
-        onBack={() => setSelectedVote(null)}
+          onBack={() => {
+          setSelectedVote(null);
+          loadVotes();
+          loadMyVotes();
+        }}
+
         user={user}
       />
     );
