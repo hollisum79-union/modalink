@@ -99,7 +99,7 @@ function computeNetPay(input: any) {
 
   const longService = hobong >= 25 ? 130000 : hobong >= 20 ? 110000 : hobong >= 15 ? 80000 : hobong >= 10 ? 60000 : hobong >= 5 ? 50000 : 0;
   const gradeSupport = (grade === 6 || grade === 7) ? 30000 : 0;
-  const seungmuBojo = (workType === "교번") ? 20000 : String(workType).includes("4조2교대") ? (grade === 3 ? 110000 : 127000) : (grade === 3 ? 135000 : 165000);
+  const seungmuBojo = (workType === "교번" || memberInfo?.work_type === "교번") ? 20000 : String(workType).includes("4조2교대") ? (grade === 3 ? 110000 : 127000) : (grade === 3 ? 135000 : 165000);
   const wtRates: Record<string, number> = {
     통상: 0.1, 변형통상: 0.108, 변형근무: 0.087,
     "4조2교대(비심야)": 0.0675, "4조2교대(심야)": 0.0635,
@@ -17036,7 +17036,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
   const getSeungmuBojo = () => {
     if (!selectedGrade) return 0;
-    if (workType === "교번") return 20000;
+    if (memberInfo?.work_type === "교번" || workType === "교번") return 20000;
     if (String(workType).includes("4조2교대")) return selectedGrade === 3 ? 110000 : 127000;
     return selectedGrade === 3 ? 135000 : 165000;
   };
@@ -23684,7 +23684,7 @@ export default function App() {
       setHomeTotalKm(baseNum + sum);
     };
     calcKm();
-  }, [homeDia, homeRotation, user]);
+  }, [homeDia, homeRotation, user, screen]);
 
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
