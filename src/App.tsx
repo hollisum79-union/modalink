@@ -19253,7 +19253,8 @@ function WorkAdjustScreen({ onBack, user }) {
   const [showTempModal, setShowTempModal] = useState(false);
   const [tempStart, setTempStart] = useState("");
   const [tempEnd, setTempEnd] = useState("");
-  const [tempWorkHours, setTempWorkHours] = useState("");
+  const [tempHour, setTempHour] = useState("");
+  const [tempMin, setTempMin] = useState("");
   const [tempDistance, setTempDistance] = useState("");
   // 교번교체용 상태
   const [swapMembers, setSwapMembers] = useState<any[]>([]);
@@ -19390,7 +19391,7 @@ function WorkAdjustScreen({ onBack, user }) {
         return;
       }
     }
-    if (formIsTemp && (!tempStart || !tempEnd || !tempWorkHours)) {
+    if (formIsTemp && (!tempStart || !tempEnd || (!tempHour && !tempMin))) {
       showToast("임시 다이아 시간을 입력해주세요.");
       return;
     }
@@ -19423,7 +19424,7 @@ function WorkAdjustScreen({ onBack, user }) {
         is_temp_dia: formIsTemp,
         temp_start_time: formIsTemp ? tempStart : null,
         temp_end_time: formIsTemp ? tempEnd : null,
-        temp_work_hours: formIsTemp ? Number(tempWorkHours) : null,
+        temp_work_hours: formIsTemp ? (Number(tempHour || 0) + Number(tempMin || 0) / 60) : null,
         temp_night_hours: formIsTemp ? tempNightHours : null,
         temp_distance_km: formIsTemp ? (Number(tempDistance) || 0) : null,
       },
@@ -19438,7 +19439,7 @@ function WorkAdjustScreen({ onBack, user }) {
     setFormMemo("");
     setFormDiaNum("");
     setFormIsTemp(false);
-    setTempStart(""); setTempEnd(""); setTempWorkHours(""); setTempDistance("");
+    setTempStart(""); setTempEnd(""); setTempHour(""); setTempMin(""); setTempDistance("");
 
     const { data } = await supabase
       .from("work_adjust")
@@ -20676,7 +20677,7 @@ appearance: "none",
                       onClick={() => {
                         if (formIsTemp) {
                           setFormIsTemp(false);
-                          setTempStart(""); setTempEnd(""); setTempWorkHours(""); setTempDistance("");
+                          setTempStart(""); setTempEnd(""); setTempHour(""); setTempMin(""); setTempDistance("");
                         } else {
                           setShowTempModal(true);
                         }
@@ -20756,17 +20757,28 @@ appearance: "none",
                     </div>
                     <div style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>
-                        인정시간 (시간) <span style={{ color: "#9CA3AF", fontWeight: 400, fontSize: 11 }}>· 보수 기준</span>
+                        인정시간 <span style={{ color: "#9CA3AF", fontWeight: 400, fontSize: 11 }}>· 보수 기준</span>
                       </div>
-                      <input
-                        type="number"
-                        step="0.1"
-                        inputMode="decimal"
-                        value={tempWorkHours}
-                        onChange={(e) => setTempWorkHours(e.target.value)}
-                        placeholder="예: 8.5"
-                        style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
-                      />
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={tempHour}
+                          onChange={(e) => setTempHour(e.target.value)}
+                          placeholder="8"
+                          style={{ flex: 1, padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                        />
+                        <span style={{ fontSize: 13, color: "#6B7280" }}>시간</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={tempMin}
+                          onChange={(e) => setTempMin(e.target.value)}
+                          placeholder="30"
+                          style={{ flex: 1, padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                        />
+                        <span style={{ fontSize: 13, color: "#6B7280" }}>분</span>
+                      </div>
                     </div>
                     <div style={{ marginBottom: 18 }}>
                       <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>주행키로 (km)</div>
@@ -20789,7 +20801,7 @@ appearance: "none",
                       </button>
                       <button
                         onClick={() => {
-                          if (!tempStart || !tempEnd || !tempWorkHours) {
+                         if (!tempStart || !tempEnd || (!tempHour && !tempMin)) {
                             showToast("출근·퇴근 시간과 인정시간을 입력해주세요.");
                             return;
                           }
