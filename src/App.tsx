@@ -12959,6 +12959,42 @@ const getKyobunWork = (member: any, date: Date) => {
                         : info.short}
                     </div>
                   )}
+                  {(() => {
+                    const recs = adjustRecords.filter((r: any) => r.work_date === key);
+                    if (recs.length === 0) return null;
+                    const LABEL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
+                    const COLOR: any = {
+                      standby: { bg: "#EDE9FE", fg: "#6D28D9" },
+                      holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" },
+                      designated: { bg: "#E1F5EE", fg: "#0F6E56" },
+                      support: { bg: "#E6F1FB", fg: "#185FA5" },
+                    };
+                    return (
+                      <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {recs.map((r: any, i: number) => {
+                          const c = COLOR[r.adjust_type] || { bg: "#F3F4F6", fg: "#374151" };
+                          const m2 = (r.memo || "").match(/다이아\s*(\d+)/);
+                          const shiftMark = r.work_shift === "야간" ? "야" : "주";
+                          const sub = r.is_temp_dia ? (r.temp_start_time || "") : (m2 ? `${shiftMark}${m2[1]}` : (r.memo && r.memo.includes("취급") ? "취급" : shiftMark));
+                          return (
+                            <div key={i} style={{ background: c.bg, borderRadius: 5, padding: "2px 3px" }}>
+                              <div style={{ fontSize: 9, color: c.fg, fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>
+                                {LABEL[r.adjust_type] || r.adjust_type}
+                              </div>
+                              <div style={{ fontSize: 9, color: c.fg, lineHeight: 1.3, textAlign: "center" }}>
+                                {sub}
+                              </div>
+                              {r.is_temp_dia && (
+                                <div style={{ marginTop: 2, background: "#FEE2E2", borderRadius: 4, fontSize: 8, color: "#B91C1C", fontWeight: 700, lineHeight: 1.3, textAlign: "center" }}>
+                                  임시
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   {dayMemos.length > 0 && (
                     <div style={{ textAlign: "center", marginTop: 3 }}>
                       {dayMemos.slice(0, 3).map((_, i) => (
