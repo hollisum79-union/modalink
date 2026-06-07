@@ -23736,6 +23736,7 @@ export default function App() {
       });
   }, [homeSalaryData, homeDia, homeHolidays, homeRotation, user]);
   useEffect(() => {
+    if (screen !== "home") return;
     const loadHomeWork = async () => {
       const t0 = performance.now();
       const { data: rot } = await supabase
