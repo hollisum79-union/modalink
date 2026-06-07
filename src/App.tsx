@@ -23687,6 +23687,7 @@ export default function App() {
   }, [homeDia, homeRotation, user, screen]);
 
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
+  const [homeTodayAdjust, setHomeTodayAdjust] = useState<any>(null);
   const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   const [payCompare, setPayCompare] = useState<any>(null);
@@ -23744,8 +23745,14 @@ export default function App() {
         .order("position");
       if (rot) setHomeRotation(rot);
 
-      const { data: dia } = await supabase.from("kyobun_dia").select("*");
+     const { data: dia } = await supabase.from("kyobun_dia").select("*");
       if (dia) setHomeDia(dia);
+      if (user?.employee_number) {
+        const _n = new Date();
+        const _td = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}-${String(_n.getDate()).padStart(2, "0")}`;
+        const { data: _ta } = await supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated"]).eq("work_date", _td);
+        setHomeTodayAdjust(_ta && _ta.length > 0 ? _ta[0] : null);
+      }
       console.log("⏱️ 1.근무표+다이아:", Math.round(performance.now() - t0), "ms");
 
       const t1 = performance.now();
@@ -23830,7 +23837,7 @@ export default function App() {
       });
     };
     loadHomeWork();
-  }, [user]);
+  }, [user, screen]);
   const onlineList = dummyMembers.slice(0, 8);
   const usage7days = [
     { date: "5/13", count: 8 },
@@ -25352,7 +25359,21 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             
           </div>
        {(() => {
-            const info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays) : null;
+            let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays) : null;
+            if (homeTodayAdjust && homeTodayAdjust.memo) {
+              const _m = String(homeTodayAdjust.memo).match(/다이아\s*(\d+)/);
+              if (_m) {
+                const _shift = homeTodayAdjust.work_shift === "야간" ? "야간" : "주간";
+                const _isHol = (dstr) => { const _d = new Date(dstr); const _w = _d.getDay(); if (_w === 0 || _w === 6) return true; const _s = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`; return (homeHolidays || []).includes(_s); };
+                const _t0 = new Date(homeTodayAdjust.work_date);
+                const _t1 = new Date(_t0); _t1.setDate(_t1.getDate() + 1);
+                let _dt;
+                if (_shift === "주간") { _dt = _isHol(_t0) ? "휴일" : "평일"; }
+                else { const _th = _isHol(_t0), _mh = _isHol(_t1); _dt = (!_th && !_mh) ? "평평" : (!_th && _mh) ? "평휴" : (_th && _mh) ? "휴휴" : "휴평"; }
+                const _row = (homeDia || []).find((r) => Number(r.dia_no) === Number(_m[1]) && r.day_type === _dt) || null;
+                info = { type: _shift, dia: _m[1], diaRow: _row };
+              }
+            }
             let type = info?.type || "-";
             if ((!info || type === "-") && user && homeShiftBase && ["A", "B", "C", "D"].includes(user.work_group)) {
               const cycle = ["주간", "야간", "비번", "휴무"];
