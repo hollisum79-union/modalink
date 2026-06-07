@@ -148,6 +148,10 @@ function computeNetPay(input: any) {
   let dutyNightHours = 0;
   dutyRecords.forEach((rec: any) => {
     if (rec.work_shift !== "야간") return;
+    if (rec.is_temp_dia) {
+      dutyNightHours += Number(rec.temp_night_hours) || 0;
+      return;
+    }
     const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!dm) return;
     dutyNightHours += calcHolidayFillHours(dm[1], "야간", rec.work_date, diaTable, holidays).nightHours;
@@ -179,6 +183,16 @@ function computeNetPay(input: any) {
   dutyRecords.forEach((rec: any) => {
     if (rec.adjust_type !== "support") return;
     if (rec.work_shift === "야간") return;
+    if (rec.is_temp_dia) {
+      const toHr = (t: any) => { const p = String(t).split(":"); return (Number(p[0]) || 0) + (Number(p[1]) || 0) / 60; };
+      const s = toHr(rec.temp_start_time), e = toHr(rec.temp_end_time);
+      const START = 8 + 50 / 60, END = 18.5;
+      let ot = 0;
+      if (s < START) ot += START - s;
+      if (e > END) ot += e - END;
+      supportOtHours += ot;
+      return;
+    }
     const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!sm) return;
     supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
@@ -13906,7 +13920,9 @@ const getKyobunWork = (member: any, date: Date) => {
                           const c = COLOR[r.adjust_type] || { bg: "#F3F4F6", fg: "#374151" };
                           const m = (r.memo || "").match(/다이아\s*(\d+)/);
                           const shiftMark = r.work_shift === "야간" ? "야" : "주";
-                          const sub = m ? `${shiftMark}${m[1]}` : (r.memo && r.memo.includes("취급") ? "취급" : shiftMark);
+                          const sub = r.is_temp_dia
+                            ? (r.temp_start_time || "")
+                            : (m ? `${shiftMark}${m[1]}` : (r.memo && r.memo.includes("취급") ? "취급" : shiftMark));
                           return (
                             <div key={i} style={{ background: c.bg, borderRadius: 5, padding: "2px 3px" }}>
                               <div style={{ fontSize: 9, color: c.fg, fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>
@@ -13915,6 +13931,11 @@ const getKyobunWork = (member: any, date: Date) => {
                               <div style={{ fontSize: 9, color: c.fg, lineHeight: 1.3, textAlign: "center" }}>
                                 {sub}
                               </div>
+                              {r.is_temp_dia && (
+                                <div style={{ marginTop: 2, background: "#FEE2E2", borderRadius: 4, fontSize: 8, color: "#B91C1C", fontWeight: 700, lineHeight: 1.3, textAlign: "center" }}>
+                                  임시
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -17097,6 +17118,16 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   dutyRecords.forEach((rec: any) => {
     if (rec.adjust_type !== "support") return;
     if (rec.work_shift === "야간") return;
+    if (rec.is_temp_dia) {
+      const toHr = (t: any) => { const p = String(t).split(":"); return (Number(p[0]) || 0) + (Number(p[1]) || 0) / 60; };
+      const s = toHr(rec.temp_start_time), e = toHr(rec.temp_end_time);
+      const START = 8 + 50 / 60, END = 18.5;
+      let ot = 0;
+      if (s < START) ot += START - s;
+      if (e > END) ot += e - END;
+      supportOtHours += ot;
+      return;
+    }
     const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!sm) return;
     supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
