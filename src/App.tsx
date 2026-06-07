@@ -139,7 +139,7 @@ function computeNetPay(input: any) {
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
       if (String(w.dia).startsWith("대기")) {
         if (w.type === "야간" && !dutyDates.has(ds)) kyobunNightHours += 4;
-      } else if (Number(w.dia) >= 60) {
+      } else if (w.type === "야간" && Number(w.dia) >= 1) {
         kyobunNightHours += calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays).nightHours;
       }
     }
@@ -17105,7 +17105,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
       if (String(w.dia).startsWith("대기")) {
         if (w.type === "야간" && !dutyDates.has(ds)) sum += 4;
-      } else if (Number(w.dia) >= 60) {
+      } else if (w.type === "야간" && Number(w.dia) >= 1) {
         const { nightHours } = calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays);
         sum += nightHours;
       }
