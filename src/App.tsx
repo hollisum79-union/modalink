@@ -12661,7 +12661,7 @@ if (data) {
         setOffset(0);
         setIsAnimating(false);
       }, 300);
-    } else {
+        } else {
       // 원위치
       setIsAnimating(true);
       setOffset(0);
@@ -12669,6 +12669,24 @@ if (data) {
     }
   };
 
+  const kyobunTouchX = React.useRef(0);
+  const handleKyobunTouchStart = (e: React.TouchEvent) => {
+    kyobunTouchX.current = e.touches[0].clientX;
+  };
+  const handleKyobunTouchEnd = (e: React.TouchEvent) => {
+    const diff = e.changedTouches[0].clientX - kyobunTouchX.current;
+    if (Math.abs(diff) > 60) {
+      if (diff < 0) {
+        const n = getNextMonth(currentYear, currentMonth);
+        setCurrentYear(n.y);
+        setCurrentMonth(n.m);
+      } else {
+        const p = getPrevMonth(currentYear, currentMonth);
+        setCurrentYear(p.y);
+        setCurrentMonth(p.m);
+      }
+    }
+  };
   const getShiftWork = (조: "A" | "B" | "C" | "D", date: Date): string => {
     if (!shiftBase) return "";
     const 순환 = ["주간", "야간", "비번", "휴무"];
@@ -13840,7 +13858,7 @@ const getKyobunWork = (member: any, date: Date) => {
       }
     }
         return (
-      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <div style={{ height: "100%", display: "flex", flexDirection: "column" }} onTouchStart={handleKyobunTouchStart} onTouchEnd={handleKyobunTouchEnd}>
         <div
           style={{
             padding: "8px 16px",
