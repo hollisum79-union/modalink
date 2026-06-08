@@ -24439,10 +24439,44 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   const [promoAlert, setPromoAlert] = useState(null);
   const [memberCount, setMemberCount] = useState(0);
   const [appUserCount, setAppUserCount] = useState(0);
+  const [onlineCount, setOnlineCount] = useState(0);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screen]);
+
+  // 앱이용 표시 켜기 + 접속중 실시간 집계
+  useEffect(() => {
+    if (!user?.employee_number) return;
+    // 1) 로그인하면 앱 사용자로 표시 (앱이용 카운트용)
+    supabase
+      .from("members")
+      .update({ is_app_user: true })
+      .eq("employee_number", user.employee_number)
+      .then(() => {
+        supabase
+          .from("members")
+          .select("*", { count: "exact", head: true })
+          .eq("is_app_user", true)
+          .then(({ count }) => {
+            if (count !== null) setAppUserCount(count);
+          });
+      });
+    // 2) 접속중 실시간 집계 (Supabase Presence, DB 변경 없음)
+    const channel = supabase.channel("online-users", {
+      config: { presence: { key: String(user.employee_number) } },
+    });
+    channel
+      .on("presence", { event: "sync" }, () => {
+        setOnlineCount(Object.keys(channel.presenceState()).length);
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") channel.track({ at: Date.now() });
+      });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.employee_number]);
   useEffect(() => {
     supabase
       .from("members")
@@ -25524,7 +25558,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 lineHeight: 1,
               }}
             >
-              0
+              {onlineCount}
             </div>
             <div
               style={{
