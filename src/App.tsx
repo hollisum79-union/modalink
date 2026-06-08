@@ -17851,6 +17851,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                                 placeholder="금액 입력"
                                 style={{
                                   flex: 1,
+                                  minWidth: 0,
                                   padding: "10px 12px",
                                   borderRadius: 10,
                                   border: "1.5px solid #C7D2FE",
