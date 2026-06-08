@@ -24342,6 +24342,67 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
 
     fetchCounts();
   }, [user, screen]);
+  const VAPID_PUBLIC = "BGFEfKMnehB4akvGm_ZKJnInEiadoDiAxq-4srJ8mfM9gAP7ZwfxQlKHwR_JLK8Ujlb-uc2Apx5qeOKe0ptgnAg";
+
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  };
+
+  const enablePush = async () => {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        alert("이 기기는 푸시 알림을 지원하지 않아요.");
+        return false;
+      }
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        alert("알림이 차단돼 있어요. 폰 설정에서 알림을 허용해주세요.");
+        return false;
+      }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
+      });
+      const json: any = sub.toJSON();
+      await supabase.from("push_subscriptions").upsert(
+        {
+          employee_number: String(user?.employee_number),
+          endpoint: json.endpoint,
+          p256dh: json.keys.p256dh,
+          auth: json.keys.auth,
+        },
+        { onConflict: "endpoint" }
+      );
+      return true;
+    } catch (e: any) {
+      console.log("푸시 구독 실패:", e);
+      alert("알림 설정 실패: " + (e?.message || e));
+      return false;
+    }
+  };
+
+  const disablePush = async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && (await reg.pushManager.getSubscription());
+      if (sub) {
+        const json: any = sub.toJSON();
+        await supabase.from("push_subscriptions").delete().eq("endpoint", json.endpoint);
+        await sub.unsubscribe();
+      }
+      return true;
+    } catch (e) {
+      console.log("푸시 해제 실패:", e);
+      return false;
+    }
+  };
+
   const refreshUser = React.useCallback(async () => {
     if (!user?.employee_number) return;
     try {
