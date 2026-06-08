@@ -14421,6 +14421,7 @@ function MySettingsScreen({
   const [showAddPayStepInfo, setShowAddPayStepInfo] = useState(false);
   const [editJoinDate, setEditJoinDate] = useState(user?.join_date || "");
   const [editBirthYear, setEditBirthYear] = useState(user?.birth_year || "");
+  const [showWorkInfo, setShowWorkInfo] = useState(false);
   const [editPayStepNextDate, setEditPayStepNextDate] = useState(
     user?.pay_step_next_date || ""
   );
@@ -15040,37 +15041,42 @@ function MySettingsScreen({
         {/* 포인트 현황 */}
         <PointSection user={user} />
 
-        {/* 근무정보 */}
+        {/* 근무 정보 버튼 카드 */}
         <div
+          onClick={() => setShowWorkInfo(true)}
           style={{
-            background: "#fff",
-            borderRadius: 20,
-            padding: "20px",
-            marginBottom: 12,
-            boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+            background: "#fff", borderRadius: 20, padding: "18px 20px", marginBottom: 12,
+            boxShadow: "0 2px 8px rgba(79,70,229,0.06)", display: "flex",
+            alignItems: "center", justifyContent: "space-between", cursor: "pointer",
           }}
         >
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#1F2937",
-              marginBottom: 16,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "#EEF0FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🔧</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>근무 정보</div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>근무유형 · 직급 · 호봉 · 출생연도</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 20, color: "#C7C4D9" }}>›</div>
+        </div>
+
+        {/* 근무 정보 팝업 */}
+        {showWorkInfo && (
+          <>
+            <div onClick={() => setShowWorkInfo(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 990 }} />
             <div
               style={{
-                width: 4,
-                height: 18,
-                background: "#4F46E5",
-                borderRadius: 2,
+                position: "fixed", top: 40, left: 0, right: 0, bottom: 0, zIndex: 991,
+                maxWidth: 430, margin: "0 auto", background: "#fff",
+                borderRadius: "28px 28px 0 0", display: "flex", flexDirection: "column",
+                overflow: "hidden", boxShadow: "0 -8px 40px rgba(0,0,0,0.2)",
               }}
-            />
-            근무 정보
-          </div>
+            >
+              <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", padding: "16px 20px", color: "#fff", position: "relative", flexShrink: 0 }}>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>🔧 근무 정보</div>
+                <button onClick={() => setShowWorkInfo(false)} style={{ position: "absolute", top: 14, right: 16, width: 30, height: 30, borderRadius: "50%", background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", fontSize: 15, cursor: "pointer" }}>✕</button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
 {editMode && (<>
           {/* 근무 유형 */}
           {[
@@ -15978,12 +15984,12 @@ function MySettingsScreen({
                 <input
                   value={editBirthYear}
                   onChange={(e) => {
-                    const v = e.target.value.replace(/[^0-9]/g, "").slice(0, 6);
+                    const v = e.target.value.replace(/[^0-9]/g, "").slice(0, 4);
                     setEditBirthYear(v);
                   }}
-                  placeholder="예: 791111"
+                  placeholder="예: 1979"
                   type="tel"
-                  maxLength={6}
+                  maxLength={4}
                   style={{
                     width: "100%",
                     padding: "10px 12px",
@@ -16436,6 +16442,9 @@ function MySettingsScreen({
             </div>
           )}
         </div>
+            </div>
+          </>
+        )}
 
         {/* 알림 설정 */}
         <div
@@ -16644,7 +16653,7 @@ function MySettingsScreen({
                 <div
                   style={{ fontSize: 13, fontWeight: 700, color: "#1e3a8a" }}
                 >
-                  모U다 플랫폼
+                  MODALINK
                 </div>
                 <div
                   style={{
@@ -16654,7 +16663,7 @@ function MySettingsScreen({
                     marginTop: 2,
                   }}
                 >
-                  모두 담다 · 모두 연결하다
+                  노동자의 내일을 연결하다
                 </div>
               </div>
             </div>
