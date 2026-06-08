@@ -19561,6 +19561,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       .from("kyobun_swap")
       .select("*")
       .or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`)
+      .in("status", ["대기", "수락"])
       .order("created_at", { ascending: false });
     if (data) setMySwaps(data);
   };
