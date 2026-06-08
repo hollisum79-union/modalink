@@ -11776,7 +11776,10 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
         </div>
       )}
 
-      <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 14 }}>🏆 나의 포인트</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937" }}>🏆 나의 포인트</div>
+        <div style={{ fontSize: 10, color: "#9CA3AF", background: "#F3F4F6", padding: "5px 10px", borderRadius: 10, fontWeight: 600, whiteSpace: "nowrap" }}>🔄 매월 말일 00시 초기화</div>
+      </div>
 
       <div style={{ background: "#F5F3FF", borderRadius: 16, padding: "20px 16px", textAlign: "center", marginBottom: 8 }}>
         <div style={{ fontSize: 13, color: "#7C6FDA", marginBottom: 6 }}>이번 달 포인트</div>
@@ -14399,6 +14402,7 @@ function MySettingsScreen({
   const [editName, setEditName] = useState(user?.name || "");
   const [editEmpId] = useState(user?.emp_id || "");
   const [editPhone, setEditPhone] = useState(user?.phone || "");
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
 
   // 근무정보 입력 상태
@@ -14898,7 +14902,7 @@ function MySettingsScreen({
             </div>
           </div>
 
-          {/* 연락처 - 수정 가능 */}
+          {/* 연락처 - 보기/수정 토글 */}
           <div style={{ marginBottom: 8 }}>
             <div
               style={{
@@ -14909,44 +14913,55 @@ function MySettingsScreen({
               }}
             >
               <div style={{ fontSize: 12, color: "#9CA3AF" }}>연락처</div>
-              {editPhone ? (
+              {!isEditingPhone && editPhone ? (
                 <div
+                  onClick={() => setIsEditingPhone(true)}
                   style={{
-                    fontSize: 10,
-                    background: "#D1FAE5",
-                    color: "#059669",
+                    fontSize: 12,
+                    color: "#4F46E5",
                     fontWeight: 700,
-                    padding: "3px 8px",
-                    borderRadius: 6,
+                    background: "#EEF0FF",
+                    padding: "5px 12px",
+                    borderRadius: 10,
+                    cursor: "pointer",
                   }}
                 >
-                  ✓ 저장됨
+                  수정
                 </div>
-              ) : (
-                <div
-                  style={{ fontSize: 10, color: "#4F46E5", fontWeight: 600 }}
-                >
-                  ✏️ 수정 가능
-                </div>
-              )}
+              ) : null}
             </div>
-            <input
-              value={editPhone}
-              onChange={(e) => setEditPhone(e.target.value)}
-              placeholder="010-0000-0000"
-              type="tel"
-              style={{
-                width: "100%",
-                padding: "12px 14px",
-                borderRadius: 12,
-                border: "1.5px solid #4F46E5",
-                fontSize: 14,
-                outline: "none",
-                boxSizing: "border-box",
-                fontFamily: "inherit",
-                color: "#1F2937",
-              }}
-            />
+            {isEditingPhone || !editPhone ? (
+              <input
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="010-0000-0000"
+                type="tel"
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: "1.5px solid #4F46E5",
+                  fontSize: 14,
+                  outline: "none",
+                  boxSizing: "border-box",
+                  fontFamily: "inherit",
+                  color: "#1F2937",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  background: "#F4F3FB",
+                  borderRadius: 12,
+                  padding: "13px 15px",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: "#1F2937",
+                }}
+              >
+                {editPhone}
+              </div>
+            )}
           </div>
 
           <div
@@ -14962,7 +14977,7 @@ function MySettingsScreen({
           >
             💡 이름·사번은 지회 조합원 명단 기준으로 자동 설정됩니다.
             <br />
-            연락처는 여기서 수정하면 조합원 명단에도 반영됩니다.
+            연락처는 "수정"을 눌러 변경하면 조합원 명단에도 반영됩니다.
           </div>
 
           {profileSaved && (
@@ -14981,6 +14996,7 @@ function MySettingsScreen({
               ✅ 연락처가 저장되었습니다!
             </div>
           )}
+          {(isEditingPhone || !editPhone) && (
           <button
             onClick={async () => {
               // 빈 칸 체크 + 기존 값 삭제 시 확인
@@ -15015,7 +15031,9 @@ function MySettingsScreen({
                   return;
                 }
               }
+              if (refreshUser) await refreshUser();
               setProfileSaved(true);
+              setIsEditingPhone(false);
               setTimeout(() => setProfileSaved(false), 2000);
             }}
             style={{
@@ -15033,6 +15051,7 @@ function MySettingsScreen({
           >
             연락처 저장하기
           </button>
+          )}
         </div>
 
         {/* 비밀번호 변경 */}
