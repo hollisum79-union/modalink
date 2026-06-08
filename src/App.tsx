@@ -12905,7 +12905,7 @@ const getKyobunWork = (member: any, date: Date) => {
   ) => {
         const weeks = buildCalendarGrid(y, m);
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 320px)", minHeight: 360 }}>
+            <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 385px)", minHeight: 320 }}>
         {weeks.map((week, wi) => (
           <div
             key={wi}
