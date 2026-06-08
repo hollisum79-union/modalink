@@ -128,6 +128,7 @@ function computeNetPay(input: any) {
     nightCount = 0, salaryTable = [], worktypeSettings = [],
     hfRecords = [], diaTable = [], holidays = [], dedRates = null,
     memberInfo = null, rotationData = [], dutyRecords = [],
+    swapData = [], allMembers = [],
   } = input;
 
   const row = salaryTable.find((r: any) => r.hobong === hobong);
@@ -171,7 +172,7 @@ function computeNetPay(input: any) {
         .map((r: any) => r.work_date)
     );
     for (let i = 1; i <= dcount; i++) {
-      const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData);
+      const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData, swapData, allMembers);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
       if (String(w.dia).startsWith("대기")) {
@@ -251,8 +252,8 @@ function computeNetPay(input: any) {
 
   return { netPay: totalGross - totalDeduction, totalGross, totalDeduction, tongsangWage };
 }
-function getTodayWorkInfo(member: any, rotationData: any[], diaTable: any[], holidays: string[], date = new Date()) {
-  const work = calcKyobunWork(member, date, rotationData);
+function getTodayWorkInfo(member: any, rotationData: any[], diaTable: any[], holidays: string[], date = new Date(), swapData: any[] = [], allMembers: any[] = []) {
+  const work = calcKyobunWork(member, date, rotationData, swapData, allMembers);
   if (!work) return null;
 
   const isHol = (d: Date) => {
