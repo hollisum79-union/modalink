@@ -20028,14 +20028,57 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                 <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>
                   📥 나에게 온 교체 요청
                 </div>
-                {receivedSwaps.map((req) => (
+                {receivedSwaps.map((req) => {
+                  const meR = swapMembers.find((m) => String(m.employee_number) === String(user?.employee_number));
+                  const requester = swapMembers.find((m) => String(m.employee_number) === String(req.a_employee_number));
+                  const fmtR = (w: any) => (!w ? "-" : w.type === "휴무" ? "휴" : w.type === "비번" ? "비" : w.dia);
+                  const sR = new Date(req.swap_date);
+                  const eR = new Date(req.swap_end || req.swap_date);
+                  const daysR: any[] = [];
+                  const cntR: any = { 주간: 0, 야간: 0, 비번: 0, 휴무: 0 };
+                  if (meR && requester) {
+                    const fromR = new Date(sR); fromR.setDate(fromR.getDate() - 1);
+                    const toR = new Date(eR); toR.setDate(toR.getDate() + 1);
+                    for (let d = new Date(fromR); d <= toR; d.setDate(d.getDate() + 1)) {
+                      const dd = new Date(d);
+                      const isEdge = dd < sR || dd > eR;
+                      const theirW = calcKyobunWork(requester, dd, swapRotation);
+                      if (!isEdge && theirW && cntR[theirW.type] !== undefined) cntR[theirW.type]++;
+                      daysR.push({ label: `${dd.getMonth() + 1}/${dd.getDate()}`, mine: fmtR(calcKyobunWork(meR, dd, swapRotation)), theirs: fmtR(theirW), edge: isEdge });
+                    }
+                  }
+                  return (
                   <div key={req.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px", marginBottom: 10 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>
-                      {req.a_name} 기관사
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#4F46E5", flexShrink: 0 }}>{req.a_name?.charAt(0)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{req.a_name} 기관사</div>
                     </div>
-                    <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 12 }}>
-                      교체 요청일: {req.swap_date}
+                    <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
+                      교체 기간: {req.swap_date}{req.swap_end && req.swap_end !== req.swap_date ? ` ~ ${req.swap_end}` : ""}
                     </div>
+                    <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
+                      받게 될 근무 → 주{cntR.주간} 야{cntR.야간} 비{cntR.비번} 휴{cntR.휴무}
+                    </div>
+                    {daysR.length > 0 && (
+                      <div style={{ overflowX: "auto", marginBottom: 12 }}>
+                        <table style={{ borderCollapse: "collapse", fontSize: 13, minWidth: "100%" }}>
+                          <tbody>
+                            <tr>
+                              <td style={{ padding: "5px 8px 5px 0", color: "#9CA3AF", fontSize: 11, whiteSpace: "nowrap" }}>날짜</td>
+                              {daysR.map((row, i) => (<td key={i} style={{ textAlign: "center", color: row.edge ? "#C7C9CF" : "#9CA3AF", fontSize: 11, padding: "5px 6px", whiteSpace: "nowrap" }}>{row.label}</td>))}
+                            </tr>
+                            <tr style={{ borderTop: "1px solid #EEF0F3" }}>
+                              <td style={{ padding: "6px 8px 6px 0", color: "#6B7280", whiteSpace: "nowrap" }}>내 다이아</td>
+                              {daysR.map((row, i) => (<td key={i} style={{ textAlign: "center", fontWeight: 600, color: row.edge ? "#C7C9CF" : "#374151", padding: "6px" }}>{row.mine}</td>))}
+                            </tr>
+                            <tr style={{ borderTop: "1px solid #EEF0F3" }}>
+                              <td style={{ padding: "6px 8px 6px 0", color: "#4F46E5", fontWeight: 600, whiteSpace: "nowrap" }}>상대 다이아</td>
+                              {daysR.map((row, i) => (<td key={i} style={{ textAlign: "center", fontWeight: 600, color: row.edge ? "#B9BDEA" : "#4F46E5", padding: "6px" }}>{row.theirs}</td>))}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         onClick={async () => {
@@ -20069,7 +20112,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
              🔄 교번교체 요청
@@ -24424,6 +24468,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   // 알림 읽음 상태 관리 (사용자별 - localStorage + 메모리 이중 저장)
   const alertKey = `readAlerts_${getUserId(user)}`;
   const [readAlerts, setReadAlerts] = React.useState({});
+  const [readNoticeIds, setReadNoticeIds] = React.useState<any[]>([]);
 
   // user 변경 시 해당 사용자의 읽음 상태 로드
   React.useEffect(() => {
@@ -24435,6 +24480,25 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       setReadAlerts({});
     }
   }, [user]);
+
+  // 공지 읽음 목록 로드
+  React.useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`readNotices_${getUserId(user)}`) || "[]");
+      setReadNoticeIds(Array.isArray(saved) ? saved : []);
+    } catch (e) { setReadNoticeIds([]); }
+  }, [user]);
+
+  // 공지목록 화면 들어가면 그때 있는 공지 전부 읽음 처리
+  React.useEffect(() => {
+    if (screen !== "noticeList" || notices.length === 0) return;
+    const ids = notices.map((n: any) => n.id);
+    setReadNoticeIds((prev) => {
+      const merged = Array.from(new Set([...prev, ...ids]));
+      try { localStorage.setItem(`readNotices_${getUserId(user)}`, JSON.stringify(merged)); } catch (e) {}
+      return merged;
+    });
+  }, [screen, notices]);
 
   const markAlertRead = (alertId) => {
     const updated = { ...readAlerts, [alertId]: true };
@@ -24485,10 +24549,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     {
       id: 1,
       type: "urgentNotice",
-      label: "긴급공지",
+      label: "공지사항",
       icon: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z",
       color: "#EF4444",
-      count: getAlertCount(1, 1),
+      count: notices.filter((n: any) => !readNoticeIds.includes(n.id)).length,
       screen: "noticeList",
     },
     {
