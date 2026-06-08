@@ -17919,7 +17919,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                         )}
                     </div>
                   </div>
-                </div>
               ))}
             </div>
 
