@@ -13937,7 +13937,9 @@ const getKyobunWork = (member: any, date: Date) => {
                 );
                            const date = new Date(currentYear, currentMonth - 1, day);
               const work = getKyobunWork(selectedMember, date);
-              const info = work ? workInfo(work.type) : workInfo("");
+                            const info = work ? workInfo(work.type) : workInfo("");
+              const diaDayType = work ? getDiaDayType(work.type, date) : null;
+              const diaInfo = work ? getDiaInfo(work.dia, diaDayType) : null;
               const isT = isToday(currentYear, currentMonth, day);
               const isSun = di === 0,
                 isSat = di === 6;
