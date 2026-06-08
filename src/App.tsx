@@ -12903,13 +12903,14 @@ const getKyobunWork = (member: any, date: Date) => {
     m: number,
     crew: "A" | "B" | "C" | "D"
   ) => {
-    const weeks = buildCalendarGrid(y, m);
+        const weeks = buildCalendarGrid(y, m);
     return (
-      <div>
+      <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 320px)", minHeight: 360 }}>
         {weeks.map((week, wi) => (
           <div
             key={wi}
             style={{
+              flex: 1,
               display: "grid",
               gridTemplateColumns: "repeat(7,1fr)",
               borderBottom: "1px solid #F3F4F6",
@@ -12920,8 +12921,7 @@ const getKyobunWork = (member: any, date: Date) => {
                 return (
                   <div
                     key={di}
-                    style={{
-                      minHeight: 72,
+                                        style={{
                       background: "#FAFAFA",
                       borderRight: "1px solid #F3F4F6",
                     }}
@@ -12951,9 +12951,8 @@ const getKyobunWork = (member: any, date: Date) => {
                     }
                   }}
                   style={{
-                    padding: "6px 4px",
-                    minHeight: 72,
-                                        background: isEditing ? "#EEF2FF" : "#fff",
+                                        padding: "6px 4px",
+                    background: isEditing ? "#EEF2FF" : "#fff",
                     borderRight: "1px solid #F3F4F6",
                     cursor: "pointer",
                     borderTop: "2px solid transparent",
