@@ -13098,11 +13098,18 @@ const getKyobunWork = (member: any, date: Date) => {
     return (
       <div
         style={{
-          margin: "0 12px 12px",
+                    position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 72,
+          zIndex: 1000,
+          maxWidth: 406,
+          margin: "0 auto",
           background: "#fff",
           borderRadius: 14,
           border: "1.5px solid #DDD6FE",
-          overflow: "hidden",
+          overflow: "auto",
+          maxHeight: "72vh",
                     boxShadow: "0 4px 16px rgba(79,70,229,0.12)",
         }}
       >
