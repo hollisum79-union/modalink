@@ -22447,10 +22447,37 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         ))
       )}
     </div>
-  );
+ );
+
+  // 승급일 당일 축하 (본인, 한국시간 09~18시, 40호봉 미만)
+  const promoToday = (() => {
+    const jd = user?.join_date;
+    if (!jd || jd.length !== 8) return null;
+    const joinMonth = parseInt(jd.slice(4, 6));
+    if (isNaN(joinMonth)) return null;
+    let promoMonth = joinMonth + 1;
+    if (promoMonth > 12) promoMonth = 1;
+    const kst = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    if (kst.getMonth() + 1 !== promoMonth) return null;
+    if (kst.getDate() !== 1) return null;
+    if (kst.getHours() < 9 || kst.getHours() >= 18) return null;
+    const add = parseInt(user?.add_pay_step || "0") || 0;
+    const step = Math.min(calcPayStep(jd).payStep + add, 40);
+    if (step >= 40) return null;
+    return { name: user?.name || "조합원", step };
+  })();
 
   return (
     <div style={{ marginBottom: 12 }}>
+
+      {promoToday && (
+        <div style={{ background: "#6D28D9", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 26, marginBottom: 4 }}>🎓✨</div>
+          <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>호봉 승급을 축하합니다</div>
+          <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{promoToday.name} 조합원님</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>오늘부터 {promoToday.step}호봉 적용 🎉</div>
+        </div>
+      )}
 
       {awardWinner && (
         <div style={{ background: "linear-gradient(135deg,#F59E0B,#EF4444)", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10, position: "relative", overflow: "hidden" }}>
