@@ -17821,7 +17821,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                                             {checkedItems[item.id] &&
                         item.type === "manual" &&
                         editingAllowance === item.id && (
-                          <div style={{ paddingLeft: 26, marginTop: 8 }}>
+                          <div style={{ paddingLeft: 26, paddingRight: 8, marginTop: 8 }}>
                             <div
                               style={{
                                 display: "flex",
