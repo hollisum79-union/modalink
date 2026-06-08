@@ -13428,7 +13428,7 @@ const getKyobunWork = (member: any, date: Date) => {
 
     return (
       <div
-              style={{ overflow: "hidden", position: "relative", touchAction: "pan-y", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
+                style={{ overflow: "hidden", position: "relative", touchAction: "pan-y", height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -14486,7 +14486,7 @@ const getKyobunWork = (member: any, date: Date) => {
         </div>
       </div>
 
-          <div style={{ background: "#fff", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+            <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto" }}>
         {activeTab === "교대" && (
           <>
             {!crewLoaded && (
