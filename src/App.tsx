@@ -19502,6 +19502,19 @@ function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: an
   };
   useEffect(() => { if (user?.employee_number) loadReceivedSwaps(); }, [user]);
 
+  // 내 교체 현황 (보낸 것 + 받아서 수락한 것)
+  const [mySwaps, setMySwaps] = useState<any[]>([]);
+  const loadMySwaps = async () => {
+    const emp = String(user?.employee_number);
+    const { data } = await supabase
+      .from("kyobun_swap")
+      .select("*")
+      .or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`)
+      .order("created_at", { ascending: false });
+    if (data) setMySwaps(data);
+  };
+  useEffect(() => { if (user?.employee_number) loadMySwaps(); }, [user]);
+
   // 순환표 불러오기 (대공원+도봉 둘 다)
   useEffect(() => {
     const loadRotation = async () => {
@@ -20032,6 +20045,7 @@ function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: an
                           if (error) { showToast("처리 실패: " + error.message, "error"); return; }
                           showToast("교체를 수락했어요", "success");
                           loadReceivedSwaps();
+                          loadMySwaps();
                         }}
                         style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: "linear-gradient(90deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
                       >
@@ -20046,6 +20060,7 @@ function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: an
                           if (error) { showToast("처리 실패: " + error.message, "error"); return; }
                           showToast("교체를 거절했어요", "info");
                           loadReceivedSwaps();
+                          loadMySwaps();
                         }}
                         style={{ flex: 1, padding: "11px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
                       >
@@ -20056,8 +20071,85 @@ function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: an
                 ))}
               </div>
             )}
-              🔄 교번교체 요청
+             🔄 교번교체 요청
             </div>
+            {mySwaps.filter((sw) => {
+              const emp = String(user?.employee_number);
+              const iAmA = String(sw.a_employee_number) === emp;
+              if (iAmA) return ["대기", "수락", "거절"].includes(sw.status);
+              return sw.status === "수락";
+            }).length > 0 && (
+              <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #F3F4F6" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>
+                  📤 내 교체 현황
+                </div>
+                {mySwaps
+                  .filter((sw) => {
+                    const emp = String(user?.employee_number);
+                    const iAmA = String(sw.a_employee_number) === emp;
+                    if (iAmA) return ["대기", "수락", "거절"].includes(sw.status);
+                    return sw.status === "수락";
+                  })
+                  .map((sw) => {
+                    const emp = String(user?.employee_number);
+                    const iAmA = String(sw.a_employee_number) === emp;
+                    const partnerName = iAmA ? sw.b_name : sw.a_name;
+                    const range =
+                      sw.swap_date === (sw.swap_end || sw.swap_date)
+                        ? sw.swap_date
+                        : `${sw.swap_date} ~ ${sw.swap_end}`;
+                    const badge =
+                      sw.status === "대기"
+                        ? { t: "⏳ 대기 중", bg: "#FEF3C7", c: "#92400E" }
+                        : sw.status === "수락"
+                        ? { t: "✅ 수락됨", bg: "#D1FAE5", c: "#065F46" }
+                        : { t: "✕ 거절됨", bg: "#FEE2E2", c: "#991B1B" };
+                    return (
+                      <div key={sw.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px", marginBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>
+                              {partnerName} 기관사{iAmA ? "" : " (받음)"}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#6B7280" }}>{range}</div>
+                          </div>
+                          <div style={{ background: badge.bg, color: badge.c, fontSize: 11, fontWeight: 800, borderRadius: 8, padding: "4px 10px", whiteSpace: "nowrap" }}>
+                            {badge.t}
+                          </div>
+                        </div>
+                        {sw.status === "대기" && iAmA && (
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm("이 교체 요청을 취소할까요?")) return;
+                              const { error } = await supabase.from("kyobun_swap").delete().eq("id", sw.id);
+                              if (error) { showToast("취소 실패: " + error.message, "error"); return; }
+                              showToast("요청을 취소했어요", "info");
+                              loadMySwaps();
+                            }}
+                            style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                          >
+                            요청 취소
+                          </button>
+                        )}
+                        {sw.status === "수락" && (
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm("교체를 되돌릴까요?\n양쪽 근무가 원래대로 복구됩니다.")) return;
+                              const { error } = await supabase.from("kyobun_swap").update({ status: "취소" }).eq("id", sw.id);
+                              if (error) { showToast("취소 실패: " + error.message, "error"); return; }
+                              showToast("교체를 취소했어요. 원래 근무로 복구됐어요", "info");
+                              loadMySwaps();
+                            }}
+                            style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px solid #FCA5A5", background: "#fff", color: "#DC2626", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                          >
+                            교체 취소 (되돌리기)
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
             <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 14, lineHeight: 1.5 }}>
               {swapMode === "period"
                 ? "교체할 기간을 정하면, 그 기간에 나와 주·야·비·휴 갯수가 같은 기관사를 찾아드려요."
