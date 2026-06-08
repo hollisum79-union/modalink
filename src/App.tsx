@@ -13642,8 +13642,8 @@ const getKyobunWork = (member: any, date: Date) => {
       // return ( 부터 마지막 ); 까지 선택 후 아래 코드로 교체
       // ============================================================
 
-            return (
-        <div style={{ padding: "16px" }}>
+                        return (
+        <div style={{ padding: "16px", height: "100%", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
           <div
             style={{
               display: "flex",
@@ -13909,9 +13909,10 @@ const getKyobunWork = (member: any, date: Date) => {
           ))}
         </div>
         {weeks.map((week, wi) => (
-          <div
+                    <div
             key={wi}
             style={{
+              flex: 1,
               display: "grid",
               gridTemplateColumns: "repeat(7,1fr)",
               borderBottom: "1px solid #F3F4F6",
@@ -13923,8 +13924,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   <div
                     key={di}
                     style={{
-                      minHeight: 70,
-                      background: "#FAFAFA",
+                                            background: "#FAFAFA",
                       borderRight: "1px solid #F3F4F6",
                     }}
                   />
@@ -13953,9 +13953,8 @@ const getKyobunWork = (member: any, date: Date) => {
                     }
                   }}
                   style={{
-                    padding: "6px 4px",
-                    minHeight: 70,
-                                        background: "#fff",
+                                        padding: "6px 4px",
+                    background: "#fff",
                     borderRight: "1px solid #F3F4F6",
                     borderTop: "2px solid transparent",
                   }}
