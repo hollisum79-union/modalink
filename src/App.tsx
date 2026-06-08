@@ -4987,6 +4987,7 @@ function VoteScreen({ onBack, user }) {
           .eq("id", id)
           .then(() => {
             loadVotes();
+            loadMyVotes();
           });
       });
   };
@@ -11125,20 +11126,35 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                   }}
                 />
                 <input
+                                  <div
+                  style={{
+                    fontSize: 12,
+                    color: "#6B7280",
+                    fontWeight: 600,
+                    marginBottom: 6,
+                  }}
+                >
+                  마감일
+                </div>
+                <input
                   type="date"
                   value={voteDeadline}
                   onChange={(e) => setVoteDeadline(e.target.value)}
-                  placeholder="마감일 (예: 2024.06.01)"
                   style={{
                     width: "100%",
-                    padding: "13px 0",
-                    border: "none",
-                    borderBottom: "1.5px solid #E5E7EB",
+                    maxWidth: "100%",
+                    padding: "12px",
+                    border: "1.5px solid #E5E7EB",
+                    borderRadius: 10,
                     fontSize: 14,
                     outline: "none",
                     boxSizing: "border-box",
                     fontFamily: "inherit",
                     color: "#374151",
+                    background: "#fff",
+                    WebkitAppearance: "none",
+                    appearance: "none",
+                    minHeight: 48,
                     marginBottom: 16,
                   }}
                 />
@@ -23650,13 +23666,27 @@ export default function App() {
       setNewPostCount(count || 0);
     };
    checkNewPost();
-    const checkNewVote = async () => {
-      const lastSeen = localStorage.getItem("lastSeen_vote") || "2000-01-01";
-      const { count } = await supabase
+        const checkNewVote = async () => {
+      const myId = String(user?.emp_id || user?.id || "");
+      const { data: activeVotes } = await supabase
         .from("votes")
-        .select("id", { count: "exact", head: true })
-        .gt("created_at", lastSeen);
-      setNewVoteCount(count || 0);
+        .select("id")
+        .eq("status", "진행중");
+      if (!activeVotes) {
+        setNewVoteCount(0);
+        return;
+      }
+      let votedIds = [];
+      if (myId) {
+        const { data: mine } = await supabase
+          .from("vote_results")
+          .select("vote_id")
+          .eq("member_id", myId);
+        votedIds = (mine || []).map((r) => r.vote_id);
+      }
+      setNewVoteCount(
+        activeVotes.filter((v) => !votedIds.includes(v.id)).length
+      );
     };
     checkNewVote();
     const checkNewInquiry = async () => {
@@ -25948,7 +25978,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   if (item.id === "board") { localStorage.setItem("lastSeen_post", new Date().toISOString()); setNewPostCount(0); setBoardTab("전체"); setScreen("board"); }
                  if (item.id === "inquiry") { localStorage.setItem("lastSeen_inquiry", new Date().toISOString()); setNewInquiryCount(0); setScreen("inquiry"); }
                   if (item.id === "welfare") setScreen("welfare");
-                  if (item.id === "vote") { localStorage.setItem("lastSeen_vote", new Date().toISOString()); setNewVoteCount(0); setScreen("vote"); }
+                  if (item.id === "vote") { setScreen("vote"); }
                   if (item.id === "anonymous") setScreen("anonymous");
                   if (item.id === "archive") setScreen("archive");
                   if (item.id === "about") setScreen("about");
@@ -26034,8 +26064,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                         minWidth: 18,
                         height: 18,
                         padding: "0 5px",
-                        borderRadius: 9,
-                        background: "#EF4444",
+                                                borderRadius: 9,
+                        background: "#60A5FA",
                         color: "#fff",
                         fontSize: 11,
                         fontWeight: 700,
