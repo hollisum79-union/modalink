@@ -18458,7 +18458,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   );
 }
 // ── 연차·기타휴가 ──
-function LeaveScreen({ onBack, user, initialDate }) {
+function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; initialDate?: any }) {
   // 잔여일수 state (사용자가 입력한 값)
   const [remaining, setRemaining] = React.useState({
     annual: 0,
@@ -19481,7 +19481,7 @@ function DistanceScreen({ onBack, user }) {
   );
 }
 
-function WorkAdjustScreen({ onBack, user, initialDate }) {
+function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: any; initialDate?: any }) {
   const [activeTab, setActiveTab] = useState("대기충당");
   const [diaPhoto, setDiaPhoto] = useState(null);
   const [diaLoading, setDiaLoading] = useState(false);
