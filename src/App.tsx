@@ -13849,9 +13849,7 @@ const getKyobunWork = (member: any, date: Date) => {
             alignItems: "center",
             justifyContent: "space-between",
             gap: 8,
-            borderBottom: "1px solid #EEF0F3",
-            position: "sticky",
-            top: 56,
+                        borderBottom: "1px solid #EEF0F3",
           }}
         >
          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
