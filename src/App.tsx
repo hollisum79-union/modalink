@@ -12953,16 +12953,10 @@ const getKyobunWork = (member: any, date: Date) => {
                   style={{
                     padding: "6px 4px",
                     minHeight: 72,
-                    background: isEditing
-                      ? "#EEF2FF"
-                      : isT
-                      ? "#F0F4FF"
-                      : "#fff",
+                                        background: isEditing ? "#EEF2FF" : "#fff",
                     borderRight: "1px solid #F3F4F6",
                     cursor: "pointer",
-                    borderTop: isT
-                      ? "2px solid #4F46E5"
-                      : "2px solid transparent",
+                    borderTop: "2px solid transparent",
                     outline: isEditing ? "2px solid #A5B4FC" : "none",
                   }}
                 >
@@ -12978,15 +12972,16 @@ const getKyobunWork = (member: any, date: Date) => {
                     {isT ? (
                       <span
                         style={{
-                          background: "#4F46E5",
-                          color: "#fff",
-                          borderRadius: "50%",
-                          width: 22,
-                          height: 22,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 12,
+                                                  background: "#4F46E5",
+                        color: "#fff",
+                        borderRadius: "50%",
+                        width: 24,
+                        height: 24,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 14,
+                        fontWeight: 700,
                         }}
                       >
                         {day}
