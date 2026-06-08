@@ -23683,8 +23683,13 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
 }
 export default function App() {
   const [screen, setScreen] = useState("login");
+  const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
+  useEffect(() => {
+    document.body.style.setProperty("zoom", String(fontScale));
+    localStorage.setItem("fontScale", String(fontScale));
+  }, [fontScale]);
   const [user, setUser] = useState(null);
-  const [autoLoginChecked, setAutoLoginChecked] = useState(false);
+const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [notices, setNotices] = useState([]);
   const [boardTab, setBoardTab] = useState("전체");
   const [selectedNotice, setSelectedNotice] = useState(null);
@@ -25257,7 +25262,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               </div>
             </div>
           </div>
-          <div
+                    <div
             style={{
               position: "relative",
               flexShrink: 0,
@@ -25265,6 +25270,25 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               gap: 8,
             }}
           >
+            <button
+              onClick={() => setFontScale(fontScale > 1 ? 1 : 1.2)}
+              style={{
+                background: fontScale > 1 ? "#fff" : "rgba(255,255,255,0.15)",
+                border: "none",
+                borderRadius: "50%",
+                width: 40,
+                height: 40,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                color: fontScale > 1 ? "#4F46E5" : "#fff",
+                fontWeight: 800,
+                fontSize: 15,
+              }}
+            >
+              가+
+            </button>
             {user?.is_admin && (
               <button
                 onClick={() => setScreen("admin")}
