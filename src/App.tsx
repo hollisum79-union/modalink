@@ -9480,7 +9480,7 @@ function PaySettingScreen() {
   const handleSaveRates = async () => {
     if (!rates) return;
     const toNum = (v) => Number(v) / 100;
-    await supabase
+    const { error } = await supabase
       .from("deduction_rates")
       .update({
         national_pension: toNum(rates.national_pension_pct),
@@ -9492,6 +9492,11 @@ function PaySettingScreen() {
         union_fee: toNum(rates.union_fee_pct),
       })
       .eq("id", rates.id);
+    if (error) {
+      setSaveMsg("❌ 저장 실패: " + error.message);
+      setTimeout(() => setSaveMsg(""), 4000);
+      return;
+    }
     setSaveMsg("✅ 요율 저장됐어요!");
     setTimeout(() => setSaveMsg(""), 2500);
   };
@@ -18013,7 +18018,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                       📅 전달 야간 다이아 근무 (다이아별 실제 시간 합산)
                     </div>
                     <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>
-                      = 이번 달 야간 {Math.round(nightTotalHours)}시간 (자동)
+                      = 이번 달 야간 {nightTotalCount}회 · {Math.round(nightTotalHours)}시간 (자동)
                     </div>
                   </div>
                 ) : (
@@ -18172,7 +18177,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     ...(nightPay > 0
                       ? [
                           {
-                           label: `야간근로수당 (${nightCount}회)`,
+                           label: `야간근로수당 (${nightTotalCount}회)`,
                             amount: nightPay,
                           },
                         ]
