@@ -24034,6 +24034,14 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
           .eq("employee_number", user.employee_number)
           .neq("status", "취소")
           .gt("used_date", bd);
+       const { data: swapData } = await supabase
+          .from("kyobun_swap")
+          .select("*")
+          .eq("status", "수락")
+          .or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`);
+        const { data: allMembers } = await supabase
+          .from("members")
+          .select("employee_number, work_group, start_position, schedule_total");
         const leaveDates = new Set((lvData || []).map((r: any) => r.used_date));
         const adjustByDate: any = {};
         const tempKmByDate: any = {};
@@ -24049,7 +24057,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
           const row = homeDia.find((r: any) => Number(r.dia_no) === Number(diaNo));
           return row ? Number(row.distance_km) || 0 : 0;
         };
-        const member = { work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
+        const member = { employee_number: user.employee_number, work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
         const start = new Date(bd + "T00:00:00");
         start.setDate(start.getDate() + 1);
         const today = new Date();
@@ -24065,7 +24073,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
           if (adjustByDate[ds]) {
             diaNo = adjustByDate[ds];
           } else if (me.work_type === "교번") {
-            const w = calcKyobunWork(member, new Date(d), homeRotation);
+           const w = calcKyobunWork(member, new Date(d), homeRotation, swapData || [], allMembers || []);
             if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
           }
           if (diaNo != null) sum += distOf(diaNo);
