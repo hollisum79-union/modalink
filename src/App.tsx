@@ -13101,6 +13101,13 @@ const getKyobunWork = (member: any, date: Date) => {
     const crewsList: ("A" | "B" | "C" | "D")[] = ["A", "B", "C", "D"];
     const LABEL_MAP: Record<string, string> = { 주: "주간", 야: "야간", 비: "비번", 휴: "휴무" };
     const COLOR_MAP: Record<string, string> = { 주: "#3B82F6", 야: "#7C3AED", 비: "#9CA3AF", 휴: "#92400E" };
+    const isKyobun = activeTab === "교번";
+    const kWork = isKyobun ? getKyobunWork(selectedMember, dateObj) : null;
+    const kDayType = kWork ? getDiaDayType(kWork.type, dateObj) : null;
+    const kDia = kWork ? getDiaInfo(kWork.dia, kDayType) : null;
+    const kInfo = kWork ? workInfo(kWork.type) : null;
+    const kLabel = kInfo ? (LABEL_MAP[kInfo.short] || kInfo.short) : "-";
+    const kColor = kInfo ? (COLOR_MAP[kInfo.short] || "#7C3AED") : "#7C3AED";
     return (
       <>
         <div
@@ -13109,30 +13116,19 @@ const getKyobunWork = (member: any, date: Date) => {
         />
         <div
           style={{
-            position: "fixed",
-            top: 40,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 1000,
-            maxWidth: 430,
-            margin: "0 auto",
-            background: "#fff",
-            borderRadius: "28px 28px 0 0",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
+            position: "fixed", top: 40, left: 0, right: 0, bottom: 0, zIndex: 1000,
+            maxWidth: 430, margin: "0 auto", background: "#fff", borderRadius: "28px 28px 0 0",
+            display: "flex", flexDirection: "column", overflow: "hidden",
             boxShadow: "0 -8px 40px rgba(0,0,0,0.2)",
           }}
         >
           <div
             style={{
-              background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)",
-              padding: "16px 20px 18px",
-              borderRadius: "28px 28px 24px 24px",
-              color: "#fff",
-              position: "relative",
-              flexShrink: 0,
+              background: isKyobun
+                ? "linear-gradient(135deg,#5B21B6,#6D28D9,#7C3AED)"
+                : "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)",
+              padding: "16px 20px 18px", borderRadius: "28px 28px 24px 24px",
+              color: "#fff", position: "relative", flexShrink: 0,
             }}
           >
             <div style={{ width: 38, height: 5, borderRadius: 3, background: "rgba(255,255,255,0.45)", margin: "0 auto 12px" }} />
@@ -13147,56 +13143,63 @@ const getKyobunWork = (member: any, date: Date) => {
               ✕
             </button>
             <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.5px" }}>{dateLabel}</div>
-            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>{selectedCrew}조 · {user?.name}</div>
-            <div style={{ marginTop: 14, background: "rgba(255,255,255,0.14)", borderRadius: 16, padding: 12 }}>
-              <div style={{ fontSize: 11, opacity: 0.8, fontWeight: 700, marginBottom: 9 }}>4개조 근무</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                {crewsList.map((c) => {
-                  const w = getShiftWork(c, dateObj);
-                  const i = w ? workInfo(w) : null;
-                  const label = i ? LABEL_MAP[i.short] || i.short : "-";
-                  const color = i ? COLOR_MAP[i.short] || "#6B7280" : "#D1D5DB";
-                  const isMe = c === selectedCrew;
-                  return (
-                    <div
-                      key={c}
-                      style={{
-                        background: "#fff",
-                        borderRadius: 12,
-                        padding: "9px 0",
-                        textAlign: "center",
-                        boxShadow: isMe ? "0 0 0 2.5px #FBBF24" : "none",
-                      }}
-                    >
-                      <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 700 }}>
-                        {c}조{isMe ? " (나)" : ""}
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 800, marginTop: 3, color }}>{label}</div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>
+              {isKyobun ? `기관사 ${selectedMember?.name || ""}` : `${selectedCrew}조 · ${user?.name || ""}`}
             </div>
+
+            {isKyobun ? (
+              kWork && (
+                <div style={{ marginTop: 14, background: "#fff", borderRadius: 16, padding: "13px 15px", color: "#1a1a1a" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: kDia?.start_time ? 11 : 0 }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: kColor }}>{kLabel} (교번)</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", padding: "4px 10px", borderRadius: 11 }}>
+                      다이아 {kWork.dia}
+                    </span>
+                  </div>
+                  {kDia?.start_time && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ flex: 1, background: "#FAF9FE", borderRadius: 11, padding: 9, textAlign: "center" }}>
+                        <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, marginBottom: 2 }}>출근</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>{kDia.start_time}</div>
+                      </div>
+                      {kDia.end_time && (
+                        <div style={{ flex: 1, background: "#FAF9FE", borderRadius: 11, padding: 9, textAlign: "center" }}>
+                          <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, marginBottom: 2 }}>퇴근</div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>{kDia.end_time}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            ) : (
+              <div style={{ marginTop: 14, background: "rgba(255,255,255,0.14)", borderRadius: 16, padding: 12 }}>
+                <div style={{ fontSize: 11, opacity: 0.8, fontWeight: 700, marginBottom: 9 }}>4개조 근무</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+                  {crewsList.map((c) => {
+                    const w = getShiftWork(c, dateObj);
+                    const i = w ? workInfo(w) : null;
+                    const label = i ? LABEL_MAP[i.short] || i.short : "-";
+                    const color = i ? COLOR_MAP[i.short] || "#6B7280" : "#D1D5DB";
+                    const isMe = c === selectedCrew;
+                    return (
+                      <div key={c} style={{ background: "#fff", borderRadius: 12, padding: "9px 0", textAlign: "center", boxShadow: isMe ? "0 0 0 2.5px #FBBF24" : "none" }}>
+                        <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 700 }}>{c}조{isMe ? " (나)" : ""}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, marginTop: 3, color }}>{label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 0" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 16px" }}>
             <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-              <button
-                onClick={() => onGoAdjust && onGoAdjust(dateStr)}
-                style={{
-                  flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8",
-                  background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer",
-                }}
-              >
+              <button onClick={() => onGoAdjust && onGoAdjust(dateStr)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8", background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 🔧 근무조정
               </button>
-              <button
-                onClick={() => onGoLeave && onGoLeave(dateStr)}
-                style={{
-                  flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8",
-                  background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer",
-                }}
-              >
+              <button onClick={() => onGoLeave && onGoLeave(dateStr)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8", background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 🏖️ 휴가
               </button>
             </div>
@@ -13210,60 +13213,25 @@ const getKyobunWork = (member: any, date: Date) => {
               <div key={memo.id} style={{ marginBottom: 10 }}>
                 {editingMemoId === memo.id ? (
                   <div style={{ background: "#F7F7FB", borderRadius: 13, padding: 14 }}>
-                    <textarea
-                      value={editingMemoText}
-                      onChange={(e) => setEditingMemoText(e.target.value)}
-                      rows={2}
-                      style={{
-                        width: "100%", padding: "8px 10px", borderRadius: 10, border: "1.5px solid #A5B4FC",
-                        fontSize: 14, resize: "none", boxSizing: "border-box", fontFamily: "inherit",
-                      }}
-                    />
+                    <textarea value={editingMemoText} onChange={(e) => setEditingMemoText(e.target.value)} rows={2} style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1.5px solid #A5B4FC", fontSize: 14, resize: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                      <button
-                        onClick={() => updateMemo(memo.id, dateStr)}
-                        disabled={savingMemo}
-                        style={{
-                          flex: 1, padding: "8px 0", borderRadius: 9, background: "#4F46E5", color: "#fff",
-                          border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >
+                      <button onClick={() => updateMemo(memo.id, dateStr)} disabled={savingMemo} style={{ flex: 1, padding: "8px 0", borderRadius: 9, background: "#4F46E5", color: "#fff", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                         {savingMemo ? "..." : "저장"}
                       </button>
-                      <button
-                        onClick={() => setEditingMemoId(null)}
-                        style={{
-                          padding: "8px 14px", borderRadius: 9, background: "#F3F4F6", color: "#6B7280",
-                          border: "none", fontSize: 13, cursor: "pointer",
-                        }}
-                      >
+                      <button onClick={() => setEditingMemoId(null)} style={{ padding: "8px 14px", borderRadius: 9, background: "#F3F4F6", color: "#6B7280", border: "none", fontSize: 13, cursor: "pointer" }}>
                         취소
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div style={{ background: "#F7F7FB", borderRadius: 13, padding: 14, display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700, flexShrink: 0, marginTop: 2 }}>
-                      {idx + 1}.
-                    </span>
+                    <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700, flexShrink: 0, marginTop: 2 }}>{idx + 1}.</span>
                     <span style={{ flex: 1, fontSize: 15, color: "#1a1a1a", lineHeight: 1.5 }}>{memo.content}</span>
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                      <button
-                        onClick={() => { setEditingMemoId(memo.id); setEditingMemoText(memo.content); }}
-                        style={{
-                          padding: "5px 10px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5",
-                          border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >
+                      <button onClick={() => { setEditingMemoId(memo.id); setEditingMemoText(memo.content); }} style={{ padding: "5px 10px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                         수정
                       </button>
-                      <button
-                        onClick={() => deleteMemo(memo.id, dateStr)}
-                        style={{
-                          padding: "5px 10px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D",
-                          border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >
+                      <button onClick={() => deleteMemo(memo.id, dateStr)} style={{ padding: "5px 10px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                         삭제
                       </button>
                     </div>
@@ -13271,29 +13239,11 @@ const getKyobunWork = (member: any, date: Date) => {
                 )}
               </div>
             ))}
+
             {dayMemos.length < 5 && (
               <div style={{ marginTop: 4, marginBottom: 8 }}>
-                <textarea
-                  value={newMemoText}
-                  onChange={(e) => setNewMemoText(e.target.value)}
-                  placeholder="메모 추가..."
-                  rows={2}
-                  style={{
-                    width: "100%", padding: "12px 14px", borderRadius: 13, border: "1.5px solid #E8E8F0",
-                    background: "#FAFAFD", fontSize: 14, resize: "none", boxSizing: "border-box", fontFamily: "inherit",
-                  }}
-                />
-                <button
-                  onClick={() => addMemo(dateStr)}
-                  disabled={savingMemo || !newMemoText.trim()}
-                  style={{
-                    width: "100%", marginTop: 8,
-                    background: newMemoText.trim() ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "#E5E7EB",
-                    color: newMemoText.trim() ? "#fff" : "#9CA3AF",
-                    fontWeight: 800, fontSize: 14, padding: "11px 0", borderRadius: 12,
-                    border: "none", cursor: "pointer",
-                  }}
-                >
+                <textarea value={newMemoText} onChange={(e) => setNewMemoText(e.target.value)} placeholder="메모 추가..." rows={2} style={{ width: "100%", padding: "12px 14px", borderRadius: 13, border: "1.5px solid #E8E8F0", background: "#FAFAFD", fontSize: 14, resize: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+                <button onClick={() => addMemo(dateStr)} disabled={savingMemo || !newMemoText.trim()} style={{ width: "100%", marginTop: 8, background: newMemoText.trim() ? (isKyobun ? "linear-gradient(135deg,#6D28D9,#7C3AED)" : "linear-gradient(135deg,#4F46E5,#6D28D9)") : "#E5E7EB", color: newMemoText.trim() ? "#fff" : "#9CA3AF", fontWeight: 800, fontSize: 14, padding: "11px 0", borderRadius: 12, border: "none", cursor: "pointer" }}>
                   {savingMemo ? "저장 중..." : "추가"}
                 </button>
               </div>
