@@ -16885,7 +16885,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     자체평가급: 0,
   });
 
-  const [checkedItems, setCheckedItems] = React.useState<
+    const [editingAllowance, setEditingAllowance] = React.useState<string | null>(null);
     Record<string, boolean>
   >({
     업무보전수당: false,
@@ -17816,43 +17816,69 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                       {checkedItems[item.id] && item.extra && (
                         <div style={{ paddingLeft: 26 }}>{item.extra}</div>
                       )}
-                      {checkedItems[item.id] && item.type === "manual" && (
-                        <div style={{ paddingLeft: 26, marginTop: 8 }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 6,
-                            }}
-                          >
-                            <input
-                              type="tel"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={manualInputs[item.id] || ""}
-                              onChange={(e) =>
-                                setManualInputs((prev) => ({
-                                  ...prev,
-                                  [item.id]: parseInt(e.target.value) || 0,
-                                }))
-                              }
-                              placeholder="금액 입력"
+                                            {checkedItems[item.id] &&
+                        item.type === "manual" &&
+                        editingAllowance === item.id && (
+                          <div style={{ paddingLeft: 26, marginTop: 8 }}>
+                            <div
                               style={{
-                                flex: 1,
-                                padding: "7px 10px",
-                                borderRadius: 8,
-                                border: "1px solid #DDD6FE",
-                                fontSize: 14,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
                               }}
-                            />
-                            <span style={{ fontSize: 13, color: "#6B7280" }}>
-                              원
-                            </span>
+                            >
+                              <input
+                                type="tel"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                autoFocus
+                                value={
+                                  manualInputs[item.id]
+                                    ? manualInputs[item.id].toLocaleString("ko-KR")
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  setManualInputs((prev) => ({
+                                    ...prev,
+                                    [item.id]:
+                                      parseInt(
+                                        e.target.value.replace(/[^0-9]/g, "")
+                                      ) || 0,
+                                  }))
+                                }
+                                placeholder="금액 입력"
+                                style={{
+                                  flex: 1,
+                                  padding: "10px 12px",
+                                  borderRadius: 10,
+                                  border: "1.5px solid #C7D2FE",
+                                  fontSize: 14,
+                                }}
+                              />
+                              <span style={{ fontSize: 13, color: "#6B7280" }}>
+                                원
+                              </span>
+                              <button
+                                onClick={() => setEditingAllowance(null)}
+                                style={{
+                                  padding: "10px 16px",
+                                  borderRadius: 10,
+                                  border: "none",
+                                  background: "#4F46E5",
+                                  color: "#fff",
+                                  fontSize: 14,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                저장
+                              </button>
+                            </div>
                           </div>
+                        )}
                         </div>
                       )}
                     </div>
-                    <div style={{ textAlign: "right", minWidth: 80 }}>
+                                        <div style={{ textAlign: "right", minWidth: 80 }}>
                       {checkedItems[item.id] && item.type !== "manual" && (
                         <span
                           style={{
@@ -17864,6 +17890,31 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                           {formatWon(getAllowanceAmount(item.id))}
                         </span>
                       )}
+                      {checkedItems[item.id] &&
+                        item.type === "manual" &&
+                        editingAllowance !== item.id && (
+                          <div
+                            onClick={() => setEditingAllowance(item.id)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "flex-end",
+                              gap: 6,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 700,
+                                color: "#4F46E5",
+                              }}
+                            >
+                              {formatWon(getAllowanceAmount(item.id))}
+                            </span>
+                            <span style={{ fontSize: 15 }}>✏️</span>
+                          </div>
+                        )}
                     </div>
                   </div>
                 </div>
