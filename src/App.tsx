@@ -14360,11 +14360,12 @@ const getKyobunWork = (member: any, date: Date) => {
         maxWidth: 430,
         margin: "0 auto",
         fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
-                background: "#F4F3FF",
+                        background: "#F4F3FF",
         height: "100dvh",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        boxSizing: "border-box",
         paddingBottom: 80,
       }}
     >
