@@ -12294,7 +12294,7 @@ function WorkManageScreen() {
 // [교체 위치] App.tsx에서 기존 ScheduleScreen 함수 전체를 이 코드로 교체
 // ============================================================
 
-function ScheduleScreen({ onBack, user, refreshUser }: { onBack: () => void; user: any; refreshUser?: () => void }) {
+function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave }: { onBack: () => void; user: any; refreshUser?: () => void; onGoAdjust?: (d: string) => void; onGoLeave?: (d: string) => void }) {
   const [activeTab, setActiveTab] = React.useState<
     "교대" | "교번" | "통상" | "변형통상"
   >(user?.work_type || "교대");
@@ -13091,9 +13091,43 @@ const getKyobunWork = (member: any, date: Date) => {
           borderRadius: 14,
           border: "1.5px solid #DDD6FE",
           overflow: "hidden",
-          boxShadow: "0 4px 16px rgba(79,70,229,0.12)",
+                    boxShadow: "0 4px 16px rgba(79,70,229,0.12)",
         }}
       >
+        <div style={{ display: "flex", gap: 8, padding: "12px 14px 0" }}>
+          <button
+            onClick={() => onGoAdjust && onGoAdjust(dateStr)}
+            style={{
+              flex: 1,
+              padding: "10px",
+              borderRadius: 10,
+              border: "1.5px solid #C7D2FE",
+              background: "#F7F8FF",
+              color: "#4F46E5",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            🔧 근무조정
+          </button>
+          <button
+            onClick={() => onGoLeave && onGoLeave(dateStr)}
+            style={{
+              flex: 1,
+              padding: "10px",
+              borderRadius: 10,
+              border: "1.5px solid #C7D2FE",
+              background: "#F7F8FF",
+              color: "#4F46E5",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            🏖️ 휴가
+          </button>
+        </div>
         {(() => {
           const dateObj = new Date(dateStr);
           const crewsList: ("A" | "B" | "C" | "D")[] = ["A", "B", "C", "D"];
@@ -24738,11 +24772,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "schedule")
     return (
       <>
-        <ScheduleScreen
-          onBack={() => setScreen("home")}
-          user={user}
-          refreshUser={refreshUser}
-        />
+              <ScheduleScreen
+        onBack={() => setScreen("home")}
+        user={user}
+        refreshUser={refreshUser}
+        onGoAdjust={() => setScreen("workAdjust")}
+        onGoLeave={() => setScreen("leave")}
+      />
         <BottomTabBar screen={screen} setScreen={setScreen} />
       </>
     );
