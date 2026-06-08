@@ -18458,7 +18458,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   );
 }
 // ── 연차·기타휴가 ──
-function LeaveScreen({ onBack, user }) {
+function LeaveScreen({ onBack, user, initialDate }) {
   // 잔여일수 state (사용자가 입력한 값)
   const [remaining, setRemaining] = React.useState({
     annual: 0,
@@ -18484,8 +18484,8 @@ function LeaveScreen({ onBack, user }) {
     supabase.from("leave_history").select("*").eq("leave_type", historyModal.id).neq("status", "취소").order("used_date", { ascending: false }).then((res) => setHistoryRows(res.data || []));
   }, [historyModal]);
 
-  const [useDate, setUseDate] = React.useState(
-    new Date().toISOString().slice(0, 10)
+    const [useDate, setUseDate] = React.useState(
+    initialDate || new Date().toISOString().slice(0, 10)
   );
   const [useDays, setUseDays] = React.useState("1");
  const [useMemo, setUseMemo] = React.useState("");
@@ -19481,7 +19481,7 @@ function DistanceScreen({ onBack, user }) {
   );
 }
 
-function WorkAdjustScreen({ onBack, user }) {
+function WorkAdjustScreen({ onBack, user, initialDate }) {
   const [activeTab, setActiveTab] = useState("대기충당");
   const [diaPhoto, setDiaPhoto] = useState(null);
   const [diaLoading, setDiaLoading] = useState(false);
@@ -19502,9 +19502,9 @@ function WorkAdjustScreen({ onBack, user }) {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // 입력 폼 상태
+   // 입력 폼 상태
   const [formDate, setFormDate] = useState(
-    new Date().toISOString().split("T")[0]
+    initialDate || new Date().toISOString().split("T")[0]
   );
   const [formShift, setFormShift] = useState("주간");
   const [formFillType, setFormFillType] = useState("다이아");
