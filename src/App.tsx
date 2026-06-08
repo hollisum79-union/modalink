@@ -16886,7 +16886,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   });
 
     const [editingAllowance, setEditingAllowance] = React.useState<string | null>(null);
+    const [checkedItems, setCheckedItems] = React.useState<
     Record<string, boolean>
+
   >({
     업무보전수당: false,
     장기근속수당: false,
