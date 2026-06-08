@@ -24666,6 +24666,27 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       .eq("status", "대기")
       .then(({ count }) => { if (count !== null) setSwapReqCount(count); });
   }, [user?.employee_number, screen]);
+
+  // 교번교체 실시간 감지 (요청 오면 홈 배지 자동 갱신)
+  useEffect(() => {
+    if (!user?.employee_number) return;
+    const ch = supabase
+      .channel("swap-badge")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "kyobun_swap", filter: `b_employee_number=eq.${user.employee_number}` },
+        () => {
+          supabase
+            .from("kyobun_swap")
+            .select("*", { count: "exact", head: true })
+            .eq("b_employee_number", String(user.employee_number))
+            .eq("status", "대기")
+            .then(({ count }) => { if (count !== null) setSwapReqCount(count); });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.employee_number]);
   useEffect(() => {
     supabase
       .from("members")
