@@ -24085,8 +24085,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         });
       }
     };
-    loadActiveVote();
-  }, [user]);
+        loadActiveVote();
+  }, [user, screen]);
   useEffect(() => {
     if (!user?.employee_number) return;
     supabase
