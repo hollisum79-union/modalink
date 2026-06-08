@@ -13643,7 +13643,7 @@ const getKyobunWork = (member: any, date: Date) => {
       // ============================================================
 
                         return (
-        <div style={{ padding: "16px", height: "100%", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
+                <div style={{ padding: "16px" }}>
           <div
             style={{
               display: "flex",
@@ -13839,8 +13839,8 @@ const getKyobunWork = (member: any, date: Date) => {
         else if (w.type === "휴무") cntRest++;
       }
     }
-    return (
-      <div>
+        return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <div
           style={{
             padding: "8px 16px",
