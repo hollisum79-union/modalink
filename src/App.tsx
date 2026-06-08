@@ -13962,7 +13962,8 @@ const getKyobunWork = (member: any, date: Date) => {
               const isT = isToday(currentYear, currentMonth, day);
               const isSun = di === 0,
                 isSat = di === 6;
-              const key = dateKey(currentYear, currentMonth, day);
+                            const key = dateKey(currentYear, currentMonth, day);
+              const dayMemos = memos[key] || [];
               const isEditing = editingDate === key;
               return (
                 <div
@@ -14129,6 +14130,24 @@ const getKyobunWork = (member: any, date: Date) => {
                       </div>
                     );
                   })()}  
+                </div>
+                                {dayMemos.length > 0 && (
+                    <div style={{ textAlign: "center", marginTop: 3 }}>
+                      {dayMemos.slice(0, 3).map((_, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            width: 4,
+                            height: 4,
+                            borderRadius: "50%",
+                            background: "#6366F1",
+                            display: "inline-block",
+                            margin: "0 1px",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
