@@ -13271,39 +13271,34 @@ const getKyobunWork = (member: any, date: Date) => {
                 )}
               </div>
             ))}
-            {dayMemos.length === 0 && (
-              <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>
-                아직 메모가 없어요
+            {dayMemos.length < 5 && (
+              <div style={{ marginTop: 4, marginBottom: 8 }}>
+                <textarea
+                  value={newMemoText}
+                  onChange={(e) => setNewMemoText(e.target.value)}
+                  placeholder="메모 추가..."
+                  rows={2}
+                  style={{
+                    width: "100%", padding: "12px 14px", borderRadius: 13, border: "1.5px solid #E8E8F0",
+                    background: "#FAFAFD", fontSize: 14, resize: "none", boxSizing: "border-box", fontFamily: "inherit",
+                  }}
+                />
+                <button
+                  onClick={() => addMemo(dateStr)}
+                  disabled={savingMemo || !newMemoText.trim()}
+                  style={{
+                    width: "100%", marginTop: 8,
+                    background: newMemoText.trim() ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "#E5E7EB",
+                    color: newMemoText.trim() ? "#fff" : "#9CA3AF",
+                    fontWeight: 800, fontSize: 14, padding: "11px 0", borderRadius: 12,
+                    border: "none", cursor: "pointer",
+                  }}
+                >
+                  {savingMemo ? "저장 중..." : "추가"}
+                </button>
               </div>
             )}
           </div>
-
-          {dayMemos.length < 5 && (
-            <div style={{ padding: "12px 16px", borderTop: "1px solid #F0F0F5", background: "#fff", display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-              <textarea
-                value={newMemoText}
-                onChange={(e) => setNewMemoText(e.target.value)}
-                placeholder="메모 추가..."
-                rows={1}
-                style={{
-                  flex: 1, padding: "12px 14px", borderRadius: 14, border: "1.5px solid #E8E8F0",
-                  background: "#FAFAFD", fontSize: 14, resize: "none", boxSizing: "border-box", fontFamily: "inherit",
-                }}
-              />
-              <button
-                onClick={() => addMemo(dateStr)}
-                disabled={savingMemo || !newMemoText.trim()}
-                style={{
-                  background: newMemoText.trim() ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "#E5E7EB",
-                  color: newMemoText.trim() ? "#fff" : "#9CA3AF",
-                  fontWeight: 800, fontSize: 14, padding: "12px 20px", borderRadius: 14,
-                  border: "none", flexShrink: 0, cursor: "pointer",
-                }}
-              >
-                {savingMemo ? "..." : "추가"}
-              </button>
-            </div>
-          )}
         </div>
       </>
     );
