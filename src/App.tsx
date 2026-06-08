@@ -19486,6 +19486,7 @@ function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: an
     new Date().toISOString().split("T")[0]
   );
   const [swapMatches, setSwapMatches] = useState<any[]>([]);
+  const [swapNameSearch, setSwapNameSearch] = useState("");
   const [swapMode, setSwapMode] = useState("period");
   const [swapStation, setSwapStation] = useState("대공원");
  const [swapSearched, setSwapSearched] = useState(false);
@@ -20313,14 +20314,22 @@ function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: an
             {swapSearched && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
-                  매칭된 기관사 ({swapMatches.length}명)
+                  매칭된 기관사 ({swapMatches.filter((x) => !swapNameSearch.trim() || (x.member.name || "").includes(swapNameSearch.trim())).length}명)
                 </div>
-                {swapMatches.length === 0 ? (
+                {swapMatches.length > 0 && (
+                  <input
+                    value={swapNameSearch}
+                    onChange={(e) => setSwapNameSearch(e.target.value)}
+                    placeholder="이름으로 빠르게 찾기"
+                    style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, marginBottom: 10, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+                  />
+                )}
+                {swapMatches.filter((x) => !swapNameSearch.trim() || (x.member.name || "").includes(swapNameSearch.trim())).length === 0 ? (
                   <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "16px 0" }}>
-                    이 기간에 갯수가 같은 기관사가 없어요
+                    {swapMatches.length === 0 ? "이 기간에 갯수가 같은 기관사가 없어요" : "검색 결과가 없어요"}
                   </div>
                 ) : (
-                  swapMatches.map((x) => {
+                  swapMatches.filter((x) => !swapNameSearch.trim() || (x.member.name || "").includes(swapNameSearch.trim())).map((x) => {
                     const isOpen = swapPartner?.employee_number === x.member.employee_number;
                     const me = swapMembers.find(
                       (m) => String(m.employee_number) === String(user?.employee_number)
