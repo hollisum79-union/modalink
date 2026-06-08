@@ -24087,8 +24087,10 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       diaTable: homeDia,
       holidays: homeHolidays,
       dedRates: d.dedRates,
-      memberInfo: d.memberInfo,
+      memberInfo: { ...d.memberInfo, employee_number: user.employee_number },
       rotationData: homeRotation,
+      swapData: d.swapData || [],
+      allMembers: d.allMembers || [],
     });
     if (!result) return;
     const now = new Date();
@@ -24164,7 +24166,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const ty = now.getFullYear();
       const tm = String(now.getMonth() + 1).padStart(2, "0");
       const tEnd = new Date(ty, now.getMonth() + 1, 0).getDate();
-     const [salaryRes, wtRes, meRes, hfRes, settingsRes, dedRes, sbRes, lvRes, dutyRes] = await Promise.all([
+     const [salaryRes, wtRes, meRes, hfRes, settingsRes, dedRes, sbRes, lvRes, dutyRes, swapRes, allMemRes] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
         emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
@@ -24174,6 +24176,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
+        supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
       ]);
       console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       let homeNightCount = 0;
@@ -24213,6 +24217,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         dedRates: dedRes.data || null,
         nightCount: homeNightCount,
         dutyRecords: dutyRes.data || [],
+        swapData: swapRes.data || [],
+        allMembers: allMemRes.data || [],
       });
     };
     loadHomeWork();
@@ -25865,8 +25871,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   diaTable: homeDia,
                   holidays: homeHolidays,
                   dedRates: d.dedRates,
-                  memberInfo: d.memberInfo,
+                  memberInfo: { ...d.memberInfo, employee_number: user.employee_number },
                   rotationData: homeRotation,
+                  swapData: d.swapData || [],
+                  allMembers: d.allMembers || [],
                 });
                 if (!result) return "—";
                 return result.netPay.toLocaleString("ko-KR");
@@ -25880,7 +25888,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             
           </div>
        {(() => {
-            let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays) : null;
+            let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays, new Date(), homeSalaryData?.swapData || [], homeSalaryData?.allMembers || []) : null;
             if (homeTodayAdjust && homeTodayAdjust.memo) {
               const _m = String(homeTodayAdjust.memo).match(/다이아\s*(\d+)/);
               if (_m) {
