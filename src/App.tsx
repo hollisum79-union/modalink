@@ -13430,7 +13430,6 @@ const getKyobunWork = (member: any, date: Date) => {
       <div
               style={{ overflow: "hidden", position: "relative", touchAction: "pan-y", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
         onTouchStart={handleTouchStart}
-        onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
