@@ -14563,6 +14563,18 @@ function MySettingsScreen({
   const workTypes = ["교대", "교번", "통상", "변형통상"];
   const [editMode, setEditMode] = useState(!(user?.work_type));
   const [editNotify, setEditNotify] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (!("serviceWorker" in navigator)) return;
+        const reg = await navigator.serviceWorker.getRegistration();
+        const sub = reg && (await reg.pushManager.getSubscription());
+        setPushOn(!!sub);
+      } catch (e) {}
+    })();
+  }, []);
   // 화면 진입 시 DB에서 최신 user 정보 다시 가져오기
   React.useEffect(() => {
     if (!user?.employee_number) return;
@@ -16614,6 +16626,29 @@ function MySettingsScreen({
               }}
             />
             알림 설정
+          </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F5F3FF", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>📱 휴대폰 알림 받기</div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{pushOn ? "알림을 받는 중이에요" : "켜면 폰에 알림이 떠요"}</div>
+            </div>
+            <button
+              disabled={pushBusy}
+              onClick={async () => {
+                setPushBusy(true);
+                if (pushOn) {
+                  const ok = await disablePush();
+                  if (ok) setPushOn(false);
+                } else {
+                  const ok = await enablePush();
+                  if (ok) setPushOn(true);
+                }
+                setPushBusy(false);
+              }}
+              style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: pushBusy ? "wait" : "pointer", background: pushOn ? "#4F46E5" : "#E5E7EB", position: "relative", flexShrink: 0 }}
+            >
+              <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: pushOn ? 23 : 3, transition: "left 0.2s" }} />
+            </button>
           </div>
       {!editNotify && (
             <div>
