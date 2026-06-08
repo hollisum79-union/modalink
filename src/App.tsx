@@ -19434,8 +19434,8 @@ function DistanceScreen({ onBack, user }) {
   );
 }
 
-function WorkAdjustScreen({ onBack, user, initialDate }: { onBack: any; user: any; initialDate?: any }) {
-  const [activeTab, setActiveTab] = useState("대기충당");
+function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: any; user: any; initialDate?: any; initialTab?: any }) {
+  const [activeTab, setActiveTab] = useState(initialTab || "대기충당");
   const [diaPhoto, setDiaPhoto] = useState(null);
   const [diaLoading, setDiaLoading] = useState(false);
   const [diaResult, setDiaResult] = useState(null);
@@ -23834,6 +23834,7 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
 export default function App() {
     const [screen, setScreen] = useState("login");
   const [adjustInitDate, setAdjustInitDate] = useState("");
+  const [adjustInitTab, setAdjustInitTab] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
   useEffect(() => {
@@ -24542,6 +24543,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   const [appUserCount, setAppUserCount] = useState(0);
   const [onlineCount, setOnlineCount] = useState(0);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [swapReqCount, setSwapReqCount] = useState(0);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -24589,6 +24591,17 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       supabase.removeChannel(channel);
     };
   }, [user?.employee_number]);
+
+  // 받은 교번교체 요청 수 (홈 배지용)
+  useEffect(() => {
+    if (!user?.employee_number) return;
+    supabase
+      .from("kyobun_swap")
+      .select("*", { count: "exact", head: true })
+      .eq("b_employee_number", String(user.employee_number))
+      .eq("status", "대기")
+      .then(({ count }) => { if (count !== null) setSwapReqCount(count); });
+  }, [user?.employee_number, screen]);
   useEffect(() => {
     supabase
       .from("members")
@@ -24915,7 +24928,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "notice-admin")
     return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("home"); }} />;
   if (screen === "workAdjust")
-        return <WorkAdjustScreen onBack={() => setScreen("home")} user={user} initialDate={adjustInitDate} />;
+        return <WorkAdjustScreen onBack={() => setScreen("home")} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
   if (screen === "salary")
     return (
       <>
@@ -26054,6 +26067,19 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 ))
               )}
             </div>
+          </div>
+        )}
+        {swapReqCount > 0 && (
+          <div
+            onClick={() => { setAdjustInitTab("교번교체"); setScreen("workAdjust"); }}
+            style={{ background: "#fff", border: "2px solid #4F46E5", borderRadius: 14, padding: "14px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}
+          >
+            <div style={{ fontSize: 22 }}>📥</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#4F46E5" }}>교번교체 요청 {swapReqCount}건</div>
+              <div style={{ fontSize: 12, color: "#6B7280" }}>눌러서 수락·거절하기</div>
+            </div>
+            <div style={{ background: "#EF4444", color: "#fff", fontSize: 12, fontWeight: 800, borderRadius: 10, minWidth: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px" }}>{swapReqCount}</div>
           </div>
         )}
         <HomeCarousel
