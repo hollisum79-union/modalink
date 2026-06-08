@@ -14148,7 +14148,6 @@ const getKyobunWork = (member: any, date: Date) => {
                     </div>
                   )}
                 </div>
-                </div>
               );
             })}
           </div>
