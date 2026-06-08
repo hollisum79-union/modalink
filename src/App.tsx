@@ -9,23 +9,60 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
-function calcKyobunWork(member: any, date: Date, rotationData: any[]) {
+function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = []) {
   if (!member || rotationData.length === 0) return null;
-  const groupName = member.work_group === "도봉" ? "도봉 41" : "대공원 114";
-  const base = new Date("2026-06-01");
-  base.setHours(0, 0, 0, 0);
-  const target = new Date(date);
-  target.setHours(0, 0, 0, 0);
-  const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
-  const pos =
-    ((((member.start_position - 1 + diff) % member.schedule_total) +
-      member.schedule_total) %
-      member.schedule_total) +
-    1;
-  const row = rotationData.find(
-    (r) => r.group_name === groupName && r.position === pos
-  );
-  return row ? { dia: row.dia_value, type: row.work_type } : null;
+
+  const calc = (mem: any) => {
+    if (!mem) return null;
+    const groupName = mem.work_group === "도봉" ? "도봉 41" : "대공원 114";
+    const base = new Date("2026-06-01");
+    base.setHours(0, 0, 0, 0);
+    const target = new Date(date);
+    target.setHours(0, 0, 0, 0);
+    const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+    const pos =
+      ((((mem.start_position - 1 + diff) % mem.schedule_total) +
+        mem.schedule_total) %
+        mem.schedule_total) +
+      1;
+    const row = rotationData.find(
+      (r) => r.group_name === groupName && r.position === pos
+    );
+    return row ? { dia: row.dia_value, type: row.work_type } : null;
+  };
+
+  const mine = calc(member);
+
+  // 교체기록·조합원 목록이 넘어왔을 때만 교체 반영 (없으면 기존과 100% 동일)
+  if (swapData.length > 0 && allMembers.length > 0 && member.employee_number != null) {
+    const y = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const dateStr = `${y}-${mm}-${dd}`;
+    const emp = String(member.employee_number);
+    const swap = swapData.find(
+      (s) =>
+        s.swap_date <= dateStr &&
+        (s.swap_end || s.swap_date) >= dateStr &&
+        (String(s.a_employee_number) === emp ||
+          String(s.b_employee_number) === emp)
+    );
+    if (swap) {
+      const partnerEmp =
+        String(swap.a_employee_number) === emp
+          ? String(swap.b_employee_number)
+          : String(swap.a_employee_number);
+      const partner = allMembers.find(
+        (p) => String(p.employee_number) === partnerEmp
+      );
+      if (partner) {
+        const partnerWork = calc(partner);
+        if (partnerWork) return { ...partnerWork, swapped: true };
+      }
+    }
+  }
+
+  return mine;
 }
 function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTable: any[], holidays: string[]) {
   if (!diaNo || !diaTable || diaTable.length === 0) return { workHours: 0, nightHours: 0 };
