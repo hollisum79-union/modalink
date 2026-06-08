@@ -14484,7 +14484,7 @@ const getKyobunWork = (member: any, date: Date) => {
         </div>
       </div>
 
-            <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto" }}>
+                       <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
         {activeTab === "교대" && (
           <>
             {!crewLoaded && (
