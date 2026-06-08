@@ -25282,9 +25282,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 alignItems: "center",
                 justifyContent: "center",
                 cursor: "pointer",
-                color: fontScale > 1 ? "#4F46E5" : "#fff",
+                                color: fontScale > 1 ? "#4F46E5" : "#fff",
                 fontWeight: 800,
-                fontSize: 15,
+                fontSize: 13,
+                whiteSpace: "nowrap",
               }}
             >
               가+
