@@ -12905,7 +12905,7 @@ const getKyobunWork = (member: any, date: Date) => {
   ) => {
         const weeks = buildCalendarGrid(y, m);
     return (
-            <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 385px)", minHeight: 320 }}>
+                  <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
         {weeks.map((week, wi) => (
           <div
             key={wi}
@@ -13428,7 +13428,8 @@ const getKyobunWork = (member: any, date: Date) => {
 
     return (
       <div
-        style={{ overflow: "hidden", position: "relative", touchAction: "pan-y" }}
+              style={{ overflow: "hidden", position: "relative", touchAction: "pan-y", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
+        onTouchStart={handleTouchStart}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -13457,10 +13458,12 @@ const getKyobunWork = (member: any, date: Date) => {
           ))}
         </div>
 
-        {/* 슬라이드 트랙: 이전달 + 현재달 + 다음달 */}
+                {/* 슬라이드 트랙: 이전달 + 현재달 + 다음달 */}
         <div
           style={{
             display: "flex",
+            flex: 1,
+            minHeight: 0,
             transform: `translateX(calc(-100% + ${offset}px))`,
             transition:
               isAnimating && offset === 0
@@ -13472,15 +13475,15 @@ const getKyobunWork = (member: any, date: Date) => {
           }}
         >
           {/* 이전달 */}
-          <div style={{ minWidth: "100%", flexShrink: 0 }}>
+          <div style={{ minWidth: "100%", flexShrink: 0, height: "100%" }}>
             {renderCalendarPanel(prev.y, prev.m, crew)}
           </div>
           {/* 현재달 */}
-          <div style={{ minWidth: "100%", flexShrink: 0 }}>
+          <div style={{ minWidth: "100%", flexShrink: 0, height: "100%" }}>
             {renderCalendarPanel(currentYear, currentMonth, crew)}
           </div>
           {/* 다음달 */}
-          <div style={{ minWidth: "100%", flexShrink: 0 }}>
+          <div style={{ minWidth: "100%", flexShrink: 0, height: "100%" }}>
             {renderCalendarPanel(next.y, next.m, crew)}
           </div>
         </div>
@@ -14360,8 +14363,11 @@ const getKyobunWork = (member: any, date: Date) => {
         maxWidth: 430,
         margin: "0 auto",
         fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
-        background: "#F4F3FF",
-        minHeight: "100vh",
+                background: "#F4F3FF",
+        height: "100dvh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
         paddingBottom: 80,
       }}
     >
@@ -14369,9 +14375,10 @@ const getKyobunWork = (member: any, date: Date) => {
             {/* 헤더 (흰 배너) */}
       <div
         style={{
-          background: "#fff",
+                    background: "#fff",
           padding: "calc(env(safe-area-inset-top) + 14px) 16px 14px",
           borderBottom: "1px solid #EEF0F3",
+          flexShrink: 0,
         }}
       >
         <div
@@ -14480,7 +14487,7 @@ const getKyobunWork = (member: any, date: Date) => {
         </div>
       </div>
 
-      <div style={{ background: "#fff", minHeight: "80vh" }}>
+          <div style={{ background: "#fff", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
         {activeTab === "교대" && (
           <>
             {!crewLoaded && (
