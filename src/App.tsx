@@ -9632,55 +9632,131 @@ function PaySettingScreen() {
   );
 }
 function PointRankingAdmin() {
+  const [period, setPeriod] = React.useState<"this" | "last" | "year">("last");
   const [rows, setRows] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  React.useEffect(() => {
-    (async () => {
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const { data: pts } = await supabase
-        .from("user_points")
-        .select("employee_number, point")
-        .gte("created_at", monthStart);
-      const { data: mem } = await supabase
-        .from("members")
-        .select("employee_number, name");
-      const nameMap: any = {};
-      (mem || []).forEach((m: any) => { nameMap[String(m.employee_number)] = m.name; });
-      const sums: any = {};
-      (pts || []).forEach((r: any) => {
-        const k = String(r.employee_number);
-        sums[k] = (sums[k] || 0) + (r.point || 0);
-      });
-      const ranked = Object.entries(sums)
-        .map(([emp, total]) => ({ emp, name: nameMap[emp] || "(미등록)", total: total as number }))
-        .sort((a, b) => b.total - a.total);
-      setRows(ranked);
-      setLoading(false);
-    })();
-  }, []);
+  const [awarding, setAwarding] = React.useState(false);
+  const [awardedMonths, setAwardedMonths] = React.useState<string[]>([]);
+
+  // 기간별 시작/끝 계산
+  const now = new Date();
+  const range = (() => {
+    if (period === "this") {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { start, end: null as Date | null, label: "이번 달", ym: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}` };
+    } else if (period === "last") {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 1);
+      const ym = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+      return { start, end, label: "전월", ym };
+    } else {
+      const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      return { start, end: null as Date | null, label: "1년 누적", ym: "" };
+    }
+  })();
+
+  const loadRanking = async () => {
+    setLoading(true);
+    let q = supabase.from("user_points").select("employee_number, point, created_at").gte("created_at", range.start.toISOString());
+    if (range.end) q = q.lt("created_at", range.end.toISOString());
+    const { data: pts } = await q;
+    const { data: mem } = await supabase.from("members").select("employee_number, name");
+    const nameMap: any = {};
+    (mem || []).forEach((m: any) => { nameMap[String(m.employee_number)] = m.name; });
+    const sums: any = {};
+    (pts || []).forEach((r: any) => {
+      const k = String(r.employee_number);
+      sums[k] = (sums[k] || 0) + (r.point || 0);
+    });
+    const ranked = Object.entries(sums)
+      .map(([emp, total]) => ({ emp, name: nameMap[emp] || "(미등록)", total: total as number }))
+      .sort((a, b) => b.total - a.total);
+    setRows(ranked);
+    setLoading(false);
+  };
+
+  const loadAwarded = async () => {
+    const { data } = await supabase.from("point_award").select("year_month");
+    setAwardedMonths((data || []).map((r: any) => r.year_month));
+  };
+
+  React.useEffect(() => { loadRanking(); }, [period]);
+  React.useEffect(() => { loadAwarded(); }, []);
+
+  const handleAward = async () => {
+    if (rows.length === 0) { alert("1등이 없어요."); return; }
+    const champ = rows[0];
+    if (!window.confirm(`${range.ym} 1등 "${champ.name}" 조합원에게 상품 지급 완료 처리할까요?\n홈 화면에 축하 메시지가 하루 동안 표시됩니다.`)) return;
+    setAwarding(true);
+    const { error } = await supabase.from("point_award").insert({
+      year_month: range.ym,
+      employee_number: String(champ.emp),
+      member_name: champ.name,
+      point: champ.total,
+    });
+    setAwarding(false);
+    if (error) { alert("처리 실패: " + error.message); return; }
+    alert("상품 지급 완료! 홈 화면에 축하 메시지가 표시됩니다.");
+    loadAwarded();
+  };
+
+  const alreadyAwarded = range.ym && awardedMonths.includes(range.ym);
+  const champ = rows[0];
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>🏆 이번 달 포인트 순위</div>
-      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>매월 1일 초기화 · 실명 표시 (관리자 전용)</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>🏆 포인트 관리</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>매월 1일 0시 새로 시작 · 실명 표시 (관리자 전용)</div>
+
+      <div style={{ display: "flex", gap: 4, background: "#F3F4F6", borderRadius: 12, padding: 4, marginBottom: 16 }}>
+        {([["this", "이번 달"], ["last", "전월"], ["year", "1년 누적"]] as const).map(([key, lbl]) => (
+          <div key={key} onClick={() => setPeriod(key)} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", background: period === key ? "#fff" : "transparent", color: period === key ? "#4F46E5" : "#9CA3AF", boxShadow: period === key ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>
+            {lbl}
+          </div>
+        ))}
+      </div>
+
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
       ) : rows.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>이번 달 집계된 활동이 없어요</div>
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>집계된 활동이 없어요</div>
       ) : (
-        <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
-          {rows.map((r, i) => (
-            <div key={r.emp} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderBottom: i < rows.length - 1 ? "1px solid #F3F4F6" : "none", background: i < 3 ? "#FFFBEB" : "#fff" }}>
-              <span style={{ fontSize: 16, fontWeight: 800, width: 28, textAlign: "center" }}>
-                {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
-              </span>
-              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{r.name}</span>
-              <span style={{ fontSize: 12, color: "#9CA3AF", marginRight: 8 }}>{r.emp}</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5" }}>{r.total}P</span>
+        <>
+          {champ && (
+            <div style={{ background: period === "year" ? "linear-gradient(135deg,#7C3AED,#6D28D9)" : "linear-gradient(135deg,#FBBF24,#F59E0B)", borderRadius: 18, padding: 17, color: "#fff", marginBottom: 10, position: "relative", overflow: "hidden" }}>
+              <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 7 }}>
+                {period === "this" ? "👑 이번 달 1등 (진행 중)" : period === "last" ? "👑 전월 1등 · 상품 증정 대상" : "🏅 1년 누적 1등 (연말 시상 후보)"}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>{champ.name}</div>
+              <div style={{ fontSize: 25, fontWeight: 800, marginTop: 8 }}>{champ.total}P</div>
             </div>
-          ))}
-        </div>
+          )}
+
+          {period === "last" && (
+            alreadyAwarded ? (
+              <div style={{ background: "#ECFDF5", color: "#059669", border: "1.5px solid #6EE7B7", borderRadius: 12, padding: 13, textAlign: "center", fontWeight: 800, fontSize: 13, marginBottom: 16 }}>
+                ✅ 이미 상품 지급 완료된 달이에요
+              </div>
+            ) : (
+              <button onClick={handleAward} disabled={awarding} style={{ width: "100%", padding: 14, borderRadius: 12, background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", border: "none", fontSize: 14, fontWeight: 800, cursor: "pointer", marginBottom: 16, fontFamily: "inherit" }}>
+                {awarding ? "처리 중…" : "✅ 상품 지급 완료 처리"}
+              </button>
+            )
+          )}
+
+          <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+            {rows.map((r, i) => (
+              <div key={r.emp} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderBottom: i < rows.length - 1 ? "1px solid #F3F4F6" : "none", background: i < 3 ? "#FFFBEB" : "#fff" }}>
+                <span style={{ fontSize: 16, fontWeight: 800, width: 28, textAlign: "center" }}>
+                  {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
+                </span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{r.name}</span>
+                <span style={{ fontSize: 12, color: "#9CA3AF", marginRight: 8 }}>{r.emp}</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5" }}>{r.total}P</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -11778,7 +11854,7 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937" }}>🏆 나의 포인트</div>
-        <div style={{ fontSize: 10, color: "#9CA3AF", background: "#F3F4F6", padding: "5px 10px", borderRadius: 10, fontWeight: 600, whiteSpace: "nowrap" }}>🔄 매월 말일 00시 초기화</div>
+        <div style={{ fontSize: 10, color: "#9CA3AF", background: "#F3F4F6", padding: "5px 10px", borderRadius: 10, fontWeight: 600, whiteSpace: "nowrap" }}>🔄 매월 1일 0시 초기화</div>
       </div>
 
       <div style={{ background: "#F5F3FF", borderRadius: 16, padding: "20px 16px", textAlign: "center", marginBottom: 8 }}>
@@ -22151,6 +22227,7 @@ function HomeCarousel({
   const [condolences, setCondolences] = React.useState([]);
 const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const [myRank, setMyRank] = React.useState<any>(null);
+  const [awardWinner, setAwardWinner] = React.useState<any>(null);
 
   React.useEffect(() => {
     const loadTop = async () => {
@@ -22197,6 +22274,19 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       setCondolences(formatted);
     };
     loadCondolences();
+  }, []);
+  React.useEffect(() => {
+    const loadAward = async () => {
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from("point_award")
+        .select("*")
+        .gte("awarded_at", dayAgo)
+        .order("awarded_at", { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) setAwardWinner(data[0]);
+    };
+    loadAward();
   }, []);
     const [index, setIndex] = React.useState(1);
   const realIndex = (index - 1 + 3) % 3;
@@ -22361,6 +22451,15 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
 
   return (
     <div style={{ marginBottom: 12 }}>
+
+      {awardWinner && (
+        <div style={{ background: "linear-gradient(135deg,#F59E0B,#EF4444)", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10, position: "relative", overflow: "hidden" }}>
+          <div style={{ fontSize: 26, marginBottom: 4 }}>🎉🏆🎉</div>
+          <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>{Number(awardWinner.year_month.split("-")[1])}월 포인트왕</div>
+          <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{awardWinner.member_name} 조합원님</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>축하합니다! 🎁 상품이 전달됩니다</div>
+        </div>
+      )}
 
       {/* 캐러셀 컨테이너 */}
       <div
