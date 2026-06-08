@@ -16956,6 +16956,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [dutyRecords, setDutyRecords] = React.useState<any[]>([]);
     const [rotationData, setRotationData] = React.useState<any[]>([]);
   const [memberInfo, setMemberInfo] = React.useState<any>(null);
+  const [swapData, setSwapData] = React.useState<any[]>([]);
+  const [allMembers, setAllMembers] = React.useState<any[]>([]);
   const [dedRates, setDedRates] = React.useState<any>(null);
   const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
   const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
@@ -16990,6 +16992,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
        rotRes,
         dedRes,
         dutyRes,
+        swapRes,
+        allMemRes,
       ] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
@@ -17002,7 +17006,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
-        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+       emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
+        supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
    ]);
 
       if (salaryRes.data) setSalaryTable(salaryRes.data);
@@ -17020,6 +17026,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           if (rotRes.data) setRotationData(rotRes.data);
       if (dedRes.data) setDedRates(dedRes.data);
       if (dutyRes.data) setDutyRecords(dutyRes.data);
+      setSwapData(swapRes.data || []);
+      setAllMembers(allMemRes.data || []);
 
             fetch("/.netlify/functions/read-holidays?year=" + ty)
         .then((r) => r.json())
@@ -17205,7 +17213,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     );
     let sum = 0;
     for (let i = 1; i <= dd; i++) {
-      const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData);
+      const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
       if (String(w.dia).startsWith("대기")) {
@@ -19302,14 +19310,18 @@ function DistanceScreen({ onBack, user }) {
   const loadAll = async () => {
     if (!user?.employee_number) return;
     setComputing(true);
-    const [meRes, rotRes, diaRes] = await Promise.all([
+    const [meRes, rotRes, diaRes, swapRes, allMemRes] = await Promise.all([
       supabase.from("members").select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total").eq("employee_number", user.employee_number).maybeSingle(),
       supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
       supabase.from("kyobun_dia").select("dia_no, distance_km"),
+      supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`),
+      supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
     ]);
     const me = meRes.data || {};
     const rotationData = rotRes.data || [];
     const diaTable = diaRes.data || [];
+    const swapData = swapRes.data || [];
+    const allMembers = allMemRes.data || [];
     setBaseKm(me.base_distance_km != null ? String(me.base_distance_km) : "");
     const bd = me.base_distance_date || "";
     setBaseDate(bd);
@@ -19342,9 +19354,9 @@ function DistanceScreen({ onBack, user }) {
       });
       const distOf = (diaNo) => {
         const row = diaTable.find((r) => Number(r.dia_no) === Number(diaNo));
-        return row ? Number(row.distance_km) || 0 : 0;
-      };
-      const member = { work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
+      return row ? Number(row.distance_km) || 0 : 0;
+    };
+    const member = { employee_number: user.employee_number, work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
       const start = new Date(bd + "T00:00:00");
       start.setDate(start.getDate() + 1);
       const today = new Date();
@@ -19361,7 +19373,7 @@ function DistanceScreen({ onBack, user }) {
         if (adjustByDate[ds]) {
           diaNo = adjustByDate[ds];
         } else if (me.work_type === "교번") {
-          const w = calcKyobunWork(member, new Date(d), rotationData);
+        const w = calcKyobunWork(member, new Date(d), rotationData, swapData, allMembers);
           if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
         }
         if (diaNo != null) {
