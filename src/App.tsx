@@ -17802,9 +17802,29 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                             color: item.type === "auto" ? "#1D4ED8" : "#92400E",
                           }}
                         >
-                          {item.type === "auto" ? "자동" : "직접입력"}
+                      {item.type === "auto" ? "자동" : "직접입력"}
                         </span>
+                        {checkedItems[item.id] &&
+                          item.type === "manual" &&
+                          editingAllowance === item.id && (
+                            <button
+                              onClick={() => setEditingAllowance(null)}
+                              style={{
+                                marginLeft: "auto",
+                                padding: "6px 16px",
+                                borderRadius: 8,
+                                border: "none",
+                                background: "#4F46E5",
+                                color: "#fff",
+                                fontSize: 13,
+                                fontWeight: 700,
+                              }}
+                            >
+                              저장
+                            </button>
+                          )}
                       </div>
+
                       <div
                         style={{
                           fontSize: 12,
@@ -17861,20 +17881,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                               <span style={{ fontSize: 13, color: "#6B7280" }}>
                                 원
                               </span>
-                              <button
-                                onClick={() => setEditingAllowance(null)}
-                                style={{
-                                  padding: "10px 16px",
-                                  borderRadius: 10,
-                                  border: "none",
-                                  background: "#4F46E5",
-                                  color: "#fff",
-                                  fontSize: 14,
-                                  fontWeight: 700,
-                                }}
-                              >
-                                저장
-                              </button>
                             </div>
                           </div>
                         )}
