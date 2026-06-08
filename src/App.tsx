@@ -17878,9 +17878,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                           </div>
                         )}
                         </div>
-                      )}
                     </div>
-                                        <div style={{ textAlign: "right", minWidth: 80 }}>
+                    <div style={{ textAlign: "right", minWidth: 80 }}>
                       {checkedItems[item.id] && item.type !== "manual" && (
                         <span
                           style={{
