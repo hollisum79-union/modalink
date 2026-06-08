@@ -14361,7 +14361,7 @@ const getKyobunWork = (member: any, date: Date) => {
         margin: "0 auto",
         fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
                         background: "#F4F3FF",
-                height: "100%",
+                        height: "100dvh",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
