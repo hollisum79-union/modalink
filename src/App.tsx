@@ -12998,11 +12998,11 @@ const getKyobunWork = (member: any, date: Date) => {
                   {work && (
                     <div
                       style={{
-                        textAlign: "center",
+                      textAlign: "center",
                         color: info.text,
                         borderRadius: 6,
                         padding: "3px 0",
-                        fontSize: 12,
+                        fontSize: 16,
                         fontWeight: 700,
                         margin: "0 2px",
                       }}
