@@ -25262,22 +25262,22 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               </div>
             </div>
           </div>
-                    <div
+            <div
             style={{
               position: "relative",
               flexShrink: 0,
               display: "flex",
-              gap: 8,
+              gap: user?.is_admin ? 5 : 8,
             }}
           >
             <button
-              onClick={() => setFontScale(fontScale > 1 ? 1 : 1.2)}
+            onClick={() => setFontScale(fontScale > 1 ? 1 : 1.2)}
               style={{
                 background: fontScale > 1 ? "#fff" : "rgba(255,255,255,0.15)",
                 border: "none",
                 borderRadius: "50%",
-                width: 40,
-                height: 40,
+                width: user?.is_admin ? 34 : 40,
+                height: user?.is_admin ? 34 : 40,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -25291,13 +25291,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </button>
             {user?.is_admin && (
               <button
-                onClick={() => setScreen("admin")}
+               onClick={() => setScreen("admin")}
                 style={{
                   background: "rgba(255,255,255,0.2)",
                   border: "1.5px solid rgba(255,255,255,0.4)",
                   borderRadius: "50%",
-                  width: 40,
-                  height: 40,
+                  width: 34,
+                  height: 34,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -25314,8 +25314,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   background: "rgba(255,255,255,0.15)",
                   border: "none",
                   borderRadius: "50%",
-                  width: 40,
-                  height: 40,
+                  width: user?.is_admin ? 34 : 40,
+                  height: user?.is_admin ? 34 : 40,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
