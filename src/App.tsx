@@ -11124,9 +11124,8 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                     color: "#374151",
                     marginBottom: 14,
                   }}
-                />
-                <input
-                                  <div
+                                />
+                <div
                   style={{
                     fontSize: 12,
                     color: "#6B7280",
@@ -11159,6 +11158,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                   }}
                 />
                 <div
+
                   style={{
                     fontSize: 12,
                     color: "#9CA3AF",
