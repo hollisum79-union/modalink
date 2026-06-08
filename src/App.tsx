@@ -17237,6 +17237,29 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     return sum;
   })();
   const nightTotalHours = isKyobun ? kyobunNightHours : nightHoursPerShift * nightCount;
+  const kyobunNightCount = (() => {
+    if (!isKyobun || rotationData.length === 0 || diaTable.length === 0) return 0;
+    const n = new Date();
+    const lp = new Date(new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 86400000);
+    const yy = lp.getFullYear();
+    const mn = lp.getMonth();
+    const dd = new Date(yy, mn + 1, 0).getDate();
+    const dutyDates = new Set((dutyRecords || []).filter((r: any) => r.work_shift === "야간").map((r: any) => r.work_date));
+    let cnt = 0;
+    for (let i = 1; i <= dd; i++) {
+      const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers);
+      if (!w) continue;
+      const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      if (String(w.dia).startsWith("대기")) {
+        if (w.type === "야간" && !dutyDates.has(ds)) cnt += 1;
+      } else if (w.type === "야간" && Number(w.dia) >= 1) {
+        cnt += 1;
+      }
+    }
+    (dutyRecords || []).forEach((rec: any) => { if (rec.work_shift === "야간" && (rec.memo || "").match(/다이아\s*(\d+)/)) cnt += 1; });
+    return cnt;
+  })();
+  const nightTotalCount = isKyobun ? kyobunNightCount : nightCount;
   const nightPay = Math.round(hourlyWage * 0.5 * nightTotalHours);
   const overtimeTotalHours = overtimeHour + overtimeMin / 60;
   const overtimeBase8 = Math.min(overtimeTotalHours, 8);
