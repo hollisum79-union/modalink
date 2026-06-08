@@ -23728,7 +23728,9 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
   );
 }
 export default function App() {
-  const [screen, setScreen] = useState("login");
+  const   const [screen, setScreen] = useState("login");
+  const [adjustInitDate, setAdjustInitDate] = useState("");
+  const [leaveInitDate, setLeaveInitDate] = useState("");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
   useEffect(() => {
     document.body.style.setProperty("zoom", String(fontScale));
@@ -24764,8 +24766,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "notice-admin")
     return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("home"); }} />;
   if (screen === "workAdjust")
-    return <WorkAdjustScreen onBack={() => setScreen("home")} user={user} />;
-
+        return <WorkAdjustScreen onBack={() => setScreen("home")} user={user} initialDate={adjustInitDate} />;
   if (screen === "salary")
     return (
       <>
@@ -24774,11 +24775,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       </>
     );
   if (screen === "leave")
-    return <LeaveScreen onBack={() => setScreen("home")} user={user} />;
-
+      return <LeaveScreen onBack={() => setScreen("home")} user={user} initialDate={leaveInitDate} />;
   if (screen === "distance")
     return <DistanceScreen onBack={() => setScreen("home")} user={user} />;
-
   if (screen === "logbook")
     return <LogbookScreen goBack={() => setScreen("home")} />;
   if (screen === "schedule")
@@ -24788,8 +24787,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         user={user}
         refreshUser={refreshUser}
-        onGoAdjust={() => setScreen("workAdjust")}
-        onGoLeave={() => setScreen("leave")}
+                onGoAdjust={(d) => { setAdjustInitDate(d); setScreen("workAdjust"); }}
+        onGoLeave={(d) => { setLeaveInitDate(d); setScreen("leave"); }}
       />
         <BottomTabBar screen={screen} setScreen={setScreen} />
       </>
@@ -25705,7 +25704,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             );
           })()}
           <div
-            onClick={() => setScreen("workAdjust")}
+                    onClick={() => { setAdjustInitDate(""); setScreen("workAdjust"); }}
             style={{
               background: "#fff",
               borderRadius: 16,
