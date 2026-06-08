@@ -14515,6 +14515,8 @@ function MySettingsScreen({
   setNotifSettings,
   onLogout,
   refreshUser,
+  enablePush,
+  disablePush,
 }) {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -25223,6 +25225,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         user={user}
         refreshUser={refreshUser}
+        enablePush={enablePush}
+        disablePush={disablePush}
                 onGoAdjust={(d) => { setAdjustInitDate(d); setScreen("workAdjust"); }}
         onGoLeave={(d) => { setLeaveInitDate(d); setScreen("leave"); }}
       />
@@ -25236,6 +25240,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           onBack={() => setScreen("home")}
           user={user}
           refreshUser={refreshUser}
+        enablePush={enablePush}
+        disablePush={disablePush}
           notifSettings={notifSettings}
           setNotifSettings={setNotifSettings}
           onLogout={() => {
