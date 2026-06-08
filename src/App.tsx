@@ -23731,8 +23731,18 @@ function NoticeForm({ item, onClose }) {
         if (error) throw error;
         alert("수정되었습니다.");
       } else {
-        const { error } = await supabase.from("notices").insert([payload]);
+       const { error } = await supabase.from("notices").insert([payload]);
         if (error) throw error;
+        fetch("/.netlify/functions/send-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: tg === "긴급" ? "🚨 긴급공지" : "📢 새 공지사항",
+            message: ttl.trim(),
+            url: "/",
+            type: tg === "긴급" ? "urgent" : "notice",
+          }),
+        }).catch(() => {});
         alert("등록되었습니다.");
       }
       onClose(true);
