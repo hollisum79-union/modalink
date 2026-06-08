@@ -25225,9 +25225,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         user={user}
         refreshUser={refreshUser}
-        enablePush={enablePush}
-        disablePush={disablePush}
-                onGoAdjust={(d) => { setAdjustInitDate(d); setScreen("workAdjust"); }}
+        onGoAdjust={(d) => { setAdjustInitDate(d); setScreen("workAdjust"); }}
         onGoLeave={(d) => { setLeaveInitDate(d); setScreen("leave"); }}
       />
         <BottomTabBar screen={screen} setScreen={setScreen} />
