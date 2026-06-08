@@ -23728,7 +23728,7 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
   );
 }
 export default function App() {
-  const   const [screen, setScreen] = useState("login");
+    const [screen, setScreen] = useState("login");
   const [adjustInitDate, setAdjustInitDate] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
