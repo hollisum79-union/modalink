@@ -14130,7 +14130,6 @@ const getKyobunWork = (member: any, date: Date) => {
                       </div>
                     );
                   })()}  
-                </div>
                                 {dayMemos.length > 0 && (
                     <div style={{ textAlign: "center", marginTop: 3 }}>
                       {dayMemos.slice(0, 3).map((_, i) => (
@@ -14148,6 +14147,7 @@ const getKyobunWork = (member: any, date: Date) => {
                       ))}
                     </div>
                   )}
+                </div>
                 </div>
               );
             })}
