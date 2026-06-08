@@ -24440,6 +24440,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   const [memberCount, setMemberCount] = useState(0);
   const [appUserCount, setAppUserCount] = useState(0);
   const [onlineCount, setOnlineCount] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -24468,10 +24469,20 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     });
     channel
       .on("presence", { event: "sync" }, () => {
-        setOnlineCount(Object.keys(channel.presenceState()).length);
+        const state = channel.presenceState();
+        const list = Object.values(state)
+          .map((arr: any) => arr[0])
+          .filter(Boolean);
+        setOnlineUsers(list);
+        setOnlineCount(list.length);
       })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") channel.track({ at: Date.now() });
+        if (status === "SUBSCRIBED")
+          channel.track({
+            name: user.name,
+            emp: user.employee_number,
+            at: Date.now(),
+          });
       });
     return () => {
       supabase.removeChannel(channel);
@@ -25905,6 +25916,42 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+        {showOnlineModal && (
+          <div
+            onClick={() => setShowOnlineModal(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 360, maxHeight: "70vh", overflowY: "auto", padding: 20 }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ADE80" }} />
+                  <span style={{ fontSize: 16, fontWeight: 800, color: "#1F2937" }}>접속 중 {onlineUsers.length}명</span>
+                </div>
+                <button
+                  onClick={() => setShowOnlineModal(false)}
+                  style={{ background: "#F3F4F6", border: "none", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 700, color: "#6B7280", cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  닫기
+                </button>
+              </div>
+              {onlineUsers.length === 0 ? (
+                <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "20px 0" }}>
+                  접속 중인 조합원이 없습니다
+                </div>
+              ) : (
+                onlineUsers.map((ou, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: i < onlineUsers.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ADE80" }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{ou.name || "조합원"}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
