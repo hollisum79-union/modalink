@@ -13935,18 +13935,27 @@ const getKyobunWork = (member: any, date: Date) => {
                     }}
                   />
                 );
-              const date = new Date(currentYear, currentMonth - 1, day);
+                           const date = new Date(currentYear, currentMonth - 1, day);
               const work = getKyobunWork(selectedMember, date);
               const info = work ? workInfo(work.type) : workInfo("");
-                          const diaDayType = work ? getDiaDayType(work.type, date) : null;
-              const diaInfo = work ? getDiaInfo(work.dia, diaDayType) : null;
-
               const isT = isToday(currentYear, currentMonth, day);
               const isSun = di === 0,
                 isSat = di === 6;
+              const key = dateKey(currentYear, currentMonth, day);
+              const isEditing = editingDate === key;
               return (
                 <div
                   key={di}
+                  onClick={() => {
+                    if (isEditing) {
+                      setEditingDate(null);
+                      setNewMemoText("");
+                    } else {
+                      setEditingDate(key);
+                      setEditingMemoId(null);
+                      setNewMemoText("");
+                    }
+                  }}
                   style={{
                     padding: "6px 4px",
                     minHeight: 70,
@@ -14105,7 +14114,8 @@ const getKyobunWork = (member: any, date: Date) => {
               );
             })}
           </div>
-        ))}
+               ))}
+        {editingDate && renderMemoPanel(editingDate)}
          </div>
     );
   };
