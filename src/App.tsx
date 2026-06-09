@@ -239,10 +239,9 @@ function computeNetPay(input: any) {
 
     return manualInputs[item] ?? 0;
   };
-    const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0) + bojeonGasanPay;
-
-  const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
-  const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
+    const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
+  const tongsangWage = (memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance) + bojeonGasanPay;
+const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   const isKyobun = memberInfo?.work_type === "교번" && (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
   let kyobunNightHours = 0;
@@ -17606,10 +17605,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const bojeonGasanPay = bojeonGasan ? Math.round(g7s1 * 0.04) : 0;
       const totalAllowance = Object.keys(checkedItems).reduce(
           (sum, item) => sum + getAllowanceAmount(item),
-        0
-      ) + bojeonGasanPay;
-
-  const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
+             0
+      );
+  const tongsangWage = (memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance) + bojeonGasanPay;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   const nightHoursPerShift =
