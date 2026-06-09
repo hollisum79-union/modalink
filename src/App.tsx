@@ -19622,7 +19622,7 @@ function DistanceScreen({ onBack, user }) {
         let diaNo = null;
         if (adjustByDate[ds]) {
           diaNo = adjustByDate[ds];
-        }} else if (me.work_type === "교번") {
+        } else if (me.work_type === "교번") {
         const w = calcKyobunWork(member, new Date(d), rotationData, swapData, allMembers);
           if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
         } else if (me.work_type === "통상") {
