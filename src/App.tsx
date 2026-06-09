@@ -6658,18 +6658,19 @@ const [showAddCat, setShowAddCat] = useState(false);
       if (upErr) throw upErr;
       const catLabel = allCats.find((c) => c.id === upCat)?.label || "";
       const sizeMB = (upFile.size / 1024 / 1024).toFixed(1) + "MB";
-      const { error: dbErr } = await supabase.from("archive_files").insert({
+            const { data: inserted, error: dbErr } = await supabase.from("archive_files").insert({
         name: upName.trim(),
         category_id: upCat,
         category_label: catLabel,
         path: path,
         size: sizeMB,
         description: upDesc.trim() || null,
-      });
+      }).select();
       if (dbErr) throw dbErr;
       alert("자료가 등록되었습니다.");
-      const { data } = await supabase.from("archive_files").select("*").order("created_at", { ascending: false });
-      if (data) setDbFiles(data);
+      if (inserted && inserted[0]) {
+        setDbFiles((prev) => [inserted[0], ...prev]);
+      }
       setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
       setShowUpload(false);
    } catch (err) {
