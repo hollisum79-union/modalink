@@ -154,6 +154,55 @@ function calcSupportOvertimeHours(diaNo: any, shift: string, dateStr: string, di
   if (e > END) ot += e - END;
   return ot;
 }
+function calcIncomeTax(monthlyPay: number, familyCount: number, childCount: number) {
+  const w = Math.max(Number(monthlyPay) || 0, 0);
+  const fam = Math.max(Number(familyCount) || 1, 1);
+  const child = Math.max(Number(childCount) || 0, 0);
+  if (w <= 0) return 0;
+  const y = w * 12;
+  const earnDed = y <= 5000000 ? y * 0.7
+    : y <= 15000000 ? 3500000 + (y - 5000000) * 0.4
+    : y <= 45000000 ? 7500000 + (y - 15000000) * 0.15
+    : y <= 100000000 ? 12000000 + (y - 45000000) * 0.05
+    : 14750000 + (y - 100000000) * 0.02;
+  const earnInc = y - earnDed;
+  let sp: number;
+  if (fam === 1) {
+    sp = y <= 30000000 ? 3100000 + y * 0.04
+      : y <= 45000000 ? 3100000 + y * 0.04 - (y - 30000000) * 0.05
+      : y <= 70000000 ? 3100000 + y * 0.015
+      : 3100000 + y * 0.005;
+  } else if (fam === 2) {
+    sp = y <= 30000000 ? 3600000 + y * 0.04
+      : y <= 45000000 ? 3600000 + y * 0.04 - (y - 30000000) * 0.05
+      : y <= 70000000 ? 3600000 + y * 0.02
+      : 3600000 + y * 0.01;
+  } else {
+    const ex = y > 40000000 ? (y - 40000000) * 0.04 : 0;
+    sp = y <= 30000000 ? 5000000 + y * 0.07 + ex
+      : y <= 45000000 ? 5000000 + y * 0.07 - (y - 30000000) * 0.05
+      : y <= 70000000 ? 5000000 + y * 0.05
+      : 5000000 + y * 0.03;
+  }
+  const pension = Math.min(w, 6170000) * 0.045 * 12;
+  let base = earnInc - 1500000 * fam - sp - pension;
+  if (base < 0) base = 0;
+  const tax = base <= 14000000 ? base * 0.06
+    : base <= 50000000 ? 840000 + (base - 14000000) * 0.15
+    : base <= 88000000 ? 6240000 + (base - 50000000) * 0.24
+    : base <= 150000000 ? 15360000 + (base - 88000000) * 0.35
+    : 37060000 + (base - 150000000) * 0.38;
+  let credit = tax <= 1300000 ? tax * 0.55 : 715000 + (tax - 1300000) * 0.30;
+  const limit = y <= 33000000 ? 740000
+    : y <= 70000000 ? Math.max(740000 - (y - 33000000) * 0.008, 660000)
+    : Math.max(660000 - (y - 70000000) * 0.5, 500000);
+  credit = Math.min(credit, limit);
+  const yearTax = Math.max(tax - credit, 0);
+  let monthTax = yearTax / 12;
+  const childCredit = child === 0 ? 0 : child === 1 ? 20830 : child === 2 ? 45830 : 45830 + (child - 2) * 33330;
+  monthTax = Math.max(monthTax - childCredit, 0);
+  return Math.round(monthTax / 10) * 10;
+}
 function computeNetPay(input: any) {
   const {
     grade, hobong, workType, checkedItems = {}, manualInputs = {},
@@ -277,7 +326,7 @@ function computeNetPay(input: any) {
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
   const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
-  const incomeTax = Math.round(totalGross * (r.income_tax ?? 0.02));
+    const incomeTax = calcIncomeTax(totalGross, 1, 0);
   const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
   const totalDeduction = nationalPension + healthInsurance + longTermCare + employmentInsurance + incomeTax + localTax + unionFee;
@@ -17609,7 +17658,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
   const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
-  const incomeTax = Math.round(totalGross * (r.income_tax ?? 0.02));
+    const incomeTax = calcIncomeTax(totalGross, 1, 0);
   const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
 
