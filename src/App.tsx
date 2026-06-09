@@ -13295,6 +13295,10 @@ const getKyobunWork = (member: any, date: Date) => {
     const LABEL_MAP: Record<string, string> = { 주: "주간", 야: "야간", 비: "비번", 휴: "휴무" };
     const COLOR_MAP: Record<string, string> = { 주: "#3B82F6", 야: "#7C3AED", 비: "#9CA3AF", 휴: "#92400E" };
     const isKyobun = activeTab === "교번";
+    const isTongsang = activeTab === "통상";
+    const tWork = isTongsang ? getTongsangWork(user, dateObj) : null;
+    const tDayType = tWork ? getDiaDayType(tWork.type, dateObj) : null;
+    const tDia = tWork ? getDiaInfo(tWork.dia, tDayType) : null;
     const kWork = isKyobun ? getKyobunWork(selectedMember, dateObj) : null;
     const kDayType = kWork ? getDiaDayType(kWork.type, dateObj) : null;
     const kDia = kWork ? getDiaInfo(kWork.dia, kDayType) : null;
@@ -13337,7 +13341,7 @@ const getKyobunWork = (member: any, date: Date) => {
             </button>
             <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: "-0.5px" }}>{dateLabel}</div>
             <div style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>
-              {isKyobun ? `기관사 ${selectedMember?.name || ""}` : `${selectedCrew}조 · ${user?.name || ""}`}
+              {isKyobun ? `기관사 ${selectedMember?.name || ""}` : isTongsang ? `통상 · ${user?.name || ""}` : `${selectedCrew}조 · ${user?.name || ""}`}
             </div>
 
             {isKyobun ? (
@@ -13364,6 +13368,31 @@ const getKyobunWork = (member: any, date: Date) => {
                     </div>
                   )}
                 </div>
+              )
+            ) : isTongsang ? (
+              tWork ? (
+                <div style={{ marginTop: 14, background: "#fff", borderRadius: 16, padding: "13px 15px", color: "#1a1a1a" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tDia?.start_time ? 11 : 0 }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5" }}>주간 (통상)</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", padding: "4px 10px", borderRadius: 11 }}>다이아 {tWork.dia}</span>
+                  </div>
+                  {tDia?.start_time && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ flex: 1, background: "#FAF9FE", borderRadius: 11, padding: 9, textAlign: "center" }}>
+                        <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, marginBottom: 2 }}>출근</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#4F46E5" }}>{tDia.start_time}</div>
+                      </div>
+                      {tDia.end_time && (
+                        <div style={{ flex: 1, background: "#FAF9FE", borderRadius: 11, padding: 9, textAlign: "center" }}>
+                          <div style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 600, marginBottom: 2 }}>퇴근</div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: "#4F46E5" }}>{tDia.end_time}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: 14, background: "rgba(255,255,255,0.14)", borderRadius: 16, padding: "13px 15px", textAlign: "center", fontSize: 15, fontWeight: 800 }}>휴무</div>
               )
             ) : (
               <div style={{ marginTop: 14, background: "rgba(255,255,255,0.14)", borderRadius: 16, padding: 12 }}>
