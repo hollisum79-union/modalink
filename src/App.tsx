@@ -216,7 +216,7 @@ function computeNetPay(input: any) {
   const basicSalary = row ? (row[`grade_${grade}`] ?? null) : null;
     if (!basicSalary) return null;
 
-  const g7s1Row = salaryTable.find((r: any) => r.hobong === 1);
+  const g7s1Row = salaryTable.find((r: any) => Number(r.hobong) === 1);
   const g7s1 = g7s1Row ? (Number(g7s1Row["grade_7"]) || 0) : 0;
   const bojeonGasanPay = memberInfo?.bojeon_gasan ? Math.round(g7s1 * 0.04) : 0;
 
@@ -17601,8 +17601,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     }
   };
 
-        const g7s1Row = salaryTable.find((r: any) => r.hobong === 1);
-      const g7s1 = g7s1Row ? (Number(g7s1Row["grade_7"]) || 0) : 0;
+  const g7s1Row = salaryTable.find((r: any) => Number(r.hobong) === 1);     
+  const g7s1 = g7s1Row ? (Number(g7s1Row["grade_7"]) || 0) : 0;
       const bojeonGasanPay = bojeonGasan ? Math.round(g7s1 * 0.04) : 0;
       const totalAllowance = Object.keys(checkedItems).reduce(
           (sum, item) => sum + getAllowanceAmount(item),
