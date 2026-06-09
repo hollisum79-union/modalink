@@ -812,7 +812,7 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
   const [category, setCategory] = useState(editPost?.category || "자유");
   const [imageUrl, setImageUrl] = useState(editPost?.image_url || "");
   const [imagePath, setImagePath] = useState(editPost?.image_path || "");
-
+  const [uploading, setUploading] = useState(false);
   const categories = [
     { name: "자유", color: "#4F46E5", bg: "#EEF0FF" },
     { name: "경조사", color: "#EF4444", bg: "#FEE2E2" },
