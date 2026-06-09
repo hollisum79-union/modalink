@@ -806,13 +806,12 @@ function Icon({ path, size = 24, color = "#4F46E5", strokeWidth = 1.5 }) {
 }
 
 // ── 자유게시판 글쓰기 ──
-function BoardWrite({ onBack, onSubmit, user }) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [category, setCategory] = useState("자유");
-  const [imageUrl, setImageUrl] = useState("");
-  const [imagePath, setImagePath] = useState("");
-  const [uploading, setUploading] = useState(false);
+function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
+  const [title, setTitle] = useState(editPost?.title || "");
+  const [content, setContent] = useState(editPost?.content || "");
+  const [category, setCategory] = useState(editPost?.category || "자유");
+  const [imageUrl, setImageUrl] = useState(editPost?.image_url || "");
+  const [imagePath, setImagePath] = useState(editPost?.image_path || "");
 
   const categories = [
     { name: "자유", color: "#4F46E5", bg: "#EEF0FF" },
@@ -839,9 +838,9 @@ function BoardWrite({ onBack, onSubmit, user }) {
     setUploading(false);
   };
 
-  const handleSubmit = () => {
+    const handleSubmit = () => {
     if (!title.trim() || (!content.trim() && !imageUrl)) return;
-    onSubmit({ title, content, category, image_url: imageUrl, image_path: imagePath });
+    onSubmit({ id: editPost?.id, title, content, category, image_url: imageUrl, image_path: imagePath });
   };
 
   return (
@@ -876,8 +875,8 @@ function BoardWrite({ onBack, onSubmit, user }) {
           >
             <Icon path="M15 19l-7-7 7-7" color="#1F2937" size={24} />
           </button>
-          <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
-            글쓰기
+                    <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
+            {editPost ? "글 수정" : "글쓰기"}
           </span>
         </div>
         <button
@@ -893,8 +892,8 @@ function BoardWrite({ onBack, onSubmit, user }) {
             cursor: "pointer",
             fontFamily: "inherit",
           }}
-        >
-          등록
+                >
+          {editPost ? "수정 완료" : "등록"}
         </button>
       </div>
       <div style={{ padding: "20px 16px" }}>
@@ -1182,11 +1181,27 @@ const handleDeletePost = async () => {
        <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
           자유게시판
         </span>
+                {canDelete && (
+          <button
+            onClick={() => onEdit && onEdit(post)}
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "none",
+              color: "#4F46E5",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            수정
+          </button>
+        )}
         {canDelete && (
           <button
             onClick={handleDeletePost}
             style={{
-              marginLeft: "auto",
               background: "none",
               border: "none",
               color: "#EF4444",
@@ -24423,7 +24438,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [notices, setNotices] = useState([]);
   const [boardTab, setBoardTab] = useState("전체");
   const [selectedNotice, setSelectedNotice] = useState(null);
-  const [selectedPost, setSelectedPost] = useState(null);
+   const [selectedPost, setSelectedPost] = useState(null);
+  const [editingPost, setEditingPost] = useState<any>(null);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [aboutInitialTab, setAboutInitialTab] = useState("intro");
   const [showOnlineModal, setShowOnlineModal] = useState(false);
@@ -25501,47 +25517,73 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           setSelectedPost(p);
           setScreen("boardDetail");
         }}
-        onWrite={() => setScreen("boardWrite")}
+                onWrite={() => { setEditingPost(null); setScreen("boardWrite"); }}
         user={user}
       />
     );
-  if (screen === "boardDetail" && selectedPost)
+    if (screen === "boardDetail" && selectedPost)
     return (
       <BoardDetail
         post={selectedPost}
         onBack={() => setScreen("board")}
         user={user}
+        onEdit={(p: any) => {
+          setEditingPost(p);
+          setScreen("boardWrite");
+        }}
       />
     );
-  if (screen === "boardWrite")
+    if (screen === "boardWrite")
     return (
       <BoardWrite
-        onBack={() => setScreen("board")}
+        onBack={() => setScreen(editingPost ? "boardDetail" : "board")}
         user={user}
+        editPost={editingPost}
         onSubmit={(post) => {
-          const newPost = {
-            title: post.title,
-            content: post.content,
-            category: post.category,
-            author: user?.name,
-            author_emp: user?.employee_number,
-            is_anonymous: false,
-            views: 0,
-            image_url: post.image_url || null,
-            image_path: post.image_path || null,
-          };
-          supabase
-            .from("posts")
-            .insert([newPost])
-            .select()
-            .then(({ data }) => {
-              if (data && data[0]) {
-                setSelectedPost({ ...data[0], comments: [] });
+          if (post.id) {
+            supabase
+              .from("posts")
+              .update({
+                title: post.title,
+                content: post.content,
+                category: post.category,
+                image_url: post.image_url || null,
+                image_path: post.image_path || null,
+              })
+              .eq("id", post.id)
+              .select()
+              .then(({ data }) => {
+                if (data && data[0]) {
+                  setSelectedPost((prev: any) => ({ ...prev, ...data[0] }));
+                }
+                setEditingPost(null);
                 setScreen("boardDetail");
-              } else {
-                setScreen("board");
-              }
-            });
+              });
+          } else {
+            const newPost = {
+              title: post.title,
+              content: post.content,
+              category: post.category,
+              author: user?.name,
+              author_emp: user?.employee_number,
+              is_anonymous: false,
+              views: 0,
+              image_url: post.image_url || null,
+              image_path: post.image_path || null,
+            };
+            supabase
+              .from("posts")
+              .insert([newPost])
+              .select()
+              .then(({ data }) => {
+                if (data && data[0]) {
+                  setSelectedPost({ ...data[0], comments: [] });
+                  setScreen("boardDetail");
+                } else {
+                  setScreen("board");
+                }
+              });
+          }
         }}
       />
     );
