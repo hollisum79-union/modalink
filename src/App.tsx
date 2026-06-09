@@ -64,6 +64,38 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: 
 
   return mine;
 }
+function calcTongsangWork(member: any, date: Date, holidays: string[] = []) {
+  if (!member || !member.tongsang_base_date || member.tongsang_base_dia == null) return null;
+  const isOff = (d: Date) => {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return true;
+    const yy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return (holidays || []).includes(`${yy}-${mm}-${dd}`);
+  };
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  if (isOff(target)) return null;
+  const base = new Date(member.tongsang_base_date);
+  base.setHours(0, 0, 0, 0);
+  let steps = 0;
+  const cur = new Date(base);
+  if (target.getTime() >= base.getTime()) {
+    while (cur.getTime() < target.getTime()) {
+      cur.setDate(cur.getDate() + 1);
+      if (!isOff(cur)) steps++;
+    }
+  } else {
+    while (cur.getTime() > target.getTime()) {
+      cur.setDate(cur.getDate() - 1);
+      if (!isOff(cur)) steps--;
+    }
+  }
+  const baseIdx = Number(member.tongsang_base_dia) - 51;
+  const idx = (((baseIdx + steps) % 4) + 4) % 4;
+  return { dia: 51 + idx, type: "주간" };
+}
 function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTable: any[], holidays: string[]) {
   if (!diaNo || !diaTable || diaTable.length === 0) return { workHours: 0, nightHours: 0 };
   const date = new Date(dateStr);
