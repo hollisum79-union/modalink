@@ -14587,6 +14587,22 @@ function MySettingsScreen({
       } catch (e) {}
     })();
   }, []);
+  React.useEffect(() => {
+    if (!user?.employee_number) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("push_subscriptions")
+          .select("notify_urgent, notify_notice, notify_swap, notify_vote")
+          .eq("employee_number", String(user.employee_number))
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          setNotifSettings((prev) => ({ ...prev, ...data }));
+        }
+      } catch (e) {}
+    })();
+  }, [user?.employee_number]);
   // 화면 진입 시 DB에서 최신 user 정보 다시 가져오기
   React.useEffect(() => {
     if (!user?.employee_number) return;
