@@ -232,15 +232,15 @@ function computeNetPay(input: any) {
 
   const allowanceAmount = (item: string): number => {
     if (!checkedItems[item]) return 0;
-    if (item === "업무보전수당") return workTypePay;
-    if (item === "장기근속수당") return longService;
+    if (item === "업무보전수당") return workTypePay + bojeonGasanPay;
+if (item === "장기근속수당") return longService;
     if (item === "직급보조비") return gradeSupport;
     if (item === "승무보조비") return seungmuBojo;
 
     return manualInputs[item] ?? 0;
   };
     const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
-  const tongsangWage = (memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance) + bojeonGasanPay;
+  const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
 const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   const isKyobun = memberInfo?.work_type === "교번" && (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
@@ -323,7 +323,8 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   const over8s = Math.max(supportOtHours - 8, 0);
   const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
 
-  const totalGross = tongsangWage + nightPay + holidayFillPay + supportPay;
+    const grossBase = (basicSalary ?? 0) + totalAllowance;
+  const totalGross = grossBase + nightPay + holidayFillPay + supportPay;
   const r = dedRates || {};
   const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
@@ -17607,7 +17608,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           (sum, item) => sum + getAllowanceAmount(item),
              0
       );
-  const tongsangWage = (memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance) + bojeonGasanPay;
+  const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   const nightHoursPerShift =
@@ -17729,7 +17730,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const over8s = Math.max(supportOtHours - 8, 0);
   const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
 
-  const totalGross = tongsangWage + nightPay + overtimePay + holidayFillPay + supportPay;
+    const grossBase = (basicSalary ?? 0) + totalAllowance;
+  const totalGross = grossBase + nightPay + holidayFillPay + supportPay;
   const r = dedRates || {};
   const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
