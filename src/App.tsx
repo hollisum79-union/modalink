@@ -18741,7 +18741,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   { label: `건강보험 (${((r.health_insurance ?? 0.03545) * 100).toFixed(3).replace(/\.?0+$/, "")}%)`, amount: healthInsurance },
                   { label: `장기요양보험 (건보료×${((r.long_term_care ?? 0.1295) * 100).toFixed(2).replace(/\.?0+$/, "")}%)`, amount: longTermCare },
                   { label: `고용보험 (${((r.employment_insurance ?? 0.009) * 100).toFixed(3).replace(/\.?0+$/, "")}%)`, amount: employmentInsurance },
-                                  { label: "소득세 (약 2%, 부양1인 기준)", amount: incomeTax },
+                                  { label: "소득세 소득세 (간이세액표 · 추정)", amount: incomeTax },
                   { label: `지방소득세 (소득세×${((r.local_tax ?? 0.1) * 100).toFixed(1).replace(/\.?0+$/, "")}%)`, amount: localTax },
                   { label: `조합비 (기본급×${((r.union_fee ?? 0.012) * 100).toFixed(2).replace(/\.?0+$/, "")}%)`, amount: unionFee },
                 ].map((row, i) => (
