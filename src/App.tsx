@@ -6515,8 +6515,40 @@ const [showAddCat, setShowAddCat] = useState(false);
     setExtraCats((prev) => [...prev, newCat]);
     setNewCatName("");
     setShowAddCat(false);
-    alert("분류가 추가되었습니다.");
+        alert("분류가 추가되었습니다.");
   };
+
+  const handleRenameCategory = async (cat: any) => {
+    const newName = prompt("새 분류 이름을 입력하세요.", cat.label);
+    if (newName === null) return;
+    if (!newName.trim()) { alert("이름을 입력해주세요."); return; }
+    const { error } = await supabase
+      .from("archive_categories")
+      .update({ label: newName.trim() })
+      .eq("id", cat.id);
+    if (error) { alert("이름 변경 실패: " + error.message); return; }
+    setExtraCats((prev) =>
+      prev.map((c) => (c.id === cat.id ? { ...c, label: newName.trim() } : c))
+    );
+        alert("이름이 변경되었습니다.");
+  };
+
+  const handleDeleteCategory = async (cat: any) => {
+    const count = dbFiles.filter((f) => f.category_id === cat.id).length;
+    if (count > 0) {
+      alert("이 분류 안에 파일이 " + count + "개 있습니다.\n파일을 다른 분류로 옮기거나 삭제한 뒤에 분류를 지울 수 있어요.");
+      return;
+    }
+    if (!confirm("'" + cat.label + "' 분류를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.")) return;
+    const { error } = await supabase
+      .from("archive_categories")
+      .delete()
+      .eq("id", cat.id);
+    if (error) { alert("삭제 실패: " + error.message); return; }
+    setExtraCats((prev) => prev.filter((c) => c.id !== cat.id));
+    alert("분류가 삭제되었습니다.");
+  };
+
   // 내 즐겨찾기 목록 불러오기
   const loadFavorites = async () => {
     if (!user?.employee_number) return;
@@ -6624,7 +6656,7 @@ const [showAddCat, setShowAddCat] = useState(false);
       const path = upCat + "/" + safeName;
       const { error: upErr } = await supabase.storage.from("archive").upload(path, upFile);
       if (upErr) throw upErr;
-      const catLabel = archiveCategories.find((c) => c.id === upCat)?.label || "";
+      const catLabel = allCats.find((c) => c.id === upCat)?.label || "";
       const sizeMB = (upFile.size / 1024 / 1024).toFixed(1) + "MB";
       const { error: dbErr } = await supabase.from("archive_files").insert({
         name: upName.trim(),
@@ -6876,7 +6908,7 @@ const [showAddCat, setShowAddCat] = useState(false);
               </div>
             ) : (
               searchResults.map((file, i) => {
-                const cat = archiveCategories.find(
+                const cat = allCats.find(
                   (c) => c.id === file.category_id
                 );
                 return (
@@ -6980,7 +7012,7 @@ const [showAddCat, setShowAddCat] = useState(false);
             {dbFiles
               .filter((f) => favorites.includes(String(f.id)))
               .map((file, i) => {
-                const cat = archiveCategories.find((c) => c.id === file.category_id);
+                const cat = allCats.find((c) => c.id === file.category_id);
                 return (
                   <div
                     key={"fav" + i}
@@ -7023,7 +7055,7 @@ const [showAddCat, setShowAddCat] = useState(false);
         )}
         {!searchQuery.trim() &&
           (!selectedCat ? (
-            archiveCategories.map((cat) => {
+            allCats.map((cat) => {
               const fileCount = dbFiles.filter((f) => f.category_id === cat.id).length;
               return (
                 <div
@@ -7068,9 +7100,26 @@ const [showAddCat, setShowAddCat] = useState(false);
                     <div
                       style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}
                     >
-                      PDF {fileCount}개
+                                            PDF {fileCount}개
                     </div>
                   </div>
+                  {cat.id.startsWith("cat_") && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRenameCategory(cat); }}
+                      style={{ border: "none", background: "#F3F4F6", color: "#4F46E5", fontSize: 12, fontWeight: 700, padding: "6px 10px", borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
+                    >
+                                           이름변경
+                    </button>
+                  )}
+                  {cat.id.startsWith("cat_") && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat); }}
+                      style={{ border: "none", background: "#FEE2E2", color: "#EF4444", fontSize: 12, fontWeight: 700, padding: "6px 10px", borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
+                    >
+                      삭제
+                    </button>
+                  )}
+
                   <Icon path="M9 5l7 7-7 7" color="#D1D5DB" size={18} />
                 </div>
               );
@@ -7286,7 +7335,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                 background: "#fff",
               }}
             >
-              {archiveCategories.map((c) => (
+              {allCats.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
