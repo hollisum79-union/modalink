@@ -1034,7 +1034,7 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
 }
 
 // ── 자유게시판 상세 ──
-function BoardDetail({ post, onBack, user }) {
+function BoardDetail({ post, onBack, user, onEdit }: any) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   useEffect(() => {
