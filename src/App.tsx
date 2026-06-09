@@ -17417,7 +17417,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
     const getBasicSalary = () => {
     if (!selectedGrade || !selectedHobong) return null;
-    const row = salaryTable.find((r) => Number(r.hobong) === Number(selectedHobong));
     if (!row) return null;
     return row[`grade_${Number(selectedGrade)}`] ?? null;
   };
