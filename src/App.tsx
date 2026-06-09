@@ -12539,6 +12539,11 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
   React.useEffect(() => {
+    if (activeTab === "통상" && user?.employee_number && (!selectedMember || String(selectedMember.employee_number) !== String(user.employee_number))) {
+      setSelectedMember(user);
+    }
+  }, [activeTab, user]);
+  React.useEffect(() => {
     if (!selectedMember?.employee_number) { setLeaveRecords([]); return; }
     const loadLeave = async () => {
       const { data } = await supabase
@@ -13687,8 +13692,15 @@ const getKyobunWork = (member: any, date: Date) => {
               const isHoli = isHolidayDate(date) && !isSun && !isSat;
               const dayColor = isSun || isHoli ? "#EF4444" : isSat ? "#3B82F6" : "#111827";
               const subColor = isSun || isHoli ? "#F87171" : "#93C5FD";
+              const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+              const dayMemos = memos[dstr] || [];
+              const adjs = adjustRecords.filter((r) => r.work_date === dstr);
+              const lvs = leaveRecords.filter((r) => r.used_date === dstr);
+              const ADJL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
+              const ADJC: any = { standby: { bg: "#EDE9FE", fg: "#6D28D9" }, holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" }, designated: { bg: "#E1F5EE", fg: "#0F6E56" }, support: { bg: "#E6F1FB", fg: "#185FA5" } };
+              const LVL: any = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체", study: "학습", longService: "장기재직" };
               return (
-                <div key={di} style={{ padding: "6px 4px", background: "#fff", borderRight: "1px solid #F3F4F6" }}>
+                <div key={di} onClick={() => setEditingDate(editingDate === dstr ? null : dstr)} style={{ padding: "6px 4px", background: "#fff", borderRight: "1px solid #F3F4F6", cursor: "pointer" }}>
                   <div style={{ fontSize: 10, fontWeight: 600, textAlign: "center", marginBottom: 4, color: isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#9CA3AF" }}>
                     {isT ? (
                       <span style={{ background: "#4F46E5", color: "#fff", borderRadius: "50%", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>{day}</span>
@@ -13706,11 +13718,44 @@ const getKyobunWork = (member: any, date: Date) => {
                   ) : (
                     <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: subColor, marginTop: 7 }}>휴</div>
                   )}
+                  {adjs.length > 0 && (
+                    <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {adjs.map((r, i) => {
+                        const c = ADJC[r.adjust_type] || { bg: "#F3F4F6", fg: "#374151" };
+                        const m = (r.memo || "").match(/다이아\s*(\d+)/);
+                        const sub = r.is_temp_dia ? (r.temp_start_time || "") : (m ? `${r.work_shift === "야간" ? "야" : "주"}${m[1]}` : (r.work_shift === "야간" ? "야" : "주"));
+                        return (
+                          <div key={i} style={{ background: c.bg, borderRadius: 5, padding: "2px 3px" }}>
+                            <div style={{ fontSize: 9, color: c.fg, fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{ADJL[r.adjust_type] || r.adjust_type}</div>
+                            <div style={{ fontSize: 9, color: c.fg, lineHeight: 1.3, textAlign: "center" }}>{sub}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {lvs.length > 0 && (
+                    <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {lvs.map((r, i) => (
+                        <div key={`lv${i}`} style={{ background: "#EEF0FF", borderRadius: 5, padding: "2px 3px" }}>
+                          <div style={{ fontSize: 9, color: "#4F46E5", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{LVL[r.leave_type] || r.leave_type}</div>
+                          <div style={{ fontSize: 9, color: "#4F46E5", lineHeight: 1.3, textAlign: "center" }}>{r.days}일</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {dayMemos.length > 0 && (
+                    <div style={{ textAlign: "center", marginTop: 3 }}>
+                      {dayMemos.slice(0, 3).map((_, i) => (
+                        <span key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: "#6366F1", display: "inline-block", margin: "0 1px" }} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-        ))}
+       ))}
+        {editingDate && renderMemoPanel(editingDate)}
       </div>
     );
   };
