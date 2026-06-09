@@ -163,8 +163,6 @@ function computeNetPay(input: any) {
     swapData = [], allMembers = [],
   } = input;
 
-  const row = salaryTable.find((r: any) => r.hobong === hobong);
-  const basicSalary = row ? (row[`grade_${grade}`] ?? null) : null;
   if (!basicSalary) return null;
 
   const longService = hobong >= 25 ? 130000 : hobong >= 20 ? 110000 : hobong >= 15 ? 80000 : hobong >= 10 ? 60000 : hobong >= 5 ? 50000 : 0;
@@ -17417,11 +17415,11 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     if (finalNight !== null) setNightCount(finalNight);
   }, [finalNight]);
 
-  const getBasicSalary = () => {
+    const getBasicSalary = () => {
     if (!selectedGrade || !selectedHobong) return null;
-    const row = salaryTable.find((r) => r.hobong === selectedHobong);
+    const row = salaryTable.find((r) => Number(r.hobong) === Number(selectedHobong));
     if (!row) return null;
-    return row[`grade_${selectedGrade}`] ?? null;
+    return row[`grade_${Number(selectedGrade)}`] ?? null;
   };
 
     const basicSalary = getBasicSalary();
