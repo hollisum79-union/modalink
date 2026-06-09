@@ -12537,6 +12537,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
+  const [tsPickDia, setTsPickDia] = React.useState(51);
   React.useEffect(() => {
     if (!selectedMember?.employee_number) { setLeaveRecords([]); return; }
     const loadLeave = async () => {
@@ -13599,6 +13600,120 @@ const getKyobunWork = (member: any, date: Date) => {
   );
 
   // ── 교번 탭 ──
+  const getTongsangWork = (member: any, date: Date) => {
+    return calcTongsangWork(member, date, holidays);
+  };
+  const renderTongsangTab = () => {
+    const me = user;
+    const hasBase = me?.tongsang_base_date && me?.tongsang_base_dia != null;
+    if (!hasBase) {
+      return (
+        <div style={{ padding: 24 }}>
+          <div style={{ background: "#fff", border: "1px solid #EEE", borderRadius: 14, padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>통상 근무표 설정</div>
+            <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16, lineHeight: 1.5 }}>
+              오늘 본인의 다이아 번호를 한 번만 고르면, 나머지 날짜는 자동으로 계산돼요.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>오늘 내 다이아</span>
+              <select
+                value={tsPickDia}
+                onChange={(e) => setTsPickDia(Number(e.target.value))}
+                style={{ fontSize: 15, padding: "8px 12px", borderRadius: 10, border: "1px solid #D1D5DB", fontFamily: "inherit" }}
+              >
+                <option value={51}>51</option>
+                <option value={52}>52</option>
+                <option value={53}>53</option>
+                <option value={54}>54</option>
+              </select>
+            </div>
+            <button
+              onClick={async () => {
+                const t = new Date();
+                const ds = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+                const { error } = await supabase
+                  .from("members")
+                  .update({ tongsang_base_date: ds, tongsang_base_dia: tsPickDia })
+                  .eq("employee_number", user?.employee_number);
+                if (error) { alert("저장 실패: " + error.message); return; }
+                if (refreshUser) await refreshUser();
+              }}
+              style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: "linear-gradient(90deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              저장하고 근무표 보기
+            </button>
+          </div>
+        </div>
+      );
+    }
+    const weeks = buildCalendarGrid(currentYear, currentMonth);
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "10px 16px", background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #EEF0F3" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <span onClick={() => { const p = getPrevMonth(currentYear, currentMonth); setCurrentYear(p.y); setCurrentMonth(p.m); }} style={{ fontSize: 18, color: "#9CA3AF", cursor: "pointer" }}>‹</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{currentYear}년 {currentMonth}월</span>
+            <span onClick={() => { const n = getNextMonth(currentYear, currentMonth); setCurrentYear(n.y); setCurrentMonth(n.m); }} style={{ fontSize: 18, color: "#9CA3AF", cursor: "pointer" }}>›</span>
+          </div>
+          <button
+            onClick={async () => {
+              if (!window.confirm("기준을 다시 설정할까요?")) return;
+              const { error } = await supabase
+                .from("members")
+                .update({ tongsang_base_date: null, tongsang_base_dia: null })
+                .eq("employee_number", user?.employee_number);
+              if (error) { alert("초기화 실패: " + error.message); return; }
+              if (refreshUser) await refreshUser();
+            }}
+            style={{ background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 12, cursor: "pointer", padding: "3px 11px", borderRadius: 999, fontFamily: "inherit" }}
+          >
+            기준 재설정
+          </button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid #F3F4F6" }}>
+          {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+            <div key={d} style={{ textAlign: "center", padding: "8px 0", fontSize: 12, fontWeight: 700, color: i === 0 ? "#EF4444" : i === 6 ? "#3B82F6" : "#6B7280" }}>{d}</div>
+          ))}
+        </div>
+        {weeks.map((week, wi) => (
+          <div key={wi} style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid #F3F4F6" }}>
+            {week.map((day, di) => {
+              if (!day) return <div key={di} style={{ background: "#FAFAFA", borderRight: "1px solid #F3F4F6" }} />;
+              const date = new Date(currentYear, currentMonth - 1, day);
+              const work = getTongsangWork(me, date);
+              const diaInfo = work ? getDiaInfo(work.dia, getDiaDayType(work.type, date)) : null;
+              const isT = isToday(currentYear, currentMonth, day);
+              const isSun = di === 0, isSat = di === 6;
+              const isHoli = isHolidayDate(date) && !isSun && !isSat;
+              const dayColor = isSun || isHoli ? "#EF4444" : isSat ? "#3B82F6" : "#111827";
+              const subColor = isSun || isHoli ? "#F87171" : "#93C5FD";
+              return (
+                <div key={di} style={{ padding: "6px 4px", background: "#fff", borderRight: "1px solid #F3F4F6" }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, textAlign: "center", marginBottom: 4, color: isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#9CA3AF" }}>
+                    {isT ? (
+                      <span style={{ background: "#4F46E5", color: "#fff", borderRadius: "50%", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>{day}</span>
+                    ) : day}
+                  </div>
+                  {work ? (
+                    <>
+                      <div style={{ textAlign: "center", fontSize: 15, fontWeight: 800, color: dayColor, lineHeight: 1, marginBottom: 4 }}>{work.dia}</div>
+                      {diaInfo && diaInfo.start_time && (
+                        <div style={{ textAlign: "center" }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#111827", background: "#F3F4F6", borderRadius: 7, padding: "2px 6px", display: "inline-block", letterSpacing: "-0.5px" }}>{diaInfo.start_time}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: subColor, marginTop: 7 }}>휴</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  };
   const renderKyobunTab = () => {
     if (!selectedGroup)
       return (
@@ -14543,19 +14658,7 @@ const getKyobunWork = (member: any, date: Date) => {
           </>
         )}
         {activeTab === "교번" && renderKyobunTab()}
-        {activeTab === "통상" && (
-          <div
-            style={{
-              padding: 32,
-              textAlign: "center",
-              color: "#9CA3AF",
-              fontSize: 14,
-            }}
-          >
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🚧</div>통상 근무표
-            준비 중
-          </div>
-        )}
+        {activeTab === "통상" && renderTongsangTab()}
         {activeTab === "변형통상" && (
           <div
             style={{
