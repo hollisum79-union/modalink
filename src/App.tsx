@@ -20530,6 +20530,16 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                                   status: "대기",
                                 }]);
                                 if (error) { showToast("요청 실패: " + error.message, "error"); return; }
+                                fetch("/.netlify/functions/send-push", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    title: "🔄 교번교체 요청",
+                                    message: `${user?.name}님이 교체를 요청했어요`,
+                                    type: "swap",
+                                    to: String(x.member.employee_number),
+                                  }),
+                                }).catch(() => {});
                                 showToast("교체 요청을 보냈어요", "success");
                                 setSwapPartner(null);
                                 setSwapSearched(false);
@@ -20632,6 +20642,16 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                                   status: "대기",
                                 }]);
                                 if (error) { showToast("요청 실패: " + error.message, "error"); return; }
+                                fetch("/.netlify/functions/send-push", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    title: "🔄 교번교체 요청",
+                                    message: `${user?.name}님이 교체를 요청했어요`,
+                                    type: "swap",
+                                    to: String(x.member.employee_number),
+                                  }),
+                                }).catch(() => {});
                                 showToast("교체 요청을 보냈어요", "success");
                                 setSwapPartner(null);
                                 setSwapSearched(false);
