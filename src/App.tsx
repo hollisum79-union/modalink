@@ -24319,7 +24319,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       if (!user?.employee_number || homeDia.length === 0) return;
       const { data: me } = await supabase
         .from("members")
-        .select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total")
+        .select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total, tongsang_base_date, tongsang_base_dia")
         .eq("employee_number", user.employee_number)
         .maybeSingle();
       if (!me) return;
@@ -24362,7 +24362,17 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
           const row = homeDia.find((r: any) => Number(r.dia_no) === Number(diaNo));
           return row ? Number(row.distance_km) || 0 : 0;
         };
-        const member = { employee_number: user.employee_number, work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
+        const member = { employee_number: user.employee_number, work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total, tongsang_base_date: me.tongsang_base_date, tongsang_base_dia: me.tongsang_base_dia };
+        let tsHolidays = [];
+        if (me.work_type === "통상") {
+          try {
+            for (let yy = Number(bd.slice(0, 4)); yy <= new Date().getFullYear(); yy++) {
+              const hr = await fetch("/.netlify/functions/read-holidays?year=" + yy);
+              const hj = await hr.json();
+              if (hj.holidays) tsHolidays = tsHolidays.concat(hj.holidays);
+            }
+          } catch (e) {}
+        }
         const start = new Date(bd + "T00:00:00");
         start.setDate(start.getDate() + 1);
         const today = new Date();
@@ -24380,6 +24390,9 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
           } else if (me.work_type === "교번") {
            const w = calcKyobunWork(member, new Date(d), homeRotation, swapData || [], allMembers || []);
             if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
+          } else if (me.work_type === "통상") {
+            const w = calcTongsangWork(member, new Date(d), tsHolidays);
+            if (w && Number(w.dia) >= 1) diaNo = w.dia;
           }
           if (diaNo != null) sum += distOf(diaNo);
         }
