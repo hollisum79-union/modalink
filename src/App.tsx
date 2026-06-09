@@ -163,6 +163,8 @@ function computeNetPay(input: any) {
     swapData = [], allMembers = [],
   } = input;
 
+    const row = salaryTable.find((r: any) => Number(r.hobong) === Number(hobong));
+  const basicSalary = row ? (row[`grade_${Number(grade)}`] ?? null) : null;
   if (!basicSalary) return null;
 
   const longService = hobong >= 25 ? 130000 : hobong >= 20 ? 110000 : hobong >= 15 ? 80000 : hobong >= 10 ? 60000 : hobong >= 5 ? 50000 : 0;
