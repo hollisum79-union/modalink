@@ -24305,7 +24305,20 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
   );
 }
 export default function App() {
-    const [screen, setScreen] = useState("login");
+      const [screen, setScreen] = useState("login");
+    const screenRef = React.useRef("login");
+    React.useEffect(() => { screenRef.current = screen; }, [screen]);
+    React.useEffect(() => {
+      window.history.pushState(null, "");
+      const onBack = () => {
+        window.history.pushState(null, "");
+        if (screenRef.current !== "home" && screenRef.current !== "login") {
+          setScreen("home");
+        }
+      };
+      window.addEventListener("popstate", onBack);
+      return () => window.removeEventListener("popstate", onBack);
+    }, []);
   const [adjustInitDate, setAdjustInitDate] = useState("");
   const [adjustInitTab, setAdjustInitTab] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
