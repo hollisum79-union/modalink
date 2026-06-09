@@ -17394,7 +17394,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("night_pay_settings").select("*"),
         supabase.from("kyobun_dia").select("dia_no, day_type, work_hours, night_hours, start_time, end_time"),
-        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage, dependents_count, children_count")
+.eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
@@ -24684,7 +24685,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
      const [salaryRes, wtRes, meRes, hfRes, settingsRes, dedRes, sbRes, lvRes, dutyRes, swapRes, allMemRes] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
-        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage, dependents_count, children_count")
+.eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
