@@ -11402,6 +11402,16 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                       .insert([newVote])
                       .then(({ error }) => {
                         if (!error) {
+                          fetch("/.netlify/functions/send-push", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              title: "🗳️ 새 투표·설문",
+                              message: newVote.title || "새 투표가 시작됐어요",
+                              type: "vote",
+                              url: "/",
+                            }),
+                          }).catch(() => {});
                           setVoteDone(true);
                           setVoteTitle("");
                           setVoteDesc("");
@@ -16669,21 +16679,10 @@ function MySettingsScreen({
             </div>
           )}
           {editNotify && [
-            {
-              key: "urgentNotice",
-              label: "긴급공지",
-              desc: "긴급 공지사항 알림",
-              locked: true,
-            },
-            {
-              key: "agreement",
-              label: "단협규정",
-              desc: "단협 변경 알림",
-              locked: true,
-            },
-            { key: "board", label: "자유게시판", desc: "새 글 및 댓글 알림" },
-            { key: "vote", label: "설문·투표", desc: "새 투표·설문 알림" },
-            { key: "inquiry", label: "1:1문의", desc: "답변 알림" },
+            { key: "notify_urgent", label: "긴급공지", desc: "긴급 공지사항 알림" },
+            { key: "notify_notice", label: "일반공지", desc: "새 공지사항 알림" },
+            { key: "notify_swap", label: "교번교체", desc: "교체 요청·수락·거절 알림" },
+            { key: "notify_vote", label: "설문·투표", desc: "새 투표·설문 알림" },
           ].map((item, i, arr) => (
             <div
               key={item.key}
@@ -16718,12 +16717,15 @@ function MySettingsScreen({
                 </div>
               </div>
               <button
-                onClick={() => {
-                  if (item.locked) return;
-                  setNotifSettings((prev) => ({
-                    ...prev,
-                    [item.key]: !prev[item.key],
-                  }));
+                onClick={async () => {
+                  const next = !notifSettings[item.key];
+                  setNotifSettings((prev) => ({ ...prev, [item.key]: next }));
+                  try {
+                    await supabase
+                      .from("push_subscriptions")
+                      .update({ [item.key]: next })
+                      .eq("employee_number", String(user?.employee_number));
+                  } catch (e) {}
                 }}
                 style={{
                   width: 44,
