@@ -17588,8 +17588,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const getAllowanceAmount = (item: string): number => {
     if (!checkedItems[item]) return 0;
     switch (item) {
-      case "업무보전수당":
-        return getWorkTypePay();
+            case "업무보전수당":
+        return getWorkTypePay() + bojeonGasanPay;
       case "장기근속수당":
         return getLongServicePay();
             case "직급보조비":
@@ -17728,7 +17728,10 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   });
   const within8s = Math.min(supportOtHours, 8);
   const over8s = Math.max(supportOtHours - 8, 0);
-  const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
+   const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
+
+    const grossBase = (basicSalary ?? 0) + totalAllowance;
+  const totalGross = grossBase + nightPay + overtimePay + holidayFillPay + supportPay;
 
     const grossBase = (basicSalary ?? 0) + totalAllowance;
   const totalGross = grossBase + nightPay + holidayFillPay + supportPay;
