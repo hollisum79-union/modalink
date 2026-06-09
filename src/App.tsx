@@ -16360,8 +16360,12 @@ function MySettingsScreen({
           )}
           <button
             onClick={async () => {
-              if (!editWorkGroup || !editWorkType) {
-                alert("근무유형과 소속을 모두 선택해주세요.");
+              if (!editWorkType) {
+                alert("근무유형을 선택해주세요.");
+                return;
+              }
+              if ((editWorkType === "교대" || editWorkType === "교번") && !editWorkGroup) {
+                alert("소속(조)을 선택해주세요.");
                 return;
               }
               setSavedWorkData({
