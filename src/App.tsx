@@ -19551,7 +19551,7 @@ function DistanceScreen({ onBack, user }) {
     if (!user?.employee_number) return;
     setComputing(true);
     const [meRes, rotRes, diaRes, swapRes, allMemRes] = await Promise.all([
-      supabase.from("members").select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total").eq("employee_number", user.employee_number).maybeSingle(),
+      supabase.from("members").select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total, tongsang_base_date, tongsang_base_dia").eq("employee_number", user.employee_number).maybeSingle(),
       supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
       supabase.from("kyobun_dia").select("dia_no, distance_km"),
       supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`),
@@ -19596,7 +19596,17 @@ function DistanceScreen({ onBack, user }) {
         const row = diaTable.find((r) => Number(r.dia_no) === Number(diaNo));
       return row ? Number(row.distance_km) || 0 : 0;
     };
-    const member = { employee_number: user.employee_number, work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total };
+    const member = { employee_number: user.employee_number, work_type: me.work_type, work_group: me.work_group, start_position: me.start_position, schedule_total: me.schedule_total, tongsang_base_date: me.tongsang_base_date, tongsang_base_dia: me.tongsang_base_dia };
+      let tsHolidays = [];
+      if (me.work_type === "통상") {
+        try {
+          for (let yy = Number(bd.slice(0, 4)); yy <= new Date().getFullYear(); yy++) {
+            const hr = await fetch("/.netlify/functions/read-holidays?year=" + yy);
+            const hj = await hr.json();
+            if (hj.holidays) tsHolidays = tsHolidays.concat(hj.holidays);
+          }
+        } catch (e) {}
+      }
       const start = new Date(bd + "T00:00:00");
       start.setDate(start.getDate() + 1);
       const today = new Date();
@@ -19612,9 +19622,12 @@ function DistanceScreen({ onBack, user }) {
         let diaNo = null;
         if (adjustByDate[ds]) {
           diaNo = adjustByDate[ds];
-        } else if (me.work_type === "교번") {
+        }} else if (me.work_type === "교번") {
         const w = calcKyobunWork(member, new Date(d), rotationData, swapData, allMembers);
           if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
+        } else if (me.work_type === "통상") {
+          const w = calcTongsangWork(member, new Date(d), tsHolidays);
+          if (w && Number(w.dia) >= 1) diaNo = w.dia;
         }
         if (diaNo != null) {
           const km = distOf(diaNo);
