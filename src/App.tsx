@@ -11410,6 +11410,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
                               message: newVote.title || "새 투표가 시작됐어요",
                               type: "vote",
                               url: "/",
+                              from: String(user?.employee_number),
                             }),
                           }).catch(() => {});
                           setVoteDone(true);
@@ -23794,6 +23795,7 @@ function NoticeForm({ item, onClose }) {
             message: ttl.trim(),
             url: "/",
             type: tg === "긴급" ? "urgent" : "notice",
+            from: String(JSON.parse(localStorage.getItem("union_user") || "{}").employee_number || ""),
           }),
         }).catch(() => {});
         alert("등록되었습니다.");
