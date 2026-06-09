@@ -25572,11 +25572,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                       }}
                     >
                       {item.label}
-                      {item.locked && (
-                        <span style={{ fontSize: 10, color: "#9CA3AF" }}>
-                          🔒 필수
-                        </span>
-                      )}
                     </div>
                     <div
                       style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}
@@ -25586,7 +25581,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   </div>
                   <button
                     onClick={() => {
-                      if (item.locked) return;
+                      
                       setNotifSettings((prev) => ({
                         ...prev,
                         [item.key]: !prev[item.key as keyof typeof prev],
