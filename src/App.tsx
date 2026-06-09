@@ -326,8 +326,7 @@ function computeNetPay(input: any) {
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
   const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
-    const incomeTax = calcIncomeTax(totalGross, Number(memberInfo?.dependents_count) || 1, Number(memberInfo?.children_count) || 0);
-(totalGross, Number(memberInfo?.dependents_count) || 1, Number(memberInfo?.children_count) || 0);
+    const incomeTax = calcIncomeTax
   const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
   const totalDeduction = nationalPension + healthInsurance + longTermCare + employmentInsurance + incomeTax + localTax + unionFee;
