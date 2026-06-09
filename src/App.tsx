@@ -20203,6 +20203,16 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                             .update({ status: "수락" })
                             .eq("id", req.id);
                           if (error) { showToast("처리 실패: " + error.message, "error"); return; }
+                          fetch("/.netlify/functions/send-push", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              title: "✅ 교체 수락",
+                              message: `${user?.name}님이 교체를 수락했어요`,
+                              type: "swap",
+                              to: String(req.a_employee_number),
+                            }),
+                          }).catch(() => {});
                           showToast("교체를 수락했어요", "success");
                           loadReceivedSwaps();
                           loadMySwaps();
@@ -20218,6 +20228,16 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                             .update({ status: "거절" })
                             .eq("id", req.id);
                           if (error) { showToast("처리 실패: " + error.message, "error"); return; }
+                          fetch("/.netlify/functions/send-push", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              title: "✕ 교체 거절",
+                              message: `${user?.name}님이 교체를 거절했어요`,
+                              type: "swap",
+                              to: String(req.a_employee_number),
+                            }),
+                          }).catch(() => {});
                           showToast("교체를 거절했어요", "info");
                           loadReceivedSwaps();
                           loadMySwaps();
