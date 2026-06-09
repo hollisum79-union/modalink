@@ -16705,12 +16705,7 @@ function MySettingsScreen({
                     gap: 6,
                   }}
                 >
-                  {item.label}
-                  {item.locked && (
-                    <span style={{ fontSize: 10, color: "#9CA3AF" }}>
-                      🔒 필수
-                    </span>
-                  )}
+              {item.label}
                 </div>
                 <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>
                   {item.desc}
