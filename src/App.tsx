@@ -326,7 +326,7 @@ function computeNetPay(input: any) {
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
   const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
-    const incomeTax = calcIncomeTax(totalGross, 1, 0);
+    con  const incomeTax = calcIncomeTax(totalGross, Number(memberInfo?.dependents_count) || 1, Number(memberInfo?.children_count) || 0);
   const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
   const totalDeduction = nationalPension + healthInsurance + longTermCare + employmentInsurance + incomeTax + localTax + unionFee;
@@ -14837,6 +14837,9 @@ function MySettingsScreen({
   const [showAddPayStepInfo, setShowAddPayStepInfo] = useState(false);
   const [editJoinDate, setEditJoinDate] = useState(user?.join_date || "");
   const [editBirthYear, setEditBirthYear] = useState(user?.birth_year || "");
+  const [editDependents, setEditDependents] = useState(user?.dependents_count || 1);
+  const [editChildren, setEditChildren] = useState(user?.children_count || 0);
+  const [depConsent, setDepConsent] = useState(user?.dependents_consent ? true : null);
   const [showWorkInfo, setShowWorkInfo] = useState(false);
   const [editPayStepNextDate, setEditPayStepNextDate] = useState(
     user?.pay_step_next_date || ""
@@ -14907,7 +14910,10 @@ function MySettingsScreen({
           setEditPayStepNextDate(data.pay_step_next_date);
         if (data.join_year) setEditJoinYear(data.join_year);
         if (data.tongsang_wage != null) setEditTongsangWage(data.tongsang_wage);
-        if (data.birth_year) setEditBirthYear(data.birth_year);
+                if (data.birth_year) setEditBirthYear(data.birth_year);
+        if (data.dependents_count != null) setEditDependents(data.dependents_count);
+        if (data.children_count != null) setEditChildren(data.children_count);
+        if (data.dependents_consent) setDepConsent(true);
         if (data.phone) setEditPhone(data.phone);
 
         // 🤖 자동 호봉 승급 체크
@@ -16465,6 +16471,51 @@ function MySettingsScreen({
             </div>
           </div>
 
+                  <div style={{ marginTop: 12 }}>
+            <div style={{ height: 1, background: "#E5E7EB", margin: "4px 0 12px" }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 10 }}>
+              👨‍👩‍👧 부양가족 (소득세 정확 계산용 · 선택)
+            </div>
+            {depConsent !== true && (
+              <>
+                <button
+                  onClick={() => {
+                    if (window.confirm("부양가족 정보를 입력하면 소득세가 더 정확히 계산됩니다.\n\n- 수집 항목: 공제대상 가족 수, 8~20세 자녀 수\n- 본인 소득세 계산에만 사용됩니다\n- 입력은 선택이며, 미입력 시 1명 기준으로 계산됩니다\n\n동의하시겠습니까?")) {
+                      setDepConsent(true);
+                    }
+                  }}
+                  style={{ width: "100%", padding: "10px 8px", borderRadius: 10, border: "1.5px dashed #C7D2FE", background: "#F8F7FF", color: "#9CA3AF", fontSize: 11, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}
+                >
+                  🔒 동의 후 입력
+                </button>
+                <div style={{ fontSize: 10, color: "#B45309", background: "#FEF9C3", borderRadius: 8, padding: "7px 9px", marginTop: 8, lineHeight: 1.5 }}>
+                  미입력 시 본인 1명 기준으로 계산되어 실제 급여명세서와 차이가 날 수 있습니다.
+                </div>
+              </>
+            )}
+            {depConsent === true && (
+              <>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>전체 공제대상 가족 수 (본인 포함)</div>
+                    <select value={editDependents} onChange={(e) => setEditDependents(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #4F46E5", fontSize: 12, outline: "none", background: "#fff", color: "#1F2937", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}>
+                      {[1,2,3,4,5,6,7,8,9,10,11].map((n) => (<option key={n} value={n}>{n}명</option>))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>8~20세 자녀 수</div>
+                    <select value={editChildren} onChange={(e) => setEditChildren(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #4F46E5", fontSize: 12, outline: "none", background: "#fff", color: "#1F2937", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}>
+                      {[0,1,2,3,4,5].map((n) => (<option key={n} value={n}>{n}명</option>))}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 5, lineHeight: 1.5 }}>
+                  💡 급여명세서의 부양가족 수와 동일하게 입력하세요. 본인·배우자도 각각 1명으로 셉니다.
+                </div>
+              </>
+            )}
+          </div>
+
           {workSaved && (
             <div
               style={{
@@ -16523,7 +16574,10 @@ function MySettingsScreen({
                     join_year: editJoinYear || null,
                     tongsang_wage: editTongsangWage,
                     tongsang_hobong: editTongsangWage != null ? (editPayStep || null) : null,
-                    birth_year: editBirthYear || null,
+                                        birth_year: editBirthYear || null,
+                    dependents_count: depConsent === true ? editDependents : null,
+                    children_count: depConsent === true ? editChildren : null,
+                    dependents_consent: depConsent === true,
                   })
                   .eq("employee_number", user.employee_number)
                   .select();
@@ -17658,7 +17712,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
   const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
-    const incomeTax = calcIncomeTax(totalGross, 1, 0);
+  const incomeTax = calcIncomeTax(totalGross, Number(memberInfo?.dependents_count) || 1, Number(memberInfo?.children_count) || 0);
   const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
 
@@ -17905,7 +17959,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   { label: "건강보험", rate: `${((dedRates?.health_insurance ?? 0.03545) * 100).toFixed(3).replace(/\.?0+$/, "")}%`, base: "통상임금 기준", color: "#10B981" },
                   { label: "장기요양보험", rate: `건강보험료 × ${((dedRates?.long_term_care ?? 0.1295) * 100).toFixed(2).replace(/\.?0+$/, "")}%`, base: "건강보험료 기준", color: "#8B5CF6" },
                   { label: "고용보험", rate: `${((dedRates?.employment_insurance ?? 0.009) * 100).toFixed(3).replace(/\.?0+$/, "")}%`, base: "통상임금 기준", color: "#F59E0B" },
-                  { label: "소득세", rate: "약 2%", base: "부양가족 1인 기준 추정", color: "#EF4444" },
+                                    { label: "소득세", rate: "간이세액표", base: "부양가족 수 반영 · 추정치", color: "#EF4444" },
                   { label: "지방소득세", rate: `소득세 × ${((dedRates?.local_tax ?? 0.1) * 100).toFixed(1).replace(/\.?0+$/, "")}%`, base: "소득세 기준", color: "#EC4899" },
                   { label: "조합비", rate: `기본급 × ${((dedRates?.union_fee ?? 0.012) * 100).toFixed(2).replace(/\.?0+$/, "")}%`, base: "기본급 기준", color: "#6366F1" },
                 ].map((item) => (
@@ -18686,7 +18740,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   { label: `건강보험 (${((r.health_insurance ?? 0.03545) * 100).toFixed(3).replace(/\.?0+$/, "")}%)`, amount: healthInsurance },
                   { label: `장기요양보험 (건보료×${((r.long_term_care ?? 0.1295) * 100).toFixed(2).replace(/\.?0+$/, "")}%)`, amount: longTermCare },
                   { label: `고용보험 (${((r.employment_insurance ?? 0.009) * 100).toFixed(3).replace(/\.?0+$/, "")}%)`, amount: employmentInsurance },
-                  { label: "소득세 (약 2%, 부양1인 기준)", amount: incomeTax },
+                                  { label: "소득세 (약 2%, 부양1인 기준)", amount: incomeTax },
                   { label: `지방소득세 (소득세×${((r.local_tax ?? 0.1) * 100).toFixed(1).replace(/\.?0+$/, "")}%)`, amount: localTax },
                   { label: `조합비 (기본급×${((r.union_fee ?? 0.012) * 100).toFixed(2).replace(/\.?0+$/, "")}%)`, amount: unionFee },
                 ].map((row, i) => (
