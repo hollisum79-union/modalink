@@ -214,7 +214,11 @@ function computeNetPay(input: any) {
 
   const row = salaryTable.find((r: any) => r.hobong === hobong);
   const basicSalary = row ? (row[`grade_${grade}`] ?? null) : null;
-  if (!basicSalary) return null;
+    if (!basicSalary) return null;
+
+  const g7s1Row = salaryTable.find((r: any) => r.hobong === 1);
+  const g7s1 = g7s1Row ? (Number(g7s1Row["grade_7"]) || 0) : 0;
+  const bojeonGasanPay = memberInfo?.bojeon_gasan ? Math.round(g7s1 * 0.04) : 0;
 
   const longService = hobong >= 25 ? 130000 : hobong >= 20 ? 110000 : hobong >= 15 ? 80000 : hobong >= 10 ? 60000 : hobong >= 5 ? 50000 : 0;
   const gradeSupport = (grade === 6 || grade === 7) ? 30000 : 0;
@@ -235,7 +239,7 @@ function computeNetPay(input: any) {
 
     return manualInputs[item] ?? 0;
   };
-  const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
+    const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0) + bojeonGasanPay;
 
   const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
@@ -17314,7 +17318,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   );
   const [salaryTable, setSalaryTable] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [workType, setWorkType] = React.useState<string>("");
+   const [workType, setWorkType] = React.useState<string>("");
+  const [bojeonGasan, setBojeonGasan] = React.useState(false);
   const [nightSettings, setNightSettings] = React.useState<any[]>([]);
   const [saveMsg, setSaveMsg] = React.useState<string>("");
 
@@ -17430,7 +17435,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         setMemberInfo(meRes.data);
         if (meRes.data.grade) setSelectedGrade(Number(meRes.data.grade));
         if (meRes.data.pay_step) setSelectedHobong(Number(meRes.data.pay_step));
-      }
+            if (meRes.data.bojeon_gasan) setBojeonGasan(true);
+            }
       if (leaveRes.data) setLastMonthLeaves(leaveRes.data);
       if (hfRes.data) setHfRecords(hfRes.data);
           if (rotRes.data) setRotationData(rotRes.data);
@@ -17595,10 +17601,13 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     }
   };
 
-  const totalAllowance = Object.keys(checkedItems).reduce(
-    (sum, item) => sum + getAllowanceAmount(item),
-    0
-  );
+        const g7s1Row = salaryTable.find((r: any) => r.hobong === 1);
+      const g7s1 = g7s1Row ? (Number(g7s1Row["grade_7"]) || 0) : 0;
+      const bojeonGasanPay = bojeonGasan ? Math.round(g7s1 * 0.04) : 0;
+      const totalAllowance = Object.keys(checkedItems).reduce(
+          (sum, item) => sum + getAllowanceAmount(item),
+        0
+      ) + bojeonGasanPay;
 
   const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
@@ -17784,7 +17793,56 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 {w}
               </option>
             ))}
-      </select>
+                </select>
+          <div
+            style={{
+              marginTop: 8,
+              padding: 10,
+              borderRadius: 8,
+              background: "#EEF2FF",
+              border: "1px solid #C7D2FE",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#3730A3" }}>
+              ⓘ 가산 안내 (7급1호봉 기본급의 4%)
+            </div>
+            <div style={{ fontSize: 11, color: "#4F46E5", marginTop: 4, lineHeight: 1.5 }}>
+              1~4호선: 2000년 이후 입사자<br />
+              5~8호선: 2014년 이후 입사자<br />
+              ('17.12.31. 이후 입사자)
+            </div>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#3730A3",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={bojeonGasan}
+                onChange={async (e) => {
+                  const v = e.target.checked;
+                  setBojeonGasan(v);
+                  if (user?.employee_number) {
+                    await supabase
+                      .from("members")
+                      .update({ bojeon_gasan: v })
+                      .eq("employee_number", user.employee_number);
+                    setMemberInfo((prev: any) =>
+                      prev ? { ...prev, bojeon_gasan: v } : prev
+                    );
+                  }
+                }}
+              />
+              나는 가산 대상자입니다 (+4%)
+            </label>
+          </div>
         </>
       ),
     },
