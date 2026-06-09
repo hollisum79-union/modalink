@@ -1040,6 +1040,17 @@ function BoardDetail({ post, onBack, user }) {
               post_title: post.title,
               actor_name: user?.name,
             });
+            fetch("/.netlify/functions/send-push", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: "💬 새 댓글",
+                message: `${user?.name}님이 회원님 글에 댓글을 남겼어요`,
+                type: "comment",
+                url: "/",
+                to: String(post.author_emp),
+              }),
+            }).catch(() => {});
           }
         }
       });
@@ -3283,6 +3294,17 @@ function InquiryDetail({ inquiry, onBack, user }) {
             .update({ status: "답변완료" })
             .eq("id", inquiry.id)
             .then(() => {});
+          fetch("/.netlify/functions/send-push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: "💬 문의 답변",
+              message: "문의하신 글에 답변이 달렸어요",
+              type: "inquiry",
+              url: "/",
+              to: String(inquiry.author_emp_id),
+            }),
+          }).catch(() => {});
         }
       });
   };
