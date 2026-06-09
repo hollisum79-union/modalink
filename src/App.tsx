@@ -17732,10 +17732,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
     const grossBase = (basicSalary ?? 0) + totalAllowance;
   const totalGross = grossBase + nightPay + overtimePay + holidayFillPay + supportPay;
-
-    const grossBase = (basicSalary ?? 0) + totalAllowance;
-  const totalGross = grossBase + nightPay + holidayFillPay + supportPay;
-  const r = dedRates || {};
+      const r = dedRates || {};
   const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
