@@ -16727,7 +16727,7 @@ function MySettingsScreen({
                   height: 24,
                   borderRadius: 12,
                   border: "none",
-                  cursor: item.locked ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                   background: notifSettings[item.key] ? "#4F46E5" : "#E5E7EB",
                   position: "relative",
                   transition: "background 0.2s",
