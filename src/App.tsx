@@ -16683,7 +16683,7 @@ function MySettingsScreen({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F9FAFB", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
                 <span style={{ fontSize: 13, color: "#6B7280" }}>받는 중인 알림</span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: "#4F46E5" }}>
-                  {["urgentNotice", "agreement", "board", "vote", "inquiry"].filter((k) => notifSettings[k]).length}개 켜짐
+                  {["notify_urgent", "notify_notice", "notify_swap", "notify_vote"].filter((k) => notifSettings[k]).length}개 켜짐
                 </span>
               </div>
               <button
