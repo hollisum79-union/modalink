@@ -24768,8 +24768,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
-        supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
-      ]);
+         supabase.from("members").select("employee_number, work_group, start_position, schedule_total, bojeon_gasan"),  
+     ]);
       console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       let homeNightCount = 0;
       const sb = sbRes.data;
