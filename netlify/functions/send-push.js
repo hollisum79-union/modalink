@@ -19,6 +19,7 @@ exports.handler = async (event) => {
 
     let query = supabase.from("push_subscriptions").select("*");
     if (body.to) query = query.eq("employee_number", String(body.to));
+    if (body.from) query = query.neq("employee_number", String(body.from));
     if (type === "notice") query = query.eq("notify_notice", true);
     else if (type === "swap") query = query.eq("notify_swap", true);
     else if (type === "vote") query = query.eq("notify_vote", true);
