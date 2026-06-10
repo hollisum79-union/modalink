@@ -20,10 +20,19 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "missing" }) };
     }
 
-    const supabase = createClient(
-      "https://svbvawioldgundtpogkc.supabase.co",
-      process.env.SUPABASE_SERVICE_ROLE
-    );
+    const key = process.env.SUPABASE_SERVICE_ROLE;
+    if (!key) {
+      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "no_key" }) };
+    }
+    let supabase;
+    try {
+      supabase = createClient(
+        "https://svbvawioldgundtpogkc.supabase.co",
+        key
+      );
+    } catch (ce) {
+      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "create_fail: " + String(ce && ce.message ? ce.message : ce) }) };
+    }
 
     const { data: member, error } = await supabase
       .from("members")
