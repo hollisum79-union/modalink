@@ -154,6 +154,55 @@ function calcSupportOvertimeHours(diaNo: any, shift: string, dateStr: string, di
   if (e > END) ot += e - END;
   return ot;
 }
+function calcIncomeTax(monthlyPay: number, familyCount: number, childCount: number) {
+  const w = Math.max(Number(monthlyPay) || 0, 0);
+  const fam = Math.max(Number(familyCount) || 1, 1);
+  const child = Math.max(Number(childCount) || 0, 0);
+  if (w <= 0) return 0;
+  const y = w * 12;
+  const earnDed = y <= 5000000 ? y * 0.7
+    : y <= 15000000 ? 3500000 + (y - 5000000) * 0.4
+    : y <= 45000000 ? 7500000 + (y - 15000000) * 0.15
+    : y <= 100000000 ? 12000000 + (y - 45000000) * 0.05
+    : 14750000 + (y - 100000000) * 0.02;
+  const earnInc = y - earnDed;
+  let sp: number;
+  if (fam === 1) {
+    sp = y <= 30000000 ? 3100000 + y * 0.04
+      : y <= 45000000 ? 3100000 + y * 0.04 - (y - 30000000) * 0.05
+      : y <= 70000000 ? 3100000 + y * 0.015
+      : 3100000 + y * 0.005;
+  } else if (fam === 2) {
+    sp = y <= 30000000 ? 3600000 + y * 0.04
+      : y <= 45000000 ? 3600000 + y * 0.04 - (y - 30000000) * 0.05
+      : y <= 70000000 ? 3600000 + y * 0.02
+      : 3600000 + y * 0.01;
+  } else {
+    const ex = y > 40000000 ? (y - 40000000) * 0.04 : 0;
+    sp = y <= 30000000 ? 5000000 + y * 0.07 + ex
+      : y <= 45000000 ? 5000000 + y * 0.07 - (y - 30000000) * 0.05
+      : y <= 70000000 ? 5000000 + y * 0.05
+      : 5000000 + y * 0.03;
+  }
+  const pension = Math.min(w, 6170000) * 0.045 * 12;
+  let base = earnInc - 1500000 * fam - sp - pension;
+  if (base < 0) base = 0;
+  const tax = base <= 14000000 ? base * 0.06
+    : base <= 50000000 ? 840000 + (base - 14000000) * 0.15
+    : base <= 88000000 ? 6240000 + (base - 50000000) * 0.24
+    : base <= 150000000 ? 15360000 + (base - 88000000) * 0.35
+    : 37060000 + (base - 150000000) * 0.38;
+  let credit = tax <= 1300000 ? tax * 0.55 : 715000 + (tax - 1300000) * 0.30;
+  const limit = y <= 33000000 ? 740000
+    : y <= 70000000 ? Math.max(740000 - (y - 33000000) * 0.008, 660000)
+    : Math.max(660000 - (y - 70000000) * 0.5, 500000);
+  credit = Math.min(credit, limit);
+  const yearTax = Math.max(tax - credit, 0);
+  let monthTax = yearTax / 12;
+  const childCredit = child === 0 ? 0 : child === 1 ? 20830 : child === 2 ? 45830 : 45830 + (child - 2) * 33330;
+  monthTax = Math.max(monthTax - childCredit, 0);
+  return Math.round(monthTax / 10) * 10;
+}
 function computeNetPay(input: any) {
   const {
     grade, hobong, workType, checkedItems = {}, manualInputs = {},
@@ -188,10 +237,9 @@ function computeNetPay(input: any) {
 
     return manualInputs[item] ?? 0;
   };
-  const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
-
+    const totalAllowance = Object.keys(checkedItems).reduce((s, item) => s + allowanceAmount(item), 0);
   const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
-  const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
+const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   const isKyobun = memberInfo?.work_type === "교번" && (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
   let kyobunNightHours = 0;
@@ -273,13 +321,14 @@ function computeNetPay(input: any) {
   const over8s = Math.max(supportOtHours - 8, 0);
   const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
 
-  const totalGross = tongsangWage + nightPay + holidayFillPay + supportPay;
+    const grossBase = (basicSalary ?? 0) + totalAllowance;
+  const totalGross = grossBase + nightPay + holidayFillPay + supportPay;
   const r = dedRates || {};
   const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
   const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
-  const incomeTax = Math.round(totalGross * (r.income_tax ?? 0.02));
+  const incomeTax = calcIncomeTax(totalGross, Number(memberInfo?.dependents_count) || 1, Number(memberInfo?.children_count) || 0);
   const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
   const totalDeduction = nationalPension + healthInsurance + longTermCare + employmentInsurance + incomeTax + localTax + unionFee;
@@ -759,14 +808,13 @@ function Icon({ path, size = 24, color = "#4F46E5", strokeWidth = 1.5 }) {
 }
 
 // ── 자유게시판 글쓰기 ──
-function BoardWrite({ onBack, onSubmit, user }) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [category, setCategory] = useState("자유");
-  const [imageUrl, setImageUrl] = useState("");
-  const [imagePath, setImagePath] = useState("");
+function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
+  const [title, setTitle] = useState(editPost?.title || "");
+  const [content, setContent] = useState(editPost?.content || "");
+  const [category, setCategory] = useState(editPost?.category || "자유");
+  const [imageUrl, setImageUrl] = useState(editPost?.image_url || "");
+  const [imagePath, setImagePath] = useState(editPost?.image_path || "");
   const [uploading, setUploading] = useState(false);
-
   const categories = [
     { name: "자유", color: "#4F46E5", bg: "#EEF0FF" },
     { name: "경조사", color: "#EF4444", bg: "#FEE2E2" },
@@ -792,9 +840,9 @@ function BoardWrite({ onBack, onSubmit, user }) {
     setUploading(false);
   };
 
-  const handleSubmit = () => {
+    const handleSubmit = () => {
     if (!title.trim() || (!content.trim() && !imageUrl)) return;
-    onSubmit({ title, content, category, image_url: imageUrl, image_path: imagePath });
+    onSubmit({ id: editPost?.id, title, content, category, image_url: imageUrl, image_path: imagePath });
   };
 
   return (
@@ -829,8 +877,8 @@ function BoardWrite({ onBack, onSubmit, user }) {
           >
             <Icon path="M15 19l-7-7 7-7" color="#1F2937" size={24} />
           </button>
-          <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
-            글쓰기
+                    <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
+            {editPost ? "글 수정" : "글쓰기"}
           </span>
         </div>
         <button
@@ -846,8 +894,8 @@ function BoardWrite({ onBack, onSubmit, user }) {
             cursor: "pointer",
             fontFamily: "inherit",
           }}
-        >
-          등록
+                >
+          {editPost ? "수정 완료" : "등록"}
         </button>
       </div>
       <div style={{ padding: "20px 16px" }}>
@@ -988,7 +1036,7 @@ function BoardWrite({ onBack, onSubmit, user }) {
 }
 
 // ── 자유게시판 상세 ──
-function BoardDetail({ post, onBack, user }) {
+function BoardDetail({ post, onBack, user, onEdit }: any) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   useEffect(() => {
@@ -1135,11 +1183,27 @@ const handleDeletePost = async () => {
        <span style={{ fontSize: 17, fontWeight: 700, color: "#1F2937" }}>
           자유게시판
         </span>
+                {canDelete && (
+          <button
+            onClick={() => onEdit && onEdit(post)}
+            style={{
+              marginLeft: "auto",
+              background: "none",
+              border: "none",
+              color: "#4F46E5",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            수정
+          </button>
+        )}
         {canDelete && (
           <button
             onClick={handleDeletePost}
             style={{
-              marginLeft: "auto",
               background: "none",
               border: "none",
               color: "#EF4444",
@@ -2113,54 +2177,50 @@ function LoginScreen({ onLogin, onGoRegister }) {
     }
     setLoading(true);
     setError("");
-    // 실제 members 테이블에서 로그인 처리 (사번=employee_number 기준)
-    const { data: foundMember } = await supabase
-      .from("members")
-      .select("*")
-      .eq("employee_number", empId.trim())
-      .eq("name", name.trim())
-      .maybeSingle();
-
-    const data = foundMember
-      ? {
-          ...foundMember,
-          emp_id: foundMember.employee_number,
-          // status 매핑: '대기'는 pending, 차단은 blocked, 그 외('명단'/'승인')는 로그인 허용
-          status:
-            foundMember.status === "대기"
-              ? "pending"
-              : foundMember.status === "차단"
-              ? "blocked"
-              : "approved",
-        }
-      : null;
+    let json;
+    try {
+      const res = await fetch("/.netlify/functions/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_number: empId.trim(),
+          name: name.trim(),
+          password,
+        }),
+      });
+      json = await res.json();
+    } catch (e) {
+      setLoading(false);
+      setError("로그인 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
     setLoading(false);
 
-    if (!data) {
+    if (json.result === "not_found") {
       setError(
         "이름 또는 사번이 올바르지 않습니다.\n조합원 명단을 확인해주세요."
       );
       return;
     }
-    if (data.status === "pending") {
+    if (json.result === "pending") {
       setError(
         "가입 승인 대기 중입니다.\n관리자 승인 후 임시 비밀번호를 받아 로그인하세요."
       );
       return;
     }
-    if (data.status === "blocked") {
+    if (json.result === "blocked") {
       localStorage.removeItem("union_user");
       setError("계정이 차단되었습니다. 지회로 문의해주세요.");
       return;
     }
-    if (!data.password) {
+    if (json.result === "no_password") {
       setError(
         "비밀번호가 설정되지 않았습니다.\n관리자에게 임시 비밀번호 발급을 요청하세요."
       );
       return;
     }
 
-    if (data.password !== password) {
+    if (json.result === "wrong_password") {
       const curInfo = lockRaw ? { ...JSON.parse(lockRaw) } : { count: 0 };
       const newCount = (curInfo.count || 0) + 1;
       if (newCount >= MAX_FAIL) {
@@ -2186,6 +2246,18 @@ function LoginScreen({ onLogin, onGoRegister }) {
       return;
     }
 
+    if (json.result !== "ok" || !json.member) {
+      setError("로그인 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
+
+    const data = {
+      ...json.member,
+      emp_id: json.member.employee_number,
+      status: "approved",
+      is_temp_password: json.is_temp_password,
+    };
+
     // 성공 → 실패 기록 초기화
     localStorage.removeItem(lockKey);
     if (data.is_temp_password) {
@@ -2207,17 +2279,35 @@ function LoginScreen({ onLogin, onGoRegister }) {
       setPwChangeError("비밀번호가 일치하지 않습니다.");
       return;
     }
-    if (newPw === pendingUser.password) {
+   if (newPw === password) {
       setPwChangeError("임시 비밀번호와 다른 비밀번호를 설정해주세요.");
       return;
     }
     setLoading(true);
-    await supabase
-      .from("members")
-      .update({ password: newPw, is_temp_password: false })
-      .eq("employee_number", pendingUser.emp_id);
+    let json;
+    try {
+      const res = await fetch("/.netlify/functions/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_number: pendingUser.emp_id,
+          name: pendingUser.name,
+          current_password: password,
+          new_password: newPw,
+        }),
+      });
+      json = await res.json();
+    } catch (e) {
+      setLoading(false);
+      setPwChangeError("변경 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
     setLoading(false);
-    onLogin({ ...pendingUser, password: newPw, is_temp_password: false });
+    if (json.result !== "ok") {
+      setPwChangeError("변경에 실패했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
+    onLogin({ ...pendingUser, ...(json.member || {}), is_temp_password: false });
   };
 
   // 비밀번호 변경 화면
@@ -6449,8 +6539,40 @@ const [showAddCat, setShowAddCat] = useState(false);
     setExtraCats((prev) => [...prev, newCat]);
     setNewCatName("");
     setShowAddCat(false);
-    alert("분류가 추가되었습니다.");
+        alert("분류가 추가되었습니다.");
   };
+
+  const handleRenameCategory = async (cat: any) => {
+    const newName = prompt("새 분류 이름을 입력하세요.", cat.label);
+    if (newName === null) return;
+    if (!newName.trim()) { alert("이름을 입력해주세요."); return; }
+    const { error } = await supabase
+      .from("archive_categories")
+      .update({ label: newName.trim() })
+      .eq("id", cat.id);
+    if (error) { alert("이름 변경 실패: " + error.message); return; }
+    setExtraCats((prev) =>
+      prev.map((c) => (c.id === cat.id ? { ...c, label: newName.trim() } : c))
+    );
+        alert("이름이 변경되었습니다.");
+  };
+
+  const handleDeleteCategory = async (cat: any) => {
+    const count = dbFiles.filter((f) => f.category_id === cat.id).length;
+    if (count > 0) {
+      alert("이 분류 안에 파일이 " + count + "개 있습니다.\n파일을 다른 분류로 옮기거나 삭제한 뒤에 분류를 지울 수 있어요.");
+      return;
+    }
+    if (!confirm("'" + cat.label + "' 분류를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.")) return;
+    const { error } = await supabase
+      .from("archive_categories")
+      .delete()
+      .eq("id", cat.id);
+    if (error) { alert("삭제 실패: " + error.message); return; }
+    setExtraCats((prev) => prev.filter((c) => c.id !== cat.id));
+    alert("분류가 삭제되었습니다.");
+  };
+
   // 내 즐겨찾기 목록 불러오기
   const loadFavorites = async () => {
     if (!user?.employee_number) return;
@@ -6558,20 +6680,21 @@ const [showAddCat, setShowAddCat] = useState(false);
       const path = upCat + "/" + safeName;
       const { error: upErr } = await supabase.storage.from("archive").upload(path, upFile);
       if (upErr) throw upErr;
-      const catLabel = archiveCategories.find((c) => c.id === upCat)?.label || "";
+      const catLabel = allCats.find((c) => c.id === upCat)?.label || "";
       const sizeMB = (upFile.size / 1024 / 1024).toFixed(1) + "MB";
-      const { error: dbErr } = await supabase.from("archive_files").insert({
+            const { data: inserted, error: dbErr } = await supabase.from("archive_files").insert({
         name: upName.trim(),
         category_id: upCat,
         category_label: catLabel,
         path: path,
         size: sizeMB,
         description: upDesc.trim() || null,
-      });
+      }).select();
       if (dbErr) throw dbErr;
       alert("자료가 등록되었습니다.");
-      const { data } = await supabase.from("archive_files").select("*").order("created_at", { ascending: false });
-      if (data) setDbFiles(data);
+      if (inserted && inserted[0]) {
+        setDbFiles((prev) => [inserted[0], ...prev]);
+      }
       setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
       setShowUpload(false);
    } catch (err) {
@@ -6810,7 +6933,7 @@ const [showAddCat, setShowAddCat] = useState(false);
               </div>
             ) : (
               searchResults.map((file, i) => {
-                const cat = archiveCategories.find(
+                const cat = allCats.find(
                   (c) => c.id === file.category_id
                 );
                 return (
@@ -6914,7 +7037,7 @@ const [showAddCat, setShowAddCat] = useState(false);
             {dbFiles
               .filter((f) => favorites.includes(String(f.id)))
               .map((file, i) => {
-                const cat = archiveCategories.find((c) => c.id === file.category_id);
+                const cat = allCats.find((c) => c.id === file.category_id);
                 return (
                   <div
                     key={"fav" + i}
@@ -6957,7 +7080,7 @@ const [showAddCat, setShowAddCat] = useState(false);
         )}
         {!searchQuery.trim() &&
           (!selectedCat ? (
-            archiveCategories.map((cat) => {
+            allCats.map((cat) => {
               const fileCount = dbFiles.filter((f) => f.category_id === cat.id).length;
               return (
                 <div
@@ -7002,9 +7125,26 @@ const [showAddCat, setShowAddCat] = useState(false);
                     <div
                       style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}
                     >
-                      PDF {fileCount}개
+                                            PDF {fileCount}개
                     </div>
                   </div>
+                  {cat.id.startsWith("cat_") && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRenameCategory(cat); }}
+                      style={{ border: "none", background: "#F3F4F6", color: "#4F46E5", fontSize: 12, fontWeight: 700, padding: "6px 10px", borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
+                    >
+                                           이름변경
+                    </button>
+                  )}
+                  {cat.id.startsWith("cat_") && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat); }}
+                      style={{ border: "none", background: "#FEE2E2", color: "#EF4444", fontSize: 12, fontWeight: 700, padding: "6px 10px", borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
+                    >
+                      삭제
+                    </button>
+                  )}
+
                   <Icon path="M9 5l7 7-7 7" color="#D1D5DB" size={18} />
                 </div>
               );
@@ -7220,7 +7360,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                 background: "#fff",
               }}
             >
-              {archiveCategories.map((c) => (
+              {allCats.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
@@ -8927,13 +9067,11 @@ function MemberManageScreen() {
           }
         });
     } else {
-      supabase
+     supabase
         .from("members")
         .insert([
           {
             ...payload,
-            password: "union0000",
-            is_temp_password: true,
             status: "명단",
             is_admin: false,
             is_app_user: false,
@@ -8943,8 +9081,20 @@ function MemberManageScreen() {
           if (error) {
             alert("추가 실패: " + error.message);
           } else {
-            setForm(null);
-            loadMembers();
+            fetch("/.netlify/functions/set-credential", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                employee_number: payload.employee_number,
+                password: "union0000",
+                is_temp_password: true,
+              }),
+            })
+              .then((r) => r.json())
+              .then(() => {
+                setForm(null);
+                loadMembers();
+              });
           }
         });
     }
@@ -8977,13 +9127,19 @@ function MemberManageScreen() {
       )
     )
       return;
-    supabase
-      .from("members")
-      .update({ password: "union0000", is_temp_password: true })
-      .eq("id", m.id)
-      .then(({ error }) => {
-        if (error) {
-          alert("초기화 실패: " + error.message);
+    fetch("/.netlify/functions/set-credential", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employee_number: m.employee_number,
+        password: "union0000",
+        is_temp_password: true,
+      }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.result !== "ok") {
+          alert("초기화 실패: " + (j.detail || j.result));
         } else {
           alert(
             `${m.name} 조합원의 비밀번호가 union0000으로 초기화되었습니다.`
@@ -10224,6 +10380,8 @@ useEffect(() => {
 
   const handleApprove = (id) => {
     const tempPw = generateTempPassword();
+    const target = pendingMembers.find((m) => m.id === id);
+   const emp = target && ((target as any).employee_number || (target as any).emp_id || (target as any).id);
     setTempPasswords((prev) => ({ ...prev, [id]: tempPw }));
     setPendingMembers((prev) =>
       prev.map((m) =>
@@ -10231,18 +10389,26 @@ useEffect(() => {
           ? {
               ...m,
               status: "approved",
-              password: tempPw,
               is_temp_password: true,
             }
           : m
       )
     );
-    // Supabase 업데이트
     supabase
       .from("members")
-      .update({ status: "approved", password: tempPw, is_temp_password: true })
+      .update({ status: "approved" })
       .eq("id", id)
-      .then(() => {});
+      .then(() => {
+        fetch("/.netlify/functions/set-credential", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employee_number: emp,
+            password: tempPw,
+            is_temp_password: true,
+          }),
+        });
+      });
   };
   const handleBlock = (id) => {
     setPendingMembers((prev) =>
@@ -14790,6 +14956,9 @@ function MySettingsScreen({
   const [showAddPayStepInfo, setShowAddPayStepInfo] = useState(false);
   const [editJoinDate, setEditJoinDate] = useState(user?.join_date || "");
   const [editBirthYear, setEditBirthYear] = useState(user?.birth_year || "");
+  const [editDependents, setEditDependents] = useState(user?.dependents_count || 1);
+  const [editChildren, setEditChildren] = useState(user?.children_count || 0);
+  const [depConsent, setDepConsent] = useState(user?.dependents_consent ? true : null);
   const [showWorkInfo, setShowWorkInfo] = useState(false);
   const [editPayStepNextDate, setEditPayStepNextDate] = useState(
     user?.pay_step_next_date || ""
@@ -14860,7 +15029,10 @@ function MySettingsScreen({
           setEditPayStepNextDate(data.pay_step_next_date);
         if (data.join_year) setEditJoinYear(data.join_year);
         if (data.tongsang_wage != null) setEditTongsangWage(data.tongsang_wage);
-        if (data.birth_year) setEditBirthYear(data.birth_year);
+                if (data.birth_year) setEditBirthYear(data.birth_year);
+        if (data.dependents_count != null) setEditDependents(data.dependents_count);
+        if (data.children_count != null) setEditChildren(data.children_count);
+        if (data.dependents_consent) setDepConsent(true);
         if (data.phone) setEditPhone(data.phone);
 
         // 🤖 자동 호봉 승급 체크
@@ -16418,6 +16590,51 @@ function MySettingsScreen({
             </div>
           </div>
 
+                  <div style={{ marginTop: 12 }}>
+            <div style={{ height: 1, background: "#E5E7EB", margin: "4px 0 12px" }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 10 }}>
+              👨‍👩‍👧 부양가족 (소득세 정확 계산용 · 선택)
+            </div>
+            {depConsent !== true && (
+              <>
+                <button
+                  onClick={() => {
+                    if (window.confirm("부양가족 정보를 입력하면 소득세가 더 정확히 계산됩니다.\n\n- 수집 항목: 공제대상 가족 수, 8~20세 자녀 수\n- 본인 소득세 계산에만 사용됩니다\n- 입력은 선택이며, 미입력 시 1명 기준으로 계산됩니다\n\n동의하시겠습니까?")) {
+                      setDepConsent(true);
+                    }
+                  }}
+                  style={{ width: "100%", padding: "10px 8px", borderRadius: 10, border: "1.5px dashed #C7D2FE", background: "#F8F7FF", color: "#9CA3AF", fontSize: 11, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}
+                >
+                  🔒 동의 후 입력
+                </button>
+                <div style={{ fontSize: 10, color: "#B45309", background: "#FEF9C3", borderRadius: 8, padding: "7px 9px", marginTop: 8, lineHeight: 1.5 }}>
+                  미입력 시 본인 1명 기준으로 계산되어 실제 급여명세서와 차이가 날 수 있습니다.
+                </div>
+              </>
+            )}
+            {depConsent === true && (
+              <>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>전체 공제대상 가족 수 (본인 포함)</div>
+                    <select value={editDependents} onChange={(e) => setEditDependents(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #4F46E5", fontSize: 12, outline: "none", background: "#fff", color: "#1F2937", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}>
+                      {[1,2,3,4,5,6,7,8,9,10,11].map((n) => (<option key={n} value={n}>{n}명</option>))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>8~20세 자녀 수</div>
+                    <select value={editChildren} onChange={(e) => setEditChildren(Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #4F46E5", fontSize: 12, outline: "none", background: "#fff", color: "#1F2937", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}>
+                      {[0,1,2,3,4,5].map((n) => (<option key={n} value={n}>{n}명</option>))}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 5, lineHeight: 1.5 }}>
+                  💡 급여명세서의 부양가족 수와 동일하게 입력하세요. 본인·배우자도 각각 1명으로 셉니다.
+                </div>
+              </>
+            )}
+          </div>
+
           {workSaved && (
             <div
               style={{
@@ -16476,7 +16693,10 @@ function MySettingsScreen({
                     join_year: editJoinYear || null,
                     tongsang_wage: editTongsangWage,
                     tongsang_hobong: editTongsangWage != null ? (editPayStep || null) : null,
-                    birth_year: editBirthYear || null,
+                                        birth_year: editBirthYear || null,
+                    dependents_count: depConsent === true ? editDependents : null,
+                    children_count: depConsent === true ? editChildren : null,
+                    dependents_consent: depConsent === true,
                   })
                   .eq("employee_number", user.employee_number)
                   .select();
@@ -17199,7 +17419,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const [salaryTable, setSalaryTable] = React.useState<any[]>([]);
   const [bojeonGasan, setBojeonGasan] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const [workType, setWorkType] = React.useState<string>("");
+   const [workType, setWorkType] = React.useState<string>("");
   const [nightSettings, setNightSettings] = React.useState<any[]>([]);
   const [saveMsg, setSaveMsg] = React.useState<string>("");
 
@@ -17294,7 +17514,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("night_pay_settings").select("*"),
         supabase.from("kyobun_dia").select("dia_no, day_type, work_hours, night_hours, start_time, end_time"),
-        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage, bojeon_gasan").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage, bojeon_gasan, dependents_count, children_count")
+.eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
@@ -17315,7 +17536,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         if (meRes.data?.bojeon_gasan) setBojeonGasan(true);
         if (meRes.data.grade) setSelectedGrade(Number(meRes.data.grade));
         if (meRes.data.pay_step) setSelectedHobong(Number(meRes.data.pay_step));
-      }
+            if (meRes.data.bojeon_gasan) setBojeonGasan(true);
+            }
       if (leaveRes.data) setLastMonthLeaves(leaveRes.data);
       if (hfRes.data) setHfRecords(hfRes.data);
           if (rotRes.data) setRotationData(rotRes.data);
@@ -17482,11 +17704,10 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     }
   };
 
-  const totalAllowance = Object.keys(checkedItems).reduce(
-    (sum, item) => sum + getAllowanceAmount(item),
-    0
-  );
-
+      const totalAllowance = Object.keys(checkedItems).reduce(
+          (sum, item) => sum + getAllowanceAmount(item),
+             0
+      );
   const tongsangWage = memberInfo?.tongsang_wage != null ? Number(memberInfo.tongsang_wage) : (basicSalary ?? 0) + totalAllowance;
   const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
@@ -17607,15 +17828,16 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   });
   const within8s = Math.min(supportOtHours, 8);
   const over8s = Math.max(supportOtHours - 8, 0);
-  const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
+   const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
 
-  const totalGross = tongsangWage + nightPay + overtimePay + holidayFillPay + supportPay;
-  const r = dedRates || {};
+    const grossBase = (basicSalary ?? 0) + totalAllowance;
+  const totalGross = grossBase + nightPay + overtimePay + holidayFillPay + supportPay;
+      const r = dedRates || {};
   const nationalPension = Math.round(tongsangWage * (r.national_pension ?? 0.045));
   const healthInsurance = Math.round(tongsangWage * (r.health_insurance ?? 0.03545));
   const longTermCare = Math.round(healthInsurance * (r.long_term_care ?? 0.1295));
   const employmentInsurance = Math.round(tongsangWage * (r.employment_insurance ?? 0.009));
-  const incomeTax = Math.round(totalGross * (r.income_tax ?? 0.02));
+  const incomeTax = calcIncomeTax(totalGross, Number(memberInfo?.dependents_count) || 1, Number(memberInfo?.children_count) || 0);
   const localTax = Math.round(incomeTax * (r.local_tax ?? 0.1));
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
 
@@ -17886,7 +18108,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   { label: "건강보험", rate: `${((dedRates?.health_insurance ?? 0.03545) * 100).toFixed(3).replace(/\.?0+$/, "")}%`, base: "통상임금 기준", color: "#10B981" },
                   { label: "장기요양보험", rate: `건강보험료 × ${((dedRates?.long_term_care ?? 0.1295) * 100).toFixed(2).replace(/\.?0+$/, "")}%`, base: "건강보험료 기준", color: "#8B5CF6" },
                   { label: "고용보험", rate: `${((dedRates?.employment_insurance ?? 0.009) * 100).toFixed(3).replace(/\.?0+$/, "")}%`, base: "통상임금 기준", color: "#F59E0B" },
-                  { label: "소득세", rate: "약 2%", base: "부양가족 1인 기준 추정", color: "#EF4444" },
+                                    { label: "소득세", rate: "간이세액표", base: "부양가족 수 반영 · 추정치", color: "#EF4444" },
                   { label: "지방소득세", rate: `소득세 × ${((dedRates?.local_tax ?? 0.1) * 100).toFixed(1).replace(/\.?0+$/, "")}%`, base: "소득세 기준", color: "#EC4899" },
                   { label: "조합비", rate: `기본급 × ${((dedRates?.union_fee ?? 0.012) * 100).toFixed(2).replace(/\.?0+$/, "")}%`, base: "기본급 기준", color: "#6366F1" },
                 ].map((item) => (
@@ -18667,7 +18889,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   { label: `건강보험 (${((r.health_insurance ?? 0.03545) * 100).toFixed(3).replace(/\.?0+$/, "")}%)`, amount: healthInsurance },
                   { label: `장기요양보험 (건보료×${((r.long_term_care ?? 0.1295) * 100).toFixed(2).replace(/\.?0+$/, "")}%)`, amount: longTermCare },
                   { label: `고용보험 (${((r.employment_insurance ?? 0.009) * 100).toFixed(3).replace(/\.?0+$/, "")}%)`, amount: employmentInsurance },
-                  { label: "소득세 (약 2%, 부양1인 기준)", amount: incomeTax },
+                                  { label: "소득세 소득세 (간이세액표 · 추정)", amount: incomeTax },
                   { label: `지방소득세 (소득세×${((r.local_tax ?? 0.1) * 100).toFixed(1).replace(/\.?0+$/, "")}%)`, amount: localTax },
                   { label: `조합비 (기본급×${((r.union_fee ?? 0.012) * 100).toFixed(2).replace(/\.?0+$/, "")}%)`, amount: unionFee },
                 ].map((row, i) => (
@@ -24362,7 +24584,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [notices, setNotices] = useState([]);
   const [boardTab, setBoardTab] = useState("전체");
   const [selectedNotice, setSelectedNotice] = useState(null);
-  const [selectedPost, setSelectedPost] = useState(null);
+   const [selectedPost, setSelectedPost] = useState(null);
+  const [editingPost, setEditingPost] = useState<any>(null);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [aboutInitialTab, setAboutInitialTab] = useState("intro");
   const [showOnlineModal, setShowOnlineModal] = useState(false);
@@ -24624,7 +24847,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
      const [salaryRes, wtRes, meRes, hfRes, settingsRes, dedRes, sbRes, lvRes, dutyRes, swapRes, allMemRes] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
-        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage, bojeon_gasan").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
+        emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage, bojeon_gasan, dependents_count, children_count")
+.eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).eq("adjust_type", "holiday_fill").gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
@@ -24632,8 +24856,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
-        supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
-      ]);
+         supabase.from("members").select("employee_number, work_group, start_position, schedule_total, bojeon_gasan"),  
+     ]);
       console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       let homeNightCount = 0;
       const sb = sbRes.data;
@@ -25439,47 +25663,73 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           setSelectedPost(p);
           setScreen("boardDetail");
         }}
-        onWrite={() => setScreen("boardWrite")}
+                onWrite={() => { setEditingPost(null); setScreen("boardWrite"); }}
         user={user}
       />
     );
-  if (screen === "boardDetail" && selectedPost)
+    if (screen === "boardDetail" && selectedPost)
     return (
       <BoardDetail
         post={selectedPost}
         onBack={() => setScreen("board")}
         user={user}
+        onEdit={(p: any) => {
+          setEditingPost(p);
+          setScreen("boardWrite");
+        }}
       />
     );
-  if (screen === "boardWrite")
+    if (screen === "boardWrite")
     return (
       <BoardWrite
-        onBack={() => setScreen("board")}
+        onBack={() => setScreen(editingPost ? "boardDetail" : "board")}
         user={user}
+        editPost={editingPost}
         onSubmit={(post) => {
-          const newPost = {
-            title: post.title,
-            content: post.content,
-            category: post.category,
-            author: user?.name,
-            author_emp: user?.employee_number,
-            is_anonymous: false,
-            views: 0,
-            image_url: post.image_url || null,
-            image_path: post.image_path || null,
-          };
-          supabase
-            .from("posts")
-            .insert([newPost])
-            .select()
-            .then(({ data }) => {
-              if (data && data[0]) {
-                setSelectedPost({ ...data[0], comments: [] });
+          if (post.id) {
+            supabase
+              .from("posts")
+              .update({
+                title: post.title,
+                content: post.content,
+                category: post.category,
+                image_url: post.image_url || null,
+                image_path: post.image_path || null,
+              })
+              .eq("id", post.id)
+              .select()
+              .then(({ data }) => {
+                if (data && data[0]) {
+                  setSelectedPost((prev: any) => ({ ...prev, ...data[0] }));
+                }
+                setEditingPost(null);
                 setScreen("boardDetail");
-              } else {
-                setScreen("board");
-              }
-            });
+              });
+          } else {
+            const newPost = {
+              title: post.title,
+              content: post.content,
+              category: post.category,
+              author: user?.name,
+              author_emp: user?.employee_number,
+              is_anonymous: false,
+              views: 0,
+              image_url: post.image_url || null,
+              image_path: post.image_path || null,
+            };
+            supabase
+              .from("posts")
+              .insert([newPost])
+              .select()
+              .then(({ data }) => {
+                if (data && data[0]) {
+                  setSelectedPost({ ...data[0], comments: [] });
+                  setScreen("boardDetail");
+                } else {
+                  setScreen("board");
+                }
+              });
+          }
         }}
       />
     );
