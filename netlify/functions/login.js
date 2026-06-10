@@ -1,5 +1,3 @@
-const { createClient } = require("@supabase/supabase-js");
-
 exports.handler = async (event) => {
   const headers = {
     "Access-Control-Allow-Origin": "*",
@@ -24,26 +22,28 @@ exports.handler = async (event) => {
     if (!key) {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "no_key" }) };
     }
-    let supabase;
-    try {
-      supabase = createClient(
-        "https://svbvawioldgundtpogkc.supabase.co",
-        key
-      );
-    } catch (ce) {
-      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "create_fail: " + String(ce && ce.message ? ce.message : ce) }) };
+
+    const base = "https://svbvawioldgundtpogkc.supabase.co/rest/v1/members";
+    const q =
+      "?employee_number=eq." + encodeURIComponent(String(employee_number).trim()) +
+      "&name=eq." + encodeURIComponent(String(name).trim()) +
+      "&select=*";
+
+    const resp = await fetch(base + q, {
+      headers: {
+        apikey: key,
+        Authorization: "Bearer " + key,
+      },
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text();
+      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "db " + resp.status + ": " + t }) };
     }
 
-    const { data: member, error } = await supabase
-      .from("members")
-      .select("*")
-      .eq("employee_number", String(employee_number).trim())
-      .eq("name", String(name).trim())
-      .maybeSingle();
+    const rows = await resp.json();
+    const member = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 
-    if (error) {
-      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: error.message }) };
-    }
     if (!member) {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "not_found" }) };
     }
@@ -73,6 +73,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (e) {
-    return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: String(e && e.message ? e.message : e) }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "catch: " + String(e && e.message ? e.message : e) }) };
   }
 };
