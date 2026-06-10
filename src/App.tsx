@@ -12706,6 +12706,14 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
+  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare">(null);
+  const [contactList, setContactList] = React.useState<any[]>([]);
+  const [contactSearch, setContactSearch] = React.useState("");
+  const [compareMembers, setCompareMembers] = React.useState<any[]>([]);
+  const [comparePicks, setComparePicks] = React.useState<any[]>([]);
+  const [comparePickerOpen, setComparePickerOpen] = React.useState(false);
+  const [compareSearch, setCompareSearch] = React.useState("");
+  const [timePopup, setTimePopup] = React.useState<any>(null);
   React.useEffect(() => {
     if (activeTab === "통상" && user?.employee_number && (!selectedMember || String(selectedMember.employee_number) !== String(user.employee_number))) {
       setSelectedMember(user);
@@ -12916,6 +12924,31 @@ if (data) {
     };
     fetchDia();
   }, []);
+
+  React.useEffect(() => {
+    if (subScreen !== "contacts") return;
+    supabase
+      .from("members")
+      .select("name, phone, employee_number")
+      .order("name")
+      .then(({ data }) => { if (data) setContactList(data); });
+  }, [subScreen]);
+
+  React.useEffect(() => {
+    if (subScreen !== "compare") return;
+    supabase
+      .from("members")
+      .select("id, name, employee_number, work_group, start_position, schedule_total")
+      .in("work_group", ["\ub300\uacf5\uc6d0", "\ub3c4\ubd09"])
+      .order("name")
+      .then(({ data }) => {
+        if (data) {
+          setCompareMembers(data);
+          const me = data.find((m: any) => String(m.employee_number) === String(user?.employee_number));
+          setComparePicks(me ? [me] : data.slice(0, 1));
+        }
+      });
+  }, [subScreen]);
 
   // 즐겨찾기 불러오기
   React.useEffect(() => {
@@ -13956,7 +13989,203 @@ const getKyobunWork = (member: any, date: Date) => {
       </div>
     );
   };
+  const cmpBackStyle: any = { background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "5px 13px", borderRadius: 999, fontFamily: "inherit" };
+
+  const renderContacts = () => {
+    const onlyDigits = (x: any) => String(x || "").replace(/[^0-9]/g, "");
+    const list = contactList.filter((m: any) =>
+      (m.name || "").replace(/\s/g, "").includes(contactSearch.replace(/\s/g, ""))
+    );
+    return (
+      <div style={{ padding: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <button onClick={() => { setSubScreen(null); setContactSearch(""); }} style={cmpBackStyle}>\u2190 \uba54\ub274\ud654\uba74</button>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>\uc9c1\uc6d0 \uc5f0\ub77d\ucc98</span>
+        </div>
+        <input
+          value={contactSearch}
+          onChange={(e) => setContactSearch(e.target.value)}
+          placeholder="\uc774\ub984 \uac80\uc0c9"
+          style={{ width: "100%", boxSizing: "border-box", padding: "10px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 14, marginBottom: 14, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" } as any}
+        />
+        <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, overflow: "hidden" }}>
+          {list.length === 0 ? (
+            <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>\uc5f0\ub77d\ucc98\uac00 \uc5c6\uc2b5\ub2c8\ub2e4</div>
+          ) : (
+            list.map((m: any, i: number) => {
+              const tel = onlyDigits(m.phone);
+              return (
+                <div key={m.employee_number || i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: i < list.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#EEF0FF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, color: "#4F46E5", flexShrink: 0 }}>{(m.name || "?").charAt(0)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#1F2937" }}>{m.name}</div>
+                    <div style={{ fontSize: 12, color: tel ? "#6B7280" : "#D1D5DB" }}>{tel ? m.phone : "\ubc88\ud638 \ubbf8\ub4f1\ub85d"}</div>
+                  </div>
+                  {tel ? (
+                    <a href={"tel:" + tel} style={{ width: 40, height: 40, borderRadius: "50%", background: "#4F46E5", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>\uc804\ud654</a>
+                  ) : (
+                    <span style={{ width: 40, height: 40, borderRadius: "50%", background: "#F3F4F6", color: "#D1D5DB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>\uc804\ud654</span>
+                  )}
+                  {tel ? (
+                    <a href={"sms:" + tel} style={{ width: 40, height: 40, borderRadius: "50%", background: "#EEF0FF", color: "#4F46E5", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>\ubb38\uc790</a>
+                  ) : (
+                    <span style={{ width: 40, height: 40, borderRadius: "50%", background: "#F3F4F6", color: "#D1D5DB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>\ubb38\uc790</span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCompare = () => {
+    const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+    const wd = ["\uc77c", "\uc6d4", "\ud654", "\uc218", "\ubaa9", "\uae08", "\ud1a0"];
+    const picks = comparePicks.slice(0, 4);
+    const colTmpl = "44px " + picks.map(() => "1fr").join(" ");
+    const goPrev = () => { const pm = getPrevMonth(currentYear, currentMonth); setCurrentYear(pm.y); setCurrentMonth(pm.m); };
+    const goNext = () => { const nm = getNextMonth(currentYear, currentMonth); setCurrentYear(nm.y); setCurrentMonth(nm.m); };
+    const togglePick = (m: any) => {
+      setComparePicks((prev) => {
+        const exists = prev.find((x: any) => String(x.employee_number) === String(m.employee_number));
+        if (exists) return prev.filter((x: any) => String(x.employee_number) !== String(m.employee_number));
+        if (prev.length >= 4) { alert("\ucd5c\ub300 4\uba85\uae4c\uc9c0 \ube44\uad50\ud560 \uc218 \uc788\uc5b4\uc694."); return prev; }
+        return [...prev, m];
+      });
+    };
+    const cellOf = (m: any, date: Date) => {
+      const w = getKyobunWork(m, date);
+      if (!w) return { txt: "-", clickable: false, color: "#D1D5DB", work: null as any };
+      if (w.type === "\ube44\ubc88") return { txt: "\ube44", clickable: false, color: "#6B7280", work: w };
+      if (w.type === "\ud734\ubb34") return { txt: "\ud734", clickable: false, color: "#059669", work: w };
+      if (w.type === "\uc8fc\uac04" || w.type === "\uc57c\uac04") return { txt: String(w.dia), clickable: true, color: "#1F2937", work: w };
+      const wi = workInfo(w.type);
+      return { txt: wi.short, clickable: false, color: wi.text, work: w };
+    };
+    const openTime = (m: any, date: Date, w: any) => {
+      const dt = getDiaDayType(w.type, date);
+      const info = getDiaInfo(w.dia, dt);
+      setTimePopup({
+        name: m.name,
+        dateLabel: `${currentMonth}/${date.getDate()} ${wd[date.getDay()]}`,
+        dia: w.dia,
+        dayType: dt,
+        start: (info && info.start_time) || "-",
+        end: (info && info.end_time) || "-",
+        hours: info && info.work_hours,
+      });
+    };
+    return (
+      <div style={{ padding: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <button onClick={() => { setSubScreen(null); setTimePopup(null); }} style={cmpBackStyle}>\u2190 \uba54\ub274\ud654\uba74</button>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>\uae30\uad00\uc0ac \uad50\ubc88 \ube44\uad50</span>
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+          {picks.map((pk: any, i: number) => (
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: i === 0 ? "#EEF0FF" : "#F3F4F6", color: i === 0 ? "#4F46E5" : "#374151", borderRadius: 999, padding: "5px 10px", fontSize: 13, fontWeight: 600 }}>
+              {pk.name}
+              <span onClick={() => togglePick(pk)} style={{ cursor: "pointer", color: "#9CA3AF", fontWeight: 700 }}>\u00d7</span>
+            </span>
+          ))}
+          {picks.length < 4 && (
+            <button onClick={() => { setComparePickerOpen(true); setCompareSearch(""); }} style={{ background: "#fff", border: "1.5px dashed #C7D2FE", color: "#4F46E5", borderRadius: 999, padding: "5px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>+ \uae30\uad00\uc0ac \ucd94\uac00</button>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 10 }}>
+          <span onClick={goPrev} style={{ cursor: "pointer", color: "#9CA3AF", fontSize: 18 }}>\u2039</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{currentYear}\ub144 {currentMonth}\uc6d4</span>
+          <span onClick={goNext} style={{ cursor: "pointer", color: "#9CA3AF", fontSize: 18 }}>\u203a</span>
+        </div>
+
+        {picks.length === 0 ? (
+          <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "30px 0" }}>\ube44\uad50\ud560 \uae30\uad00\uc0ac\ub97c \ucd94\uac00\ud558\uc138\uc694</div>
+        ) : (
+          <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: colTmpl, background: "#F9FAFB" }}>
+              <div style={{ padding: "8px 4px", fontSize: 10, color: "#6B7280", fontWeight: 600 }}>\ub0a0\uc9dc</div>
+              {picks.map((pk: any, i: number) => (
+                <div key={i} style={{ padding: "8px 2px", textAlign: "center", fontSize: 12, fontWeight: 600, color: i === 0 ? "#4F46E5" : "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pk.name}</div>
+              ))}
+            </div>
+            {Array.from({ length: daysInMonth }, (_, idx) => idx + 1).map((d) => {
+              const date = new Date(currentYear, currentMonth - 1, d);
+              const dow = date.getDay();
+              const holi = isHolidayDate(date) && dow !== 0 && dow !== 6;
+              const dcolor = dow === 0 || holi ? "#EF4444" : dow === 6 ? "#3B82F6" : "#6B7280";
+              return (
+                <div key={d} style={{ display: "grid", gridTemplateColumns: colTmpl, borderTop: "1px solid #F3F4F6", alignItems: "center" }}>
+                  <div style={{ padding: "8px 4px", fontSize: 11, color: dcolor }}>{d} {wd[dow]}</div>
+                  {picks.map((pk: any, i: number) => {
+                    const c = cellOf(pk, date);
+                    return (
+                      <div key={i} onClick={() => { if (c.clickable && c.work) openTime(pk, date, c.work); }} style={{ padding: "7px 2px", textAlign: "center", cursor: c.clickable ? "pointer" : "default" }}>
+                        <span style={{ fontSize: c.clickable ? 13 : 11, fontWeight: c.clickable ? 700 : 500, color: c.color }}>{c.txt}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {comparePickerOpen && (
+          <div onClick={() => setComparePickerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 340, maxHeight: "70vh", display: "flex", flexDirection: "column", padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>\uae30\uad00\uc0ac \uc120\ud0dd ({picks.length}/4)</span>
+                <button onClick={() => setComparePickerOpen(false)} style={{ background: "#4F46E5", border: "none", borderRadius: 10, padding: "6px 14px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>\ud655\uc778</button>
+              </div>
+              <input value={compareSearch} onChange={(e) => setCompareSearch(e.target.value)} placeholder="\uc774\ub984 \uac80\uc0c9" style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, marginBottom: 10, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" } as any} />
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                {compareMembers.filter((m: any) => (m.name || "").replace(/\s/g, "").includes(compareSearch.replace(/\s/g, ""))).map((m: any, i: number) => {
+                  const on = comparePicks.find((x: any) => String(x.employee_number) === String(m.employee_number));
+                  return (
+                    <div key={m.employee_number || i} onClick={() => togglePick(m)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 6px", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: on ? "#4F46E5" : "#1F2937" }}>{m.name}</span>
+                      {on ? <span style={{ color: "#4F46E5", fontWeight: 800 }}>\u2713</span> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {timePopup && (
+          <div onClick={() => setTimePopup(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.42)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 280, padding: "20px 18px 18px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>{timePopup.name} \u00b7 {timePopup.dateLabel}</span>
+                <span onClick={() => setTimePopup(null)} style={{ cursor: "pointer", color: "#9CA3AF", fontSize: 18, fontWeight: 700 }}>\u00d7</span>
+              </div>
+              <div style={{ textAlign: "center", fontSize: 13, color: "#4F46E5", fontWeight: 700, marginBottom: 14 }}>\uad50\ubc88 {timePopup.dia}\ubc88 {timePopup.dayType ? <span style={{ color: "#9CA3AF", fontWeight: 400 }}>\u00b7 {timePopup.dayType}</span> : null}</div>
+              <div style={{ display: "flex", gap: 10, marginBottom: timePopup.hours ? 14 : 0 }}>
+                <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 10, padding: 10, textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>\ucd9c\uadfc</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: "#7C3AED" }}>{timePopup.start}</div>
+                </div>
+                <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 10, padding: 10, textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>\ud1f4\uadfc</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: "#7C3AED" }}>{timePopup.end}</div>
+                </div>
+              </div>
+              {timePopup.hours ? <div style={{ textAlign: "center", fontSize: 12, color: "#6B7280" }}>\uadfc\ubb34\uc2dc\uac04 {timePopup.hours}</div> : null}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderKyobunTab = () => {
+    if (subScreen === "contacts") return renderContacts();
+    if (subScreen === "compare") return renderCompare();
     if (!selectedGroup)
       return (
         <div style={{ padding: "24px 16px" }}>
@@ -13989,10 +14218,15 @@ const getKyobunWork = (member: any, date: Date) => {
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
           >
-            {["현장조치 매뉴얼", "업무용 전화번호", "직원 연락처"].map((label) => (
+            {[
+              { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
+              { label: "업무용 전화번호", action: () => alert("업무용 전화번호 (준비중)") },
+              { label: "직원 연락처", action: () => setSubScreen("contacts") },
+              { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
+            ].map((c) => (
               <button
-                key={label}
-                onClick={() => alert(label + " (준비중)")}
+                key={c.label}
+                onClick={c.action}
                 style={{
                   padding: "28px 12px",
                   borderRadius: 16,
@@ -14005,7 +14239,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                 }}
               >
-                {label}
+                {c.label}
               </button>
             ))}
           </div>
