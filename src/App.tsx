@@ -10383,7 +10383,7 @@ useEffect(() => {
   const handleApprove = (id) => {
     const tempPw = generateTempPassword();
     const target = pendingMembers.find((m) => m.id === id);
-    const emp = target && target.employee_number;
+   const emp = target && ((target as any).employee_number || (target as any).emp_id || (target as any).id);
     setTempPasswords((prev) => ({ ...prev, [id]: tempPw }));
     setPendingMembers((prev) =>
       prev.map((m) =>
