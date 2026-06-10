@@ -2179,54 +2179,50 @@ function LoginScreen({ onLogin, onGoRegister }) {
     }
     setLoading(true);
     setError("");
-    // 실제 members 테이블에서 로그인 처리 (사번=employee_number 기준)
-    const { data: foundMember } = await supabase
-      .from("members")
-      .select("*")
-      .eq("employee_number", empId.trim())
-      .eq("name", name.trim())
-      .maybeSingle();
-
-    const data = foundMember
-      ? {
-          ...foundMember,
-          emp_id: foundMember.employee_number,
-          // status 매핑: '대기'는 pending, 차단은 blocked, 그 외('명단'/'승인')는 로그인 허용
-          status:
-            foundMember.status === "대기"
-              ? "pending"
-              : foundMember.status === "차단"
-              ? "blocked"
-              : "approved",
-        }
-      : null;
+    let json;
+    try {
+      const res = await fetch("/.netlify/functions/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_number: empId.trim(),
+          name: name.trim(),
+          password,
+        }),
+      });
+      json = await res.json();
+    } catch (e) {
+      setLoading(false);
+      setError("로그인 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
     setLoading(false);
 
-    if (!data) {
+    if (json.result === "not_found") {
       setError(
         "이름 또는 사번이 올바르지 않습니다.\n조합원 명단을 확인해주세요."
       );
       return;
     }
-    if (data.status === "pending") {
+    if (json.result === "pending") {
       setError(
         "가입 승인 대기 중입니다.\n관리자 승인 후 임시 비밀번호를 받아 로그인하세요."
       );
       return;
     }
-    if (data.status === "blocked") {
+    if (json.result === "blocked") {
       localStorage.removeItem("union_user");
       setError("계정이 차단되었습니다. 지회로 문의해주세요.");
       return;
     }
-    if (!data.password) {
+    if (json.result === "no_password") {
       setError(
         "비밀번호가 설정되지 않았습니다.\n관리자에게 임시 비밀번호 발급을 요청하세요."
       );
       return;
     }
 
-    if (data.password !== password) {
+    if (json.result === "wrong_password") {
       const curInfo = lockRaw ? { ...JSON.parse(lockRaw) } : { count: 0 };
       const newCount = (curInfo.count || 0) + 1;
       if (newCount >= MAX_FAIL) {
@@ -2251,6 +2247,18 @@ function LoginScreen({ onLogin, onGoRegister }) {
       }
       return;
     }
+
+    if (json.result !== "ok" || !json.member) {
+      setError("로그인 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
+
+    const data = {
+      ...json.member,
+      emp_id: json.member.employee_number,
+      status: "approved",
+      is_temp_password: json.is_temp_password,
+    };
 
     // 성공 → 실패 기록 초기화
     localStorage.removeItem(lockKey);
