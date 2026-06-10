@@ -212,13 +212,9 @@ function computeNetPay(input: any) {
     swapData = [], allMembers = [],
   } = input;
 
-  const row = salaryTable.find((r: any) => r.hobong === hobong);
-  const basicSalary = row ? (row[`grade_${grade}`] ?? null) : null;
-    if (!basicSalary) return null;
-
-  const g7s1Row = salaryTable.find((r: any) => Number(r.hobong) === 1);
-  const g7s1 = g7s1Row ? (Number(g7s1Row["grade_7"]) || 0) : 0;
-  const bojeonGasanPay = memberInfo?.bojeon_gasan ? Math.round(g7s1 * 0.04) : 0;
+    const row = salaryTable.find((r: any) => Number(r.hobong) === Number(hobong));
+  const basicSalary = row ? (row[`grade_${Number(grade)}`] ?? null) : null;
+  if (!basicSalary) return null;
 
   const longService = hobong >= 25 ? 130000 : hobong >= 20 ? 110000 : hobong >= 15 ? 80000 : hobong >= 10 ? 60000 : hobong >= 5 ? 50000 : 0;
   const gradeSupport = (grade === 6 || grade === 7) ? 30000 : 0;
@@ -228,12 +224,14 @@ function computeNetPay(input: any) {
     "4조2교대(비심야)": 0.0675, "4조2교대(심야)": 0.0635,
     "4조2교대(야간집중)": 0.06, 교번: 0.087,
   };
-  const workTypePay = (basicSalary && workType) ? Math.round(basicSalary * (wtRates[workType] ?? 0)) : 0;
+    const workTypePay = (basicSalary && workType) ? Math.round(basicSalary * (wtRates[workType] ?? 0)) : 0;
+  const g7s1 = (salaryTable.find((r: any) => r.hobong === 1)?.grade_7) ?? 0;
+  const bojeonGasanPay = memberInfo?.bojeon_gasan ? Math.round(g7s1 * 0.04) : 0;
 
   const allowanceAmount = (item: string): number => {
     if (!checkedItems[item]) return 0;
     if (item === "업무보전수당") return workTypePay + bojeonGasanPay;
-if (item === "장기근속수당") return longService;
+    if (item === "장기근속수당") return longService;
     if (item === "직급보조비") return gradeSupport;
     if (item === "승무보조비") return seungmuBojo;
 
@@ -17418,10 +17416,10 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [selectedHobong, setSelectedHobong] = React.useState<number | null>(
     user?.pay_step ?? null
   );
-  const [salaryTable, setSalaryTable] = React.useState<any[]>([]);
+    const [salaryTable, setSalaryTable] = React.useState<any[]>([]);
+  const [bojeonGasan, setBojeonGasan] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
    const [workType, setWorkType] = React.useState<string>("");
-  const [bojeonGasan, setBojeonGasan] = React.useState(false);
   const [nightSettings, setNightSettings] = React.useState<any[]>([]);
   const [saveMsg, setSaveMsg] = React.useState<string>("");
 
@@ -17534,7 +17532,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       if (nightRes.data) setNightSettings(nightRes.data);
       if (diaRes.data) setDiaTable(diaRes.data);
             if (meRes.data) {
-        setMemberInfo(meRes.data);
+                setMemberInfo(meRes.data);
+        if (meRes.data?.bojeon_gasan) setBojeonGasan(true);
         if (meRes.data.grade) setSelectedGrade(Number(meRes.data.grade));
         if (meRes.data.pay_step) setSelectedHobong(Number(meRes.data.pay_step));
             if (meRes.data.bojeon_gasan) setBojeonGasan(true);
@@ -17640,14 +17639,16 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     if (finalNight !== null) setNightCount(finalNight);
   }, [finalNight]);
 
-  const getBasicSalary = () => {
-    if (!selectedGrade || !selectedHobong) return null;
-    const row = salaryTable.find((r) => r.hobong === selectedHobong);
+    const getBasicSalary = () => {
+       if (!selectedGrade || !selectedHobong) return null;
+    const row = salaryTable.find((r) => Number(r.hobong) === Number(selectedHobong));
     if (!row) return null;
-    return row[`grade_${selectedGrade}`] ?? null;
+    return row[`grade_${Number(selectedGrade)}`] ?? null;
   };
 
-  const basicSalary = getBasicSalary();
+    const basicSalary = getBasicSalary();
+  const grade7step1 = (salaryTable.find((r) => r.hobong === 1)?.grade_7) ?? 0;
+  const bojeonGasanPay = bojeonGasan ? Math.round(grade7step1 * 0.04) : 0;
 
   const getLongServicePay = () => {
     if (!selectedHobong) return 0;
@@ -17703,9 +17704,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     }
   };
 
-  const g7s1Row = salaryTable.find((r: any) => Number(r.hobong) === 1);     
-  const g7s1 = g7s1Row ? (Number(g7s1Row["grade_7"]) || 0) : 0;
-      const bojeonGasanPay = bojeonGasan ? Math.round(g7s1 * 0.04) : 0;
       const totalAllowance = Object.keys(checkedItems).reduce(
           (sum, item) => sum + getAllowanceAmount(item),
              0
@@ -17873,7 +17871,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       label: "업무보전수당",
       type: "auto",
       desc: "근무형태 선택 후 자동계산",
-     extra: (
+          extra: (
         <>
           <select
             value={workType}
@@ -17895,36 +17893,15 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 {w}
               </option>
             ))}
-                </select>
-          <div
-            style={{
-              marginTop: 8,
-              padding: 10,
-              borderRadius: 8,
-              background: "#EEF2FF",
-              border: "1px solid #C7D2FE",
-            }}
-          >
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#3730A3" }}>
-              ⓘ 가산 안내 (7급1호봉 기본급의 4%)
-            </div>
-            <div style={{ fontSize: 11, color: "#4F46E5", marginTop: 4, lineHeight: 1.5 }}>
-              1~4호선: 2000년 이후 입사자<br />
-              5~8호선: 2014년 이후 입사자<br />
-              ('17.12.31. 이후 입사자)
-            </div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                marginTop: 8,
-                fontSize: 13,
-                fontWeight: 600,
-                color: "#3730A3",
-                cursor: "pointer",
-              }}
-            >
+          </select>
+          <div style={{ marginTop: 8, background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 8, padding: "9px 11px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#4338CA", marginBottom: 5 }}>ⓘ 가산 안내 (7급1호봉 기본급의 4%)</div>
+            <div style={{ fontSize: 11.5, color: "#4B5563", lineHeight: 1.5 }}>대상자에게 근무형태별 보전수당에 가산하여 지급합니다.</div>
+            <div style={{ fontSize: 11.5, color: "#1F2937", fontWeight: 600, marginTop: 3 }}>· 대상자</div>
+            <div style={{ fontSize: 11.5, color: "#4B5563" }}>1~4호선 : 2000년 이후 입사자</div>
+            <div style={{ fontSize: 11.5, color: "#4B5563" }}>5~8호선 : 2014년 이후 입사자</div>
+            <div style={{ fontSize: 11.5, color: "#4B5563" }}>'17.12.31. 이후 입사자</div>
+            <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, paddingTop: 8, borderTop: "1px dashed #C7D2FE", cursor: "pointer" }}>
               <input
                 type="checkbox"
                 checked={bojeonGasan}
@@ -17932,17 +17909,13 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   const v = e.target.checked;
                   setBojeonGasan(v);
                   if (user?.employee_number) {
-                    await supabase
-                      .from("members")
-                      .update({ bojeon_gasan: v })
-                      .eq("employee_number", user.employee_number);
-                    setMemberInfo((prev: any) =>
-                      prev ? { ...prev, bojeon_gasan: v } : prev
-                    );
+                    await supabase.from("members").update({ bojeon_gasan: v }).eq("employee_number", user.employee_number);
+                    setMemberInfo((prev: any) => prev ? { ...prev, bojeon_gasan: v } : prev);
                   }
                 }}
+                style={{ width: 18, height: 18, accentColor: "#4F46E5" }}
               />
-              나는 가산 대상자입니다 (+4%)
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: bojeonGasan ? "#4338CA" : "#9CA3AF" }}>나는 가산 대상자입니다 (+4%)</span>
             </label>
           </div>
         </>
@@ -24584,7 +24557,20 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
   );
 }
 export default function App() {
-    const [screen, setScreen] = useState("login");
+      const [screen, setScreen] = useState("login");
+    const screenRef = React.useRef("login");
+    React.useEffect(() => { screenRef.current = screen; }, [screen]);
+    React.useEffect(() => {
+      window.history.pushState(null, "");
+      const onBack = () => {
+        window.history.pushState(null, "");
+        if (screenRef.current !== "home" && screenRef.current !== "login") {
+          setScreen("home");
+        }
+      };
+      window.addEventListener("popstate", onBack);
+      return () => window.removeEventListener("popstate", onBack);
+    }, []);
   const [adjustInitDate, setAdjustInitDate] = useState("");
   const [adjustInitTab, setAdjustInitTab] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
