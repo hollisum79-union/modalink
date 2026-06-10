@@ -23,36 +23,46 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "no_key" }) };
     }
 
-    const root = "https://svbvawioldgundtpogkc.supabase.co/rest/v1/members";
+    const proj = "https://svbvawioldgundtpogkc.supabase.co/rest/v1";
     const emp = encodeURIComponent(String(employee_number).trim());
-    const q =
-      "?employee_number=eq." + emp +
-      "&name=eq." + encodeURIComponent(String(name).trim()) +
-      "&select=*";
+    const auth = { apikey: key, Authorization: "Bearer " + key };
 
-    const getResp = await fetch(root + q, {
-      headers: { apikey: key, Authorization: "Bearer " + key },
-    });
-    if (!getResp.ok) {
-      const t = await getResp.text();
-      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "db " + getResp.status + ": " + t }) };
+    const memResp = await fetch(
+      proj + "/members?employee_number=eq." + emp +
+      "&name=eq." + encodeURIComponent(String(name).trim()) +
+      "&select=employee_number",
+      { headers: auth }
+    );
+    if (!memResp.ok) {
+      const t = await memResp.text();
+      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "mem " + memResp.status + ": " + t }) };
     }
-    const rows = await getResp.json();
-    const member = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-    if (!member) {
+    const memRows = await memResp.json();
+    if (!Array.isArray(memRows) || memRows.length === 0) {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "not_found" }) };
     }
-    if (member.password !== current_password) {
+
+    const authResp = await fetch(
+      proj + "/member_auth?employee_number=eq." + emp + "&select=*",
+      { headers: auth }
+    );
+    if (!authResp.ok) {
+      const t = await authResp.text();
+      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "auth " + authResp.status + ": " + t }) };
+    }
+    const authRows = await authResp.json();
+    const cred = Array.isArray(authRows) && authRows.length > 0 ? authRows[0] : null;
+    if (!cred || cred.password !== current_password) {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "wrong_password" }) };
     }
 
-    const patchResp = await fetch(root + "?employee_number=eq." + emp, {
+    const patchResp = await fetch(proj + "/member_auth?employee_number=eq." + emp, {
       method: "PATCH",
       headers: {
         apikey: key,
         Authorization: "Bearer " + key,
         "Content-Type": "application/json",
-        Prefer: "return=representation",
+        Prefer: "return=minimal",
       },
       body: JSON.stringify({ password: new_password, is_temp_password: false }),
     });
@@ -60,12 +70,8 @@ exports.handler = async (event) => {
       const t = await patchResp.text();
       return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "patch " + patchResp.status + ": " + t }) };
     }
-    const updated = await patchResp.json();
-    const m = Array.isArray(updated) && updated.length > 0 ? updated[0] : member;
-    const safeMember = { ...m };
-    delete safeMember.password;
 
-    return { statusCode: 200, headers, body: JSON.stringify({ result: "ok", member: safeMember }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ result: "ok" }) };
   } catch (e) {
     return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: "catch: " + String(e && e.message ? e.message : e) }) };
   }
