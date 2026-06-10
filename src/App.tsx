@@ -13994,6 +13994,7 @@ const getKyobunWork = (member: any, date: Date) => {
   const renderContacts = () => {
     const onlyDigits = (x: any) => String(x || "").replace(/[^0-9]/g, "");
     const list = contactList.filter((m: any) =>
+      !(m.name || "").includes("결원") &&
       (m.name || "").replace(/\s/g, "").includes(contactSearch.replace(/\s/g, ""))
     );
     return (
@@ -14084,6 +14085,24 @@ const getKyobunWork = (member: any, date: Date) => {
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>기관사 교번 비교</span>
         </div>
 
+        {favorites.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>⭐ 즐겨찾기 (눌러서 비교)</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {favorites.map((fav: any) => {
+                const full = compareMembers.find((m: any) => String(m.id) === String(fav.id)) || fav;
+                const on = comparePicks.find((x: any) => String(x.employee_number) === String(full.employee_number));
+                return (
+                  <span key={fav.fav_id} onClick={() => togglePick(full)} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: on ? "#EEF0FF" : "#FFF7E6", color: on ? "#4F46E5" : "#92400E", border: on ? "1px solid #C7D2FE" : "1px solid #FDE9C8", borderRadius: 999, padding: "5px 11px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    <span style={{ color: "#F59E0B" }}>⭐</span> {fav.name}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>비교 중</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
           {picks.map((pk: any, i: number) => (
             <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: i === 0 ? "#EEF0FF" : "#F3F4F6", color: i === 0 ? "#4F46E5" : "#374151", borderRadius: 999, padding: "5px 10px", fontSize: 13, fontWeight: 600 }}>
