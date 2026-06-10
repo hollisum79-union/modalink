@@ -2310,6 +2310,7 @@ function LoginScreen({ onLogin, onGoRegister }) {
       return;
     }
     onLogin({ ...pendingUser, ...(json.member || {}), is_temp_password: false });
+  };
 
   // 비밀번호 변경 화면
   if (needChangePw)
