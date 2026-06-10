@@ -2281,18 +2281,35 @@ function LoginScreen({ onLogin, onGoRegister }) {
       setPwChangeError("비밀번호가 일치하지 않습니다.");
       return;
     }
-    if (newPw === pendingUser.password) {
+   if (newPw === password) {
       setPwChangeError("임시 비밀번호와 다른 비밀번호를 설정해주세요.");
       return;
     }
     setLoading(true);
-    await supabase
-      .from("members")
-      .update({ password: newPw, is_temp_password: false })
-      .eq("employee_number", pendingUser.emp_id);
+    let json;
+    try {
+      const res = await fetch("/.netlify/functions/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_number: pendingUser.emp_id,
+          name: pendingUser.name,
+          current_password: password,
+          new_password: newPw,
+        }),
+      });
+      json = await res.json();
+    } catch (e) {
+      setLoading(false);
+      setPwChangeError("변경 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
     setLoading(false);
-    onLogin({ ...pendingUser, password: newPw, is_temp_password: false });
-  };
+    if (json.result !== "ok") {
+      setPwChangeError("변경에 실패했습니다.\n잠시 후 다시 시도해주세요.");
+      return;
+    }
+    onLogin({ ...pendingUser, ...(json.member || {}), is_temp_password: false });
 
   // 비밀번호 변경 화면
   if (needChangePw)
