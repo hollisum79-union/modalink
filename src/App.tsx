@@ -9069,13 +9069,11 @@ function MemberManageScreen() {
           }
         });
     } else {
-      supabase
+     supabase
         .from("members")
         .insert([
           {
             ...payload,
-            password: "union0000",
-            is_temp_password: true,
             status: "명단",
             is_admin: false,
             is_app_user: false,
@@ -9085,8 +9083,20 @@ function MemberManageScreen() {
           if (error) {
             alert("추가 실패: " + error.message);
           } else {
-            setForm(null);
-            loadMembers();
+            fetch("/.netlify/functions/set-credential", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                employee_number: payload.employee_number,
+                password: "union0000",
+                is_temp_password: true,
+              }),
+            })
+              .then((r) => r.json())
+              .then(() => {
+                setForm(null);
+                loadMembers();
+              });
           }
         });
     }
@@ -9119,13 +9129,19 @@ function MemberManageScreen() {
       )
     )
       return;
-    supabase
-      .from("members")
-      .update({ password: "union0000", is_temp_password: true })
-      .eq("id", m.id)
-      .then(({ error }) => {
-        if (error) {
-          alert("초기화 실패: " + error.message);
+    fetch("/.netlify/functions/set-credential", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employee_number: m.employee_number,
+        password: "union0000",
+        is_temp_password: true,
+      }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.result !== "ok") {
+          alert("초기화 실패: " + (j.detail || j.result));
         } else {
           alert(
             `${m.name} 조합원의 비밀번호가 union0000으로 초기화되었습니다.`
@@ -10366,6 +10382,8 @@ useEffect(() => {
 
   const handleApprove = (id) => {
     const tempPw = generateTempPassword();
+    const target = pendingMembers.find((m) => m.id === id);
+    const emp = target && target.employee_number;
     setTempPasswords((prev) => ({ ...prev, [id]: tempPw }));
     setPendingMembers((prev) =>
       prev.map((m) =>
@@ -10373,18 +10391,26 @@ useEffect(() => {
           ? {
               ...m,
               status: "approved",
-              password: tempPw,
               is_temp_password: true,
             }
           : m
       )
     );
-    // Supabase 업데이트
     supabase
       .from("members")
-      .update({ status: "approved", password: tempPw, is_temp_password: true })
+      .update({ status: "approved" })
       .eq("id", id)
-      .then(() => {});
+      .then(() => {
+        fetch("/.netlify/functions/set-credential", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employee_number: emp,
+            password: tempPw,
+            is_temp_password: true,
+          }),
+        });
+      });
   };
   const handleBlock = (id) => {
     setPendingMembers((prev) =>
