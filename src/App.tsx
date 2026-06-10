@@ -6669,6 +6669,44 @@ const [showAddCat, setShowAddCat] = useState(false);
   const [upCat, setUpCat] = useState("agreement");
   const [upDesc, setUpDesc] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editFile, setEditFile] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editCat, setEditCat] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEdit = (file) => {
+    setEditFile(file);
+    setEditName(file.name || "");
+    setEditCat(file.category_id || "");
+    setEditDesc(file.description || "");
+    setMenuOpenId(null);
+    setShowEdit(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) { alert("자료 제목을 입력해주세요."); return; }
+    setSavingEdit(true);
+    try {
+      const catLabel = allCats.find((c) => c.id === editCat)?.label || "";
+      const { error } = await supabase.from("archive_files").update({
+        name: editName.trim(),
+        category_id: editCat,
+        category_label: catLabel,
+        description: editDesc.trim() || null,
+      }).eq("id", editFile.id);
+      if (error) throw error;
+      setDbFiles((prev) => prev.map((ff) => ff.id === editFile.id ? { ...ff, name: editName.trim(), category_id: editCat, category_label: catLabel, description: editDesc.trim() || null } : ff));
+      alert("수정되었습니다.");
+      setShowEdit(false);
+    } catch (err) {
+      alert("수정 실패: " + err.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   // 파일 업로드 처리
   const handleUpload = async () => {
@@ -7248,25 +7286,55 @@ const [showAddCat, setShowAddCat] = useState(false);
                     {favorites.includes(String(file.id)) ? "⭐" : "☆"}
                   </button>
                   {isAdmin && file.id && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(file);
-                      }}
-                      style={{
-                        background: "#FEE2E2",
-                        border: "none",
-                        borderRadius: 8,
-                        padding: "6px 10px",
-                        fontSize: 12,
-                        color: "#EF4444",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        flexShrink: 0,
-                      }}
-                    >
-                      삭제
-                    </button>
+                    <div style={{ position: "relative", flexShrink: 0 }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId(menuOpenId === file.id ? null : file.id);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: 22,
+                          color: "#9CA3AF",
+                          padding: "0 4px",
+                          lineHeight: 1,
+                        }}
+                      >
+                        ⋮
+                      </button>
+                      {menuOpenId === file.id && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            position: "absolute",
+                            top: 30,
+                            right: 0,
+                            background: "#fff",
+                            border: "1px solid #E5E7EB",
+                            borderRadius: 10,
+                            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                            padding: 4,
+                            width: 110,
+                            zIndex: 30,
+                          }}
+                        >
+                          <div
+                            onClick={() => openEdit(file)}
+                            style={{ padding: "9px 12px", fontSize: 13, color: "#1F2937", cursor: "pointer", borderRadius: 8 }}
+                          >
+                            수정
+                          </div>
+                          <div
+                            onClick={() => { setMenuOpenId(null); handleDelete(file); }}
+                            style={{ padding: "9px 12px", fontSize: 13, color: "#EF4444", fontWeight: 600, cursor: "pointer", borderRadius: 8 }}
+                          >
+                            삭제
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
@@ -7424,6 +7492,151 @@ const [showAddCat, setShowAddCat] = useState(false);
           </div>
         </div>
       )}
+
+      {showEdit && editFile && (
+        <div
+          onClick={() => !savingEdit && setShowEdit(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: 20,
+              width: "100%",
+              maxWidth: 340,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>
+              자료 수정 ✏️
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#F3F4F6",
+                borderRadius: 8,
+                padding: "9px 11px",
+                marginBottom: 14,
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 900, color: "#EF4444" }}>PDF</span>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>파일은 변경되지 않아요</span>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
+              제목
+            </div>
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px 12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                fontSize: 14,
+                marginBottom: 14,
+                fontFamily: "inherit",
+              }}
+            />
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
+              분류
+            </div>
+            <select
+              value={editCat}
+              onChange={(e) => setEditCat(e.target.value)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px 12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                fontSize: 14,
+                marginBottom: 14,
+                background: "#fff",
+              }}
+            >
+              {allCats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
+              설명 (선택)
+            </div>
+            <input
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.target.value)}
+              placeholder="간단한 설명 (검색에 사용돼요)"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px 12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                fontSize: 14,
+                marginBottom: 18,
+                fontFamily: "inherit",
+              }}
+            />
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setShowEdit(false)}
+                disabled={savingEdit}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "#F3F4F6",
+                  color: "#6B7280",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: savingEdit ? "#A5B4FC" : "#4F46E5",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {savingEdit ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {showAddCat && (
         <div
