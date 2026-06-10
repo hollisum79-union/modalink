@@ -33,7 +33,7 @@ exports.handler = async (event) => {
       .maybeSingle();
 
     if (error) {
-      return { statusCode: 200, headers, body: JSON.stringify({ result: "server" }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: error.message }) };
     }
     if (!member) {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "not_found" }) };
@@ -64,6 +64,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (e) {
-    return { statusCode: 200, headers, body: JSON.stringify({ result: "server" }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ result: "server", detail: String(e && e.message ? e.message : e) }) };
   }
 };
