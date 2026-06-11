@@ -7217,13 +7217,15 @@ const [showAddCat, setShowAddCat] = useState(false);
                     borderRadius: 16,
                     padding: "16px 20px",
                     marginBottom: 10,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
+                   display: "flex",
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                    gap: 12,
                     boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
                     cursor: "pointer",
                   }}
                 >
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   <div
                     style={{
                       width: 44,
@@ -7265,6 +7267,8 @@ const [showAddCat, setShowAddCat] = useState(false);
                       {file.size} · {file.date || file.created_at?.slice(0, 10)}
                     </div>
                   </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
                  <Icon
                     path="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     color="#4F46E5"
@@ -7351,6 +7355,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                       삭제
                     </button>
                   )}
+                  </div>
                 </div>
               ))}
               <div
