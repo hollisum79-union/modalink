@@ -14010,6 +14010,7 @@ const getKyobunWork = (member: any, date: Date) => {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 16px" }}>
+            {!(activeTab === "교번" && selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) && (
             <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
               <button onClick={() => onGoAdjust && onGoAdjust(dateStr)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8", background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 🔧 근무조정
@@ -14018,6 +14019,7 @@ const getKyobunWork = (member: any, date: Date) => {
                 🏖️ 휴가
               </button>
             </div>
+            )}
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "2px 2px 12px" }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "#1a1a1a" }}>📝 메모</span>
@@ -14673,9 +14675,30 @@ const getKyobunWork = (member: any, date: Date) => {
     </div>
   );
 
+ const goMySchedule = () => {
+    setSubScreen(null);
+    setSearchQ("");
+    if (user?.work_type === "교번" && (user?.work_group === "대공원" || user?.work_group === "도봉")) {
+      setActiveTab("교번");
+      if (selectedGroup === user.work_group) {
+        const me = members.find((m: any) => String(m.employee_number) === String(user.employee_number));
+        setSelectedMember(me || user);
+      } else {
+        searchPickRef.current = null;
+        setSelectedGroup(user.work_group);
+      }
+    } else if (["A", "B", "C", "D"].includes(String(user?.work_group))) {
+      setActiveTab("교대");
+      setSelectedCrew(user.work_group);
+      setShiftViewMode("crew");
+    } else if (user?.work_type === "통상") {
+      setActiveTab("통상");
+    }
+  };
+
   const renderMenu = () => (
     <div style={{ padding: "24px 16px" }}>
-      <button onClick={() => setSubScreen(null)} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 16, padding: 0 }}>← 내 근무표 보기</button>
+      <button onClick={goMySchedule} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 16, padding: 0 }}>← 내 근무표 보기</button>
       <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 16, textAlign: "center" }}>근무표 홈</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         {[
