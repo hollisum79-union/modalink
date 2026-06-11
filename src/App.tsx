@@ -13385,6 +13385,8 @@ if (data) {
       .single();
     if (!error && data) {
       setFavorites((prev) => [...prev, { fav_id: data.id, ...member }]);
+    } else if (error) {
+      alert("즐겨찾기 추가 실패: " + error.message);
     }
   };
 
@@ -13396,6 +13398,8 @@ if (data) {
       .eq("id", favId);
     if (!error) {
       setFavorites((prev) => prev.filter((f) => f.fav_id !== favId));
+    } else {
+      alert("즐겨찾기 삭제 실패: " + error.message);
     }
   };
   const handleCrewSelect = async (crew: "A" | "B" | "C" | "D") => {
@@ -14665,7 +14669,7 @@ const getKyobunWork = (member: any, date: Date) => {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <button onClick={() => setSubScreen(null)} style={cmpBackStyle}>← 근무표</button>
         <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>⭐ 즐겨찾기</span>
-        <button onClick={() => { setSubScreen(null); setSelectedMember(null); }} style={{ background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 11px", borderRadius: 999, fontFamily: "inherit" }}>관리</button>
+        <button onClick={() => { setSearchQ(""); setSubScreen("search"); }} style={{ background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 11px", borderRadius: 999, fontFamily: "inherit" }}>관리</button>
       </div>
       {favorites.length === 0 ? (
         <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "30px 0" }}>
@@ -14769,6 +14773,17 @@ const getKyobunWork = (member: any, date: Date) => {
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: isK ? "#F4F3FF" : isS ? "#EFF6FF" : "#F3F4F6", color: isK ? "#7C3AED" : isS ? "#2563EB" : "#6B7280" }}>
                   {isK ? `교번 · ${m.work_group}` : isS ? `교대 · ${m.work_group}조` : m.work_type === "통상" ? "통상" : m.work_type === "변형통상" ? "변형통상" : m.work_type === "일근" ? "일근" : "미지정"}
                 </span>
+                {(isK || isS) && (() => {
+                  const fv = favorites.find((f: any) => String(f.id) === String(m.id));
+                  return (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (fv) { removeFavorite(fv.fav_id); } else { addFavorite(m); } }}
+                      style={{ background: "none", border: "none", fontSize: 17, cursor: "pointer", marginLeft: 6, padding: 0 }}
+                    >
+                      {fv ? "⭐" : "☆"}
+                    </button>
+                  );
+                })()}
               </div>
             );
           })}
