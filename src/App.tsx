@@ -9900,6 +9900,90 @@ function MemberManageScreen() {
     </div>
   );
 }
+function ScheduleUpdateAdmin() {
+  const [list, setList] = React.useState<any[]>([]);
+  const [newDate, setNewDate] = React.useState("");
+  const [newNote, setNewNote] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from("schedule_updates")
+      .select("*")
+      .order("effective_date", { ascending: false })
+      .limit(20);
+    if (data) setList(data);
+  };
+  React.useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!newDate) { alert("적용일을 선택해주세요."); return; }
+    setSaving(true);
+    const { error } = await supabase
+      .from("schedule_updates")
+      .insert({ effective_date: newDate, note: newNote || null });
+    setSaving(false);
+    if (error) { alert("저장 실패: " + error.message); return; }
+    setNewDate("");
+    setNewNote("");
+    load();
+  };
+
+  const del = async (id: number) => {
+    if (!window.confirm("이 업데이트 기록을 삭제할까요?")) return;
+    await supabase.from("schedule_updates").delete().eq("id", id);
+    load();
+  };
+
+  const todayStr = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })();
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+        근무표 업데이트
+      </div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
+        적용일을 미리 입력하면 그날 0시부터 근무표 상단 표시가 자동으로 바뀝니다.
+      </div>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>적용일</div>
+        <input
+          type="date"
+          value={newDate}
+          onChange={(e) => setNewDate(e.target.value)}
+          style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff" }}
+        />
+        <div style={{ fontSize: 12, color: "#6B7280", margin: "12px 0 6px" }}>메모 (선택)</div>
+        <input
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          placeholder="예: 6월 개정 교번표 반영"
+          style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box" }}
+        />
+        <button
+          onClick={add}
+          disabled={saving}
+          style={{ width: "100%", marginTop: 14, padding: "12px", background: "#0EA5E9", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: saving ? 0.6 : 1 }}
+        >
+          {saving ? "저장 중..." : "저장하기"}
+        </button>
+      </div>
+      {list.map((r) => (
+        <div key={r.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{r.effective_date}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 8, padding: "2px 8px", borderRadius: 999, background: r.effective_date > todayStr ? "#FEF3C7" : "#D1FAE5", color: r.effective_date > todayStr ? "#B45309" : "#047857" }}>
+              {r.effective_date > todayStr ? "예정" : "적용중"}
+            </span>
+            {r.note && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{r.note}</div>}
+          </div>
+          <button onClick={() => del(r.id)} style={{ background: "none", border: "none", color: "#EF4444", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>삭제</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
@@ -10629,6 +10713,14 @@ useEffect(() => {
       badge: 0,
     },
     {
+      id: "scheduleupdate",
+      label: "근무표 업데이트",
+      icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+      color: "#0EA5E9",
+      bg: "#E0F2FE",
+      badge: 0,
+    },
+    {
       id: "paysettings",
       label: "급여시간 설정",
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
@@ -10854,6 +10946,7 @@ useEffect(() => {
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
+        {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "members" && (
           <div>
             <div
@@ -12968,7 +13061,32 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
-  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare">(null);
+  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu">(null);
+  const [searchList, setSearchList] = React.useState<any[]>([]);
+  const [searchQ, setSearchQ] = React.useState("");
+  const searchPickRef = React.useRef<any>(null);
+  const [updateInfo, setUpdateInfo] = React.useState<any>(null);
+  const [pendingInfo, setPendingInfo] = React.useState<any>(null);
+  React.useEffect(() => {
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    supabase
+      .from("schedule_updates")
+      .select("effective_date, note")
+      .lte("effective_date", today)
+      .order("effective_date", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setUpdateInfo(data); });
+    supabase
+      .from("schedule_updates")
+      .select("effective_date, note")
+      .gt("effective_date", today)
+      .order("effective_date", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { setPendingInfo(data || null); });
+  }, []);
   const [contactList, setContactList] = React.useState<any[]>([]);
   const [contactSearch, setContactSearch] = React.useState("");
   const [compareMembers, setCompareMembers] = React.useState<any[]>([]);
@@ -13135,7 +13253,10 @@ if (data) {
               .maybeSingle();
             if (own) me = own;
           }
-          if (me) setSelectedMember(me);
+          if (searchPickRef.current) {
+            setSelectedMember(searchPickRef.current);
+            searchPickRef.current = null;
+          } else if (me) setSelectedMember(me);
         }
       }
       setLoadingMembers(false);
@@ -13194,6 +13315,15 @@ if (data) {
       .select("name, phone, employee_number")
       .order("name")
       .then(({ data }) => { if (data) setContactList(data); });
+  }, [subScreen]);
+
+  React.useEffect(() => {
+    if (subScreen !== "search") return;
+    supabase
+      .from("members")
+      .select("id, name, employee_number, work_type, work_group, start_position, schedule_total")
+      .order("name")
+      .then(({ data }) => { if (data) setSearchList(data); });
   }, [subScreen]);
 
   React.useEffect(() => {
@@ -14262,7 +14392,7 @@ const getKyobunWork = (member: any, date: Date) => {
     return (
       <div style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <button onClick={() => { setSubScreen(null); setContactSearch(""); }} style={cmpBackStyle}>← 메뉴화면</button>
+          <button onClick={() => { setSubScreen("menu"); setContactSearch(""); }} style={cmpBackStyle}>← 메뉴화면</button>
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>직원 연락처</span>
         </div>
         <input
@@ -14343,7 +14473,7 @@ const getKyobunWork = (member: any, date: Date) => {
     return (
       <div style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <button onClick={() => { setSubScreen(null); setTimePopup(null); }} style={cmpBackStyle}>← 메뉴화면</button>
+          <button onClick={() => { setSubScreen("menu"); setTimePopup(null); }} style={cmpBackStyle}>← 메뉴화면</button>
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>기관사 교번 비교</span>
         </div>
 
@@ -14460,6 +14590,84 @@ const getKyobunWork = (member: any, date: Date) => {
             </div>
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderMenu = () => (
+    <div style={{ padding: "24px 16px" }}>
+      <button onClick={() => setSubScreen(null)} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 16, padding: 0 }}>← 내 근무표 보기</button>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 16, textAlign: "center" }}>근무표 홈</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {[
+          { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
+          { label: "업무용 전화번호", action: () => alert("업무용 전화번호 (준비중)") },
+          { label: "직원 연락처", action: () => setSubScreen("contacts") },
+          { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
+          { label: "편승 도우미", action: () => alert("편승 도우미 (준비중)") },
+        ].map((c) => (
+          <button key={c.label} onClick={c.action} style={{ padding: "28px 12px", borderRadius: 16, border: "2px solid #E5E7EB", background: "#fff", fontSize: 15, fontWeight: 700, color: "#374151", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderSearch = () => {
+    const nq = searchQ.replace(/\s+/g, "").toLowerCase();
+    const results = nq
+      ? searchList.filter(
+          (m) =>
+            String(m.name || "").replace(/\s+/g, "").toLowerCase().includes(nq) ||
+            String(m.employee_number || "").includes(nq)
+        )
+      : [];
+    const openMember = (m: any) => {
+      if (m.work_type === "교번" && (m.work_group === "대공원" || m.work_group === "도봉")) {
+        setSubScreen(null);
+        setActiveTab("교번");
+        if (selectedGroup === m.work_group) setSelectedMember(m);
+        else { searchPickRef.current = m; setSelectedGroup(m.work_group); }
+      } else if (["A", "B", "C", "D"].includes(String(m.work_group))) {
+        setSubScreen(null);
+        setActiveTab("교대");
+        setSelectedCrew(m.work_group);
+        setShiftViewMode("crew");
+      } else {
+        alert("통상근무자 근무표 보기는 준비중입니다.");
+      }
+    };
+    return (
+      <div style={{ padding: "16px 16px 24px" }}>
+        <button onClick={() => { setSubScreen(null); setSearchQ(""); }} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 돌아가기</button>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>직원 근무 검색</div>
+        <input
+          value={searchQ}
+          onChange={(e) => setSearchQ(e.target.value)}
+          placeholder="이름 또는 사번으로 검색"
+          style={{ width: "100%", padding: "12px 14px", border: "1.5px solid #E8E8F0", borderRadius: 13, background: "#FAFAFD", fontSize: 14, boxSizing: "border-box", outline: "none" }}
+        />
+        <div style={{ marginTop: 14 }}>
+          {nq && results.length === 0 && (
+            <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>검색 결과가 없습니다</div>
+          )}
+          {results.map((m) => {
+            const isK = m.work_type === "교번";
+            const isS = ["A", "B", "C", "D"].includes(String(m.work_group));
+            return (
+              <div key={m.id} onClick={() => openMember(m)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 6px", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}>
+                <div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{m.name}</span>
+                  <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: 8 }}>{m.employee_number}</span>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: isK ? "#F4F3FF" : isS ? "#EFF6FF" : "#F3F4F6", color: isK ? "#7C3AED" : isS ? "#2563EB" : "#6B7280" }}>
+                  {isK ? `교번 · ${m.work_group}` : isS ? `교대 · ${m.work_group}조` : m.work_type || "통상"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -15310,6 +15518,7 @@ const getKyobunWork = (member: any, date: Date) => {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            flexWrap: "wrap",
             gap: 8,
             marginTop: 5,
           }}
@@ -15318,24 +15527,51 @@ const getKyobunWork = (member: any, date: Date) => {
             사용자 : <b style={{ color: "#1F2937" }}>{user?.name}</b>
             {user?.work_group ? ` ( ${user.work_group} )` : ""}
           </span>
+          {updateInfo && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#059669", background: "#ECFDF5", padding: "2px 8px", borderRadius: 999 }}>
+              DB : {String(updateInfo.effective_date || "").replace(/-/g, ".")}
+            </span>
+          )}
+          {pendingInfo && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#B45309", background: "#FEF3C7", padding: "2px 8px", borderRadius: 999 }}>
+              ⏳ {String(pendingInfo.effective_date || "").slice(5).replace("-", ".")} 변경예정
+            </span>
+          )}
+          </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <button
-            onClick={() => {
-              setSelectedGroup(null);
-              setSelectedMember(null);
-              setSelectedCrew(null);
-            }}
+            onClick={() => setSubScreen("menu")}
             style={{
               background: "#EEF2FF",
               border: "none",
               color: "#6366F1",
-              fontSize: 12,
+              fontSize: 13,
+              fontWeight: 700,
               cursor: "pointer",
-              padding: "3px 11px",
-              borderRadius: 999,
+              padding: "9px 0",
+              borderRadius: 11,
               fontFamily: "inherit",
+              flex: 1,
             }}
           >
-            메뉴화면
+            ☰ 메뉴화면
+          </button>
+          <button
+            onClick={() => { setSearchQ(""); setSubScreen("search"); }}
+            style={{
+              background: "#F4F3FF",
+              border: "none",
+              color: "#7C3AED",
+             fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              padding: "9px 0",
+              borderRadius: 11,
+              fontFamily: "inherit",
+              flex: 1,
+            }}
+          >
+            🔍 직원검색
           </button>
         </div>
 
@@ -15396,7 +15632,11 @@ const getKyobunWork = (member: any, date: Date) => {
       </div>
 
                        <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
-        {activeTab === "교대" && (
+        {subScreen === "search" && renderSearch()}
+        {subScreen === "menu" && renderMenu()}
+        {subScreen === "contacts" && renderContacts()}
+        {subScreen === "compare" && renderCompare()}
+        {subScreen === null && activeTab === "교대" && (
           <>
             {!crewLoaded && (
               <div
@@ -15414,9 +15654,9 @@ const getKyobunWork = (member: any, date: Date) => {
             {crewLoaded && shiftViewMode === "all" && renderAllCrews()}
           </>
         )}
-        {activeTab === "교번" && renderKyobunTab()}
-        {activeTab === "통상" && renderTongsangTab()}
-        {activeTab === "변형통상" && (
+       {subScreen === null && activeTab === "교번" && renderKyobunTab()}
+       {subScreen === null && activeTab === "통상" && renderTongsangTab()}
+        {subScreen === null && activeTab === "변형통상" && (
           <div
             style={{
               padding: 32,
@@ -25163,6 +25403,8 @@ export default function App() {
       return () => window.removeEventListener("popstate", onBack);
     }, []);
   const [adjustInitDate, setAdjustInitDate] = useState("");
+  const [adjustReturn, setAdjustReturn] = useState("home");
+  const [leaveReturn, setLeaveReturn] = useState("home");
   const [adjustInitTab, setAdjustInitTab] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
@@ -26462,7 +26704,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "notice-admin")
     return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("home"); }} />;
   if (screen === "workAdjust")
-        return <WorkAdjustScreen onBack={() => setScreen("home")} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
+        return <WorkAdjustScreen onBack={() => setScreen(adjustReturn)} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
   if (screen === "salary")
     return (
       <>
@@ -26471,7 +26713,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       </>
     );
   if (screen === "leave")
-      return <LeaveScreen onBack={() => setScreen("home")} user={user} initialDate={leaveInitDate} />;
+      return <LeaveScreen onBack={() => setScreen(leaveReturn)} user={user} initialDate={leaveInitDate} />;
   if (screen === "distance")
     return <DistanceScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "logbook")
@@ -26483,8 +26725,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         user={user}
         refreshUser={refreshUser}
-        onGoAdjust={(d) => { setAdjustInitDate(d); setScreen("workAdjust"); }}
-        onGoLeave={(d) => { setLeaveInitDate(d); setScreen("leave"); }}
+        onGoAdjust={(d) => { setAdjustInitDate(d); setAdjustReturn("schedule"); setScreen("workAdjust"); }}
+        onGoLeave={(d) => { setLeaveInitDate(d); setLeaveReturn("schedule"); setScreen("leave"); }}
       />
         <BottomTabBar screen={screen} setScreen={setScreen} />
       </>
@@ -27412,7 +27654,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             );
           })()}
           <div
-                    onClick={() => { setAdjustInitDate(""); setScreen("workAdjust"); }}
+       onClick={() => { setAdjustInitDate(""); setAdjustReturn("home"); setScreen("workAdjust"); }}
             style={{
               background: "#fff",
               borderRadius: 16,
@@ -27650,7 +27892,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         )}
         {swapReqCount > 0 && (
           <div
-            onClick={() => { setAdjustInitTab("교번교체"); setScreen("workAdjust"); }}
+           onClick={() => { setAdjustInitTab("교번교체"); setAdjustReturn("home"); setScreen("workAdjust"); }}
             style={{ background: "#fff", border: "2px solid #4F46E5", borderRadius: 14, padding: "14px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}
           >
             <div style={{ fontSize: 22 }}>📥</div>
@@ -27902,7 +28144,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   if (item.id === "anonymous") setScreen("anonymous");
                   if (item.id === "archive") setScreen("archive");
                   if (item.id === "about") setScreen("about");
-                  if (item.id === "leave") setScreen("leave");
+                if (item.id === "leave") { setLeaveReturn("home"); setScreen("leave"); }
                   if (item.id === "salary") setScreen("salary");
                   if (item.id === "schedule") setScreen("schedule");
                   if (item.id === "distance") setScreen("distance");
