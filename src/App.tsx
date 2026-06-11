@@ -13066,6 +13066,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [searchQ, setSearchQ] = React.useState("");
   const searchPickRef = React.useRef<any>(null);
   const [updateInfo, setUpdateInfo] = React.useState<any>(null);
+  const [pendingInfo, setPendingInfo] = React.useState<any>(null);
   React.useEffect(() => {
     const t = new Date();
     const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
@@ -13077,6 +13078,14 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
       .limit(1)
       .maybeSingle()
       .then(({ data }) => { if (data) setUpdateInfo(data); });
+    supabase
+      .from("schedule_updates")
+      .select("effective_date, note")
+      .gt("effective_date", today)
+      .order("effective_date", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { setPendingInfo(data || null); });
   }, []);
   const [contactList, setContactList] = React.useState<any[]>([]);
   const [contactSearch, setContactSearch] = React.useState("");
@@ -15509,6 +15518,7 @@ const getKyobunWork = (member: any, date: Date) => {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            flexWrap: "wrap",
             gap: 8,
             marginTop: 5,
           }}
@@ -15517,20 +15527,34 @@ const getKyobunWork = (member: any, date: Date) => {
             사용자 : <b style={{ color: "#1F2937" }}>{user?.name}</b>
             {user?.work_group ? ` ( ${user.work_group} )` : ""}
           </span>
+          {updateInfo && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#059669", background: "#ECFDF5", padding: "2px 8px", borderRadius: 999 }}>
+              DB : {String(updateInfo.effective_date || "").replace(/-/g, ".")}
+            </span>
+          )}
+          {pendingInfo && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#B45309", background: "#FEF3C7", padding: "2px 8px", borderRadius: 999 }}>
+              ⏳ {String(pendingInfo.effective_date || "").slice(5).replace("-", ".")} 변경예정
+            </span>
+          )}
+          </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <button
             onClick={() => setSubScreen("menu")}
             style={{
               background: "#EEF2FF",
               border: "none",
               color: "#6366F1",
-              fontSize: 12,
+              fontSize: 13,
+              fontWeight: 700,
               cursor: "pointer",
-              padding: "3px 11px",
-              borderRadius: 999,
+              padding: "9px 0",
+              borderRadius: 11,
               fontFamily: "inherit",
+              flex: 1,
             }}
           >
-            메뉴화면
+            ☰ 메뉴화면
           </button>
           <button
             onClick={() => { setSearchQ(""); setSubScreen("search"); }}
@@ -15538,23 +15562,18 @@ const getKyobunWork = (member: any, date: Date) => {
               background: "#F4F3FF",
               border: "none",
               color: "#7C3AED",
-              fontSize: 12,
+             fontSize: 13,
+              fontWeight: 700,
               cursor: "pointer",
-              padding: "3px 11px",
-              borderRadius: 999,
+              padding: "9px 0",
+              borderRadius: 11,
               fontFamily: "inherit",
+              flex: 1,
             }}
           >
-            직원검색
+            🔍 직원검색
           </button>
         </div>
-        {updateInfo && (
-          <div style={{ textAlign: "center", marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-              📋 근무표 {Number(updateInfo.effective_date?.slice(5, 7))}월 {Number(updateInfo.effective_date?.slice(8, 10))}일 기준{updateInfo.note ? ` · ${updateInfo.note}` : ""}
-            </span>
-          </div>
-        )}
 
         <div
           style={{
