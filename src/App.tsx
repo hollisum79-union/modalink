@@ -9900,6 +9900,90 @@ function MemberManageScreen() {
     </div>
   );
 }
+function ScheduleUpdateAdmin() {
+  const [list, setList] = React.useState<any[]>([]);
+  const [newDate, setNewDate] = React.useState("");
+  const [newNote, setNewNote] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from("schedule_updates")
+      .select("*")
+      .order("effective_date", { ascending: false })
+      .limit(20);
+    if (data) setList(data);
+  };
+  React.useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!newDate) { alert("적용일을 선택해주세요."); return; }
+    setSaving(true);
+    const { error } = await supabase
+      .from("schedule_updates")
+      .insert({ effective_date: newDate, note: newNote || null });
+    setSaving(false);
+    if (error) { alert("저장 실패: " + error.message); return; }
+    setNewDate("");
+    setNewNote("");
+    load();
+  };
+
+  const del = async (id: number) => {
+    if (!window.confirm("이 업데이트 기록을 삭제할까요?")) return;
+    await supabase.from("schedule_updates").delete().eq("id", id);
+    load();
+  };
+
+  const todayStr = (() => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })();
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+        근무표 업데이트
+      </div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
+        적용일을 미리 입력하면 그날 0시부터 근무표 상단 표시가 자동으로 바뀝니다.
+      </div>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>적용일</div>
+        <input
+          type="date"
+          value={newDate}
+          onChange={(e) => setNewDate(e.target.value)}
+          style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff" }}
+        />
+        <div style={{ fontSize: 12, color: "#6B7280", margin: "12px 0 6px" }}>메모 (선택)</div>
+        <input
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          placeholder="예: 6월 개정 교번표 반영"
+          style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box" }}
+        />
+        <button
+          onClick={add}
+          disabled={saving}
+          style={{ width: "100%", marginTop: 14, padding: "12px", background: "#0EA5E9", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: saving ? 0.6 : 1 }}
+        >
+          {saving ? "저장 중..." : "저장하기"}
+        </button>
+      </div>
+      {list.map((r) => (
+        <div key={r.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{r.effective_date}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 8, padding: "2px 8px", borderRadius: 999, background: r.effective_date > todayStr ? "#FEF3C7" : "#D1FAE5", color: r.effective_date > todayStr ? "#B45309" : "#047857" }}>
+              {r.effective_date > todayStr ? "예정" : "적용중"}
+            </span>
+            {r.note && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{r.note}</div>}
+          </div>
+          <button onClick={() => del(r.id)} style={{ background: "none", border: "none", color: "#EF4444", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>삭제</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
@@ -10629,6 +10713,14 @@ useEffect(() => {
       badge: 0,
     },
     {
+      id: "scheduleupdate",
+      label: "근무표 업데이트",
+      icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+      color: "#0EA5E9",
+      bg: "#E0F2FE",
+      badge: 0,
+    },
+    {
       id: "paysettings",
       label: "급여시간 설정",
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
@@ -10854,6 +10946,7 @@ useEffect(() => {
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
+        {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "members" && (
           <div>
             <div
@@ -12972,6 +13065,19 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [searchList, setSearchList] = React.useState<any[]>([]);
   const [searchQ, setSearchQ] = React.useState("");
   const searchPickRef = React.useRef<any>(null);
+  const [updateInfo, setUpdateInfo] = React.useState<any>(null);
+  React.useEffect(() => {
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    supabase
+      .from("schedule_updates")
+      .select("effective_date, note")
+      .lte("effective_date", today)
+      .order("effective_date", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setUpdateInfo(data); });
+  }, []);
   const [contactList, setContactList] = React.useState<any[]>([]);
   const [contactSearch, setContactSearch] = React.useState("");
   const [compareMembers, setCompareMembers] = React.useState<any[]>([]);
@@ -15442,6 +15548,13 @@ const getKyobunWork = (member: any, date: Date) => {
             직원검색
           </button>
         </div>
+        {updateInfo && (
+          <div style={{ textAlign: "center", marginTop: 6 }}>
+            <span style={{ fontSize: 11, color: "#9CA3AF" }}>
+              📋 근무표 {Number(updateInfo.effective_date?.slice(5, 7))}월 {Number(updateInfo.effective_date?.slice(8, 10))}일 기준{updateInfo.note ? ` · ${updateInfo.note}` : ""}
+            </span>
+          </div>
+        )}
 
         <div
           style={{
