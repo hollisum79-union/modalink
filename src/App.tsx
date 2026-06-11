@@ -13321,7 +13321,7 @@ if (data) {
     if (subScreen !== "search") return;
     supabase
       .from("members")
-      .select("id, name, employee_number, work_type, work_group, start_position, schedule_total")
+      .select("id, name, employee_number, work_type, work_group, start_position, schedule_total, is_union")
       .order("name")
       .then(({ data }) => { if (data) setSearchList(data); });
   }, [subScreen]);
@@ -14761,10 +14761,13 @@ const getKyobunWork = (member: any, date: Date) => {
               <div key={m.id} onClick={() => openMember(m)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 6px", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}>
                 <div>
                   <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{m.name}</span>
+                  {m.is_union === false && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 999, marginLeft: 6 }}>비조합원</span>
+                  )}
                   <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: 8 }}>{m.employee_number}</span>
                 </div>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: isK ? "#F4F3FF" : isS ? "#EFF6FF" : "#F3F4F6", color: isK ? "#7C3AED" : isS ? "#2563EB" : "#6B7280" }}>
-                  {isK ? `교번 · ${m.work_group}` : isS ? `교대 · ${m.work_group}조` : m.work_type || "통상"}
+                  {isK ? `교번 · ${m.work_group}` : isS ? `교대 · ${m.work_group}조` : m.work_type === "통상" ? "통상" : m.work_type === "변형통상" ? "변형통상" : m.work_type === "일근" ? "일근" : "미지정"}
                 </span>
               </div>
             );
