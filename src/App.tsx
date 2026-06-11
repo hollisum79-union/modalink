@@ -14652,16 +14652,6 @@ const getKyobunWork = (member: any, date: Date) => {
                       </span>
                     ) : null}
                   </td>
-                    {m.name}
-                    {m.fav_id ? (
-                      <span
-                        onClick={() => { if (window.confirm(m.name + "님을 즐겨찾기에서 해제할까요?")) removeFavorite(m.fav_id); }}
-                        style={{ cursor: "pointer", fontSize: 12, marginLeft: 3 }}
-                      >
-                        ⭐
-                      </span>
-                    ) : null}
-                  </td>
                   {dates.map((d, i) => {
                     const c = horizCell(m, d);
                     return (
