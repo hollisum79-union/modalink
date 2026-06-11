@@ -24841,8 +24841,8 @@ function NoticeForm({ item, onClose }) {
     <div style={{ minHeight: "100vh", background: "#F9FAFB" }}>
       <div
         style={{
-          background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "20px 16px",
+                    background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
+          padding: "max(env(safe-area-inset-top), 44px) 16px 16px",
           color: "#fff",
           position: "sticky",
           top: 0,
@@ -26133,18 +26133,64 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 {(selectedNotice as any).created_at.slice(0, 10)}
               </div>
             )}
-            <div
+                        <div
               style={{
-                fontSize: 14,
-                color: "#374151",
-                lineHeight: 1.7,
-                whiteSpace: "pre-wrap",
                 marginTop: 16,
                 paddingTop: 16,
                 borderTop: "1px solid #F3F4F6",
               }}
             >
-              {(selectedNotice as any)?.content || "내용 준비 중입니다."}
+              {((selectedNotice as any)?.content || "내용 준비 중입니다.")
+                .split("\n")
+                .map((line: string, i: number) => {
+                  const trimmed = line.trim();
+                  if (trimmed === "") return <div key={i} style={{ height: 10 }} />;
+                  const bullet = trimmed.match(/^[•\-·*]\s*(.*)$/);
+                  if (bullet) {
+                    return (
+                      <div
+                        key={i}
+                        style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}
+                      >
+                        <div
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: "50%",
+                            background: "#60A5FA",
+                            flexShrink: 0,
+                            marginTop: 9,
+                          }}
+                        />
+                        <span
+                          style={{
+                            flex: 1,
+                            fontSize: 15,
+                            color: "#374151",
+                            lineHeight: 1.8,
+                            wordBreak: "keep-all",
+                          }}
+                        >
+                          {bullet[1]}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: 15,
+                        color: "#374151",
+                        lineHeight: 1.8,
+                        wordBreak: "keep-all",
+                        marginBottom: 8,
+                      }}
+                    >
+                      {line}
+                    </div>
+                  );
+                })}
             </div>
           </div>
         </div>
