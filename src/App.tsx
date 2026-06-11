@@ -6444,7 +6444,7 @@ const [selectedReport, setSelectedReport] = useState(null);
 const archiveCategories = [
   {
     id: "agreement",
-    label: "단체협약",
+    label: "단체협약 및 노사합의서",
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
     color: "#4F46E5",
     bg: "#EEF0FF",
@@ -6522,6 +6522,9 @@ function ArchiveScreen({ onBack, user }) {
   const [showUpload, setShowUpload] = useState(false);
   const [favorites, setFavorites] = useState([]);
 const [showAddCat, setShowAddCat] = useState(false);
+  const [renameFile, setRenameFile] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [moveFile, setMoveFile] = useState(null);
   const [newCatName, setNewCatName] = useState("");
 
   // 새 분류 추가
@@ -6715,10 +6718,47 @@ const [showAddCat, setShowAddCat] = useState(false);
       if (error) throw error;
       const { data } = await supabase.from("archive_files").select("*").order("created_at", { ascending: false });
       setDbFiles(data || []);
-      alert("삭제되었습니다.");
+            alert("삭제되었습니다.");
     } catch (err) {
       alert("삭제 실패: " + err.message);
     }
+  };
+
+  // 저장된 자료 제목 변경
+  const handleRename = async () => {
+    if (!renameFile) return;
+    const newName = renameValue.trim();
+    if (!newName) { alert("제목을 입력해주세요."); return; }
+    const { error } = await supabase
+      .from("archive_files")
+      .update({ name: newName })
+      .eq("id", renameFile.id);
+    if (error) { alert("제목 변경 실패: " + error.message); return; }
+    setDbFiles((prev) =>
+      prev.map((f) => (f.id === renameFile.id ? { ...f, name: newName } : f))
+    );
+    setRenameFile(null);
+    alert("제목이 변경되었습니다.");
+  };
+
+  // 파일을 다른 분류로 이동 (정보만 변경, 스토리지 파일은 그대로 둠)
+  const handleMove = async (targetCat) => {
+    if (!moveFile) return;
+    if (targetCat.id === moveFile.category_id) { setMoveFile(null); return; }
+    const { error } = await supabase
+      .from("archive_files")
+      .update({ category_id: targetCat.id, category_label: targetCat.label })
+      .eq("id", moveFile.id);
+    if (error) { alert("이동 실패: " + error.message); return; }
+    setDbFiles((prev) =>
+      prev.map((f) =>
+        f.id === moveFile.id
+          ? { ...f, category_id: targetCat.id, category_label: targetCat.label }
+          : f
+      )
+    );
+    setMoveFile(null);
+    alert("'" + targetCat.label + "' 분류로 이동했습니다.");
   };
 
   return (
@@ -7177,13 +7217,15 @@ const [showAddCat, setShowAddCat] = useState(false);
                     borderRadius: 16,
                     padding: "16px 20px",
                     marginBottom: 10,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
+                   display: "flex",
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                    gap: 12,
                     boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
                     cursor: "pointer",
                   }}
                 >
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   <div
                     style={{
                       width: 44,
@@ -7225,6 +7267,8 @@ const [showAddCat, setShowAddCat] = useState(false);
                       {file.size} · {file.date || file.created_at?.slice(0, 10)}
                     </div>
                   </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
                  <Icon
                     path="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     color="#4F46E5"
@@ -7245,8 +7289,51 @@ const [showAddCat, setShowAddCat] = useState(false);
                       lineHeight: 1,
                     }}
                   >
-                    {favorites.includes(String(file.id)) ? "⭐" : "☆"}
+                                        {favorites.includes(String(file.id)) ? "⭐" : "☆"}
                   </button>
+                  {isAdmin && file.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMoveFile(file);
+                      }}
+                      style={{
+                        background: "#EEF2FF",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        color: "#4F46E5",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                      }}
+                    >
+                      이동
+                    </button>
+                  )}
+                                    {isAdmin && file.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenameFile(file);
+                        setRenameValue(file.name);
+                      }}
+                      style={{
+                        background: "#FEF3C7",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        color: "#D97706",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                      }}
+                    >
+                      수정
+                    </button>
+                  )}
                   {isAdmin && file.id && (
                     <button
                       onClick={(e) => {
@@ -7268,6 +7355,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                       삭제
                     </button>
                   )}
+                  </div>
                 </div>
               ))}
               <div
@@ -7321,7 +7409,13 @@ const [showAddCat, setShowAddCat] = useState(false);
             <input
               type="file"
               accept="application/pdf"
-              onChange={(e) => setUpFile(e.target.files?.[0] || null)}
+                                     onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                setUpFile(f);
+                if (f && !upName.trim()) {
+                  setUpName(f.name.replace(/\.[^/.]+$/, ""));
+                }
+              }}
               style={{ width: "100%", marginBottom: 14, fontSize: 13 }}
             />
 
@@ -7502,6 +7596,174 @@ const [showAddCat, setShowAddCat] = useState(false);
                 }}
               >
                 추가
+              </button>
+            </div>
+          </div>
+        </div>
+            )}
+
+      {moveFile && (
+        <div
+          onClick={() => setMoveFile(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: "22px 22px 0 0",
+              padding: "8px 18px 28px",
+              width: "100%",
+              maxWidth: 430,
+            }}
+          >
+            <div
+              style={{
+                width: 38,
+                height: 4,
+                background: "#E5E7EB",
+                borderRadius: 4,
+                margin: "8px auto 14px",
+              }}
+            />
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>
+              분류 이동
+            </div>
+            <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 16 }}>
+              "{moveFile.name}"을(를) 옮길 분류를 선택하세요
+            </div>
+            {allCats.map((cat) => {
+              const isCur = cat.id === moveFile.category_id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => handleMove(cat)}
+                  disabled={isCur}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    textAlign: "left",
+                    background: isCur ? "#EEF2FF" : "#F9FAFB",
+                    border: isCur ? "1.5px solid #C7D2FE" : "1.5px solid transparent",
+                    borderRadius: 12,
+                    padding: 14,
+                    marginBottom: 8,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: isCur ? "#4F46E5" : "#374151",
+                    cursor: isCur ? "default" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: "50%",
+                      background: "#7C3AED",
+                      flexShrink: 0,
+                    }}
+                  />
+                  {cat.label}
+                  {isCur && (
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>
+                      현재 위치
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+            )}
+
+      {renameFile && (
+        <div
+          onClick={() => setRenameFile(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: 20,
+              width: "100%",
+              maxWidth: 340,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+              제목 수정 ✏️
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16 }}>
+              자료 제목을 새로 입력하세요.
+            </div>
+            <input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="자료 제목"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 10,
+                fontSize: 14,
+                marginBottom: 18,
+                fontFamily: "inherit",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setRenameFile(null)}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "#F3F4F6",
+                  color: "#6B7280",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRename}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                저장
               </button>
             </div>
           </div>
@@ -8856,7 +9118,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                     textAlign: "center",
                   }}
                 >
-                  입사일
+                  입사연도
                 </div>
               </div>
               {members
@@ -8952,7 +9214,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                   </div>
                   <div style={{ flex: 0.9, textAlign: "center" }}>
                     <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                      {m.joinDate}
+                                            {m.join_year || "-"}
                     </span>
                   </div>
                 </div>
@@ -16357,7 +16619,7 @@ function MySettingsScreen({
                   </div>
                 </div>
 
-                {/* 입사년도 */}
+                {/* 입사연도 */}
 
                 <div style={{ marginBottom: 10 }}>
                   <div
@@ -16368,7 +16630,7 @@ function MySettingsScreen({
                       fontWeight: 600,
                     }}
                   >
-                    입사년도
+                    입사연도
                   </div>
                   <input
                     value={editJoinYear}
@@ -16992,7 +17254,7 @@ function MySettingsScreen({
                 { label: "직급", value: editGrade ? `${editGrade}급` : "-" },
                 { label: "현재 호봉", value: editPayStep ? `${editPayStep}호봉` : "-" },
                 { label: "다음 승급일", value: editPayStepNextDate || "-" },
-                { label: "입사년도", value: editJoinYear || "-" },
+                { label: "입사연도", value: editJoinYear || "-" },
                 { label: "출생연도", value: editBirthYear || "-" },
               ].map((it, i, arr) => (
                 <div key={it.label} style={{ display: "flex", justifyContent: "space-between", padding: "11px 0", borderBottom: i < arr.length - 1 ? "1px solid #F3F4F6" : "none" }}>
@@ -17048,7 +17310,7 @@ function MySettingsScreen({
                   },
                   { label: "직급", value: savedWorkData.grade },
                   {
-                  label: "입사년도",
+                  label: "입사연도",
                   value: savedWorkData.joinYear
                     ? `${savedWorkData.joinYear}년`
                     : "미제공",
@@ -24510,7 +24772,28 @@ function NoticeForm({ item, onClose }) {
   const [act, setAct] = useState(
     item?.is_active !== undefined ? item.is_active : true
   );
-  const [svg, setSvg] = useState(false);
+ const [svg, setSvg] = useState(false);
+  const [imgUrl, setImgUrl] = useState(item?.image_url || "");
+  const [imgPath, setImgPath] = useState(item?.image_path || "");
+  const [imgUploading, setImgUploading] = useState(false);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImgUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `notices/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("archive").upload(path, file);
+    if (error) {
+      alert("사진 업로드 실패: " + error.message);
+      setImgUploading(false);
+      return;
+    }
+    const { data } = supabase.storage.from("archive").getPublicUrl(path);
+    setImgUrl(data.publicUrl);
+    setImgPath(path);
+    setImgUploading(false);
+  };
 
   const doSave = async () => {
     if (!ttl.trim()) {
@@ -24529,6 +24812,8 @@ function NoticeForm({ item, onClose }) {
         tag: tg,
         is_active: act,
         color: tg === "긴급" ? "red" : "indigo",
+        image_url: imgUrl || null,
+        image_path: imgPath || null,
       };
       if (isEdit) {
         const { error } = await supabase
@@ -24584,8 +24869,8 @@ function NoticeForm({ item, onClose }) {
     <div style={{ minHeight: "100vh", background: "#F9FAFB" }}>
       <div
         style={{
-          background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-          padding: "20px 16px",
+                    background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
+          padding: "max(env(safe-area-inset-top), 44px) 16px 16px",
           color: "#fff",
           position: "sticky",
           top: 0,
@@ -24699,6 +24984,59 @@ function NoticeForm({ item, onClose }) {
             rows={6}
             style={{ ...inp, resize: "vertical", fontFamily: "inherit" }}
           />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={lbl}>사진 (선택)</label>
+          {imgUrl ? (
+            <div style={{ position: "relative", marginTop: 4 }}>
+              <img
+                src={imgUrl}
+                alt="첨부 사진"
+                style={{ width: "100%", borderRadius: 10, display: "block" }}
+              />
+              <button
+                onClick={() => { setImgUrl(""); setImgPath(""); }}
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  background: "rgba(0,0,0,0.6)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                사진 제거
+              </button>
+            </div>
+          ) : (
+            <label
+              style={{
+                display: "block",
+                textAlign: "center",
+                padding: 14,
+                background: "#fff",
+                border: "1px dashed #C7D2FE",
+                borderRadius: 8,
+                color: "#4F46E5",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {imgUploading ? "올리는 중..." : "📷 사진 첨부"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={pickImage}
+                style={{ display: "none" }}
+              />
+            </label>
+          )}
         </div>
         <div style={{ marginBottom: 20 }}>
           <label style={lbl}>표시 여부</label>
@@ -25876,18 +26214,64 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 {(selectedNotice as any).created_at.slice(0, 10)}
               </div>
             )}
-            <div
+                        <div
               style={{
-                fontSize: 14,
-                color: "#374151",
-                lineHeight: 1.7,
-                whiteSpace: "pre-wrap",
                 marginTop: 16,
                 paddingTop: 16,
                 borderTop: "1px solid #F3F4F6",
               }}
             >
-              {(selectedNotice as any)?.content || "내용 준비 중입니다."}
+              {((selectedNotice as any)?.content || "내용 준비 중입니다.")
+                .split("\n")
+                .map((line: string, i: number) => {
+                  const trimmed = line.trim();
+                  if (trimmed === "") return <div key={i} style={{ height: 10 }} />;
+                  const bullet = trimmed.match(/^[•\-·*]\s*(.*)$/);
+                  if (bullet) {
+                    return (
+                      <div
+                        key={i}
+                        style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}
+                      >
+                        <div
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: "50%",
+                            background: "#60A5FA",
+                            flexShrink: 0,
+                            marginTop: 9,
+                          }}
+                        />
+                        <span
+                          style={{
+                            flex: 1,
+                            fontSize: 15,
+                            color: "#374151",
+                            lineHeight: 1.8,
+                            wordBreak: "keep-all",
+                          }}
+                        >
+                          {bullet[1]}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: 15,
+                        color: "#374151",
+                        lineHeight: 1.8,
+                        wordBreak: "keep-all",
+                        marginBottom: 8,
+                      }}
+                    >
+                      {line}
+                    </div>
+                  );
+                })}
             </div>
           </div>
         </div>
