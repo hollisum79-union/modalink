@@ -6522,6 +6522,8 @@ function ArchiveScreen({ onBack, user }) {
   const [showUpload, setShowUpload] = useState(false);
   const [favorites, setFavorites] = useState([]);
 const [showAddCat, setShowAddCat] = useState(false);
+  const [renameFile, setRenameFile] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
   const [moveFile, setMoveFile] = useState(null);
   const [newCatName, setNewCatName] = useState("");
 
@@ -6716,10 +6718,27 @@ const [showAddCat, setShowAddCat] = useState(false);
       if (error) throw error;
       const { data } = await supabase.from("archive_files").select("*").order("created_at", { ascending: false });
       setDbFiles(data || []);
-      alert("삭제되었습니다.");
+            alert("삭제되었습니다.");
     } catch (err) {
-            alert("삭제 실패: " + err.message);
+      alert("삭제 실패: " + err.message);
     }
+  };
+
+  // 저장된 자료 제목 변경
+  const handleRename = async () => {
+    if (!renameFile) return;
+    const newName = renameValue.trim();
+    if (!newName) { alert("제목을 입력해주세요."); return; }
+    const { error } = await supabase
+      .from("archive_files")
+      .update({ name: newName })
+      .eq("id", renameFile.id);
+    if (error) { alert("제목 변경 실패: " + error.message); return; }
+    setDbFiles((prev) =>
+      prev.map((f) => (f.id === renameFile.id ? { ...f, name: newName } : f))
+    );
+    setRenameFile(null);
+    alert("제목이 변경되었습니다.");
   };
 
   // 파일을 다른 분류로 이동 (정보만 변경, 스토리지 파일은 그대로 둠)
@@ -7289,6 +7308,28 @@ const [showAddCat, setShowAddCat] = useState(false);
                       이동
                     </button>
                   )}
+                                    {isAdmin && file.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenameFile(file);
+                        setRenameValue(file.name);
+                      }}
+                      style={{
+                        background: "#FEF3C7",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        color: "#D97706",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                      }}
+                    >
+                      수정
+                    </button>
+                  )}
                   {isAdmin && file.id && (
                     <button
                       onClick={(e) => {
@@ -7363,7 +7404,7 @@ const [showAddCat, setShowAddCat] = useState(false);
             <input
               type="file"
               accept="application/pdf"
-                        onChange={(e) => {
+                                     onChange={(e) => {
                 const f = e.target.files?.[0] || null;
                 setUpFile(f);
                 if (f && !upName.trim()) {
@@ -7637,6 +7678,89 @@ const [showAddCat, setShowAddCat] = useState(false);
                 </button>
               );
             })}
+          </div>
+        </div>
+            )}
+
+      {renameFile && (
+        <div
+          onClick={() => setRenameFile(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: 20,
+              width: "100%",
+              maxWidth: 340,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+              제목 수정 ✏️
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16 }}>
+              자료 제목을 새로 입력하세요.
+            </div>
+            <input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="자료 제목"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 10,
+                fontSize: 14,
+                marginBottom: 18,
+                fontFamily: "inherit",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setRenameFile(null)}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "#F3F4F6",
+                  color: "#6B7280",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRename}
+                style={{
+                  flex: 1,
+                  padding: "12px 0",
+                  background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                저장
+              </button>
+            </div>
           </div>
         </div>
       )}
