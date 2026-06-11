@@ -24772,7 +24772,28 @@ function NoticeForm({ item, onClose }) {
   const [act, setAct] = useState(
     item?.is_active !== undefined ? item.is_active : true
   );
-  const [svg, setSvg] = useState(false);
+ const [svg, setSvg] = useState(false);
+  const [imgUrl, setImgUrl] = useState(item?.image_url || "");
+  const [imgPath, setImgPath] = useState(item?.image_path || "");
+  const [imgUploading, setImgUploading] = useState(false);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImgUploading(true);
+    const ext = file.name.split(".").pop();
+    const path = `notices/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("archive").upload(path, file);
+    if (error) {
+      alert("사진 업로드 실패: " + error.message);
+      setImgUploading(false);
+      return;
+    }
+    const { data } = supabase.storage.from("archive").getPublicUrl(path);
+    setImgUrl(data.publicUrl);
+    setImgPath(path);
+    setImgUploading(false);
+  };
 
   const doSave = async () => {
     if (!ttl.trim()) {
@@ -24791,6 +24812,8 @@ function NoticeForm({ item, onClose }) {
         tag: tg,
         is_active: act,
         color: tg === "긴급" ? "red" : "indigo",
+        image_url: imgUrl || null,
+        image_path: imgPath || null,
       };
       if (isEdit) {
         const { error } = await supabase
@@ -24961,6 +24984,59 @@ function NoticeForm({ item, onClose }) {
             rows={6}
             style={{ ...inp, resize: "vertical", fontFamily: "inherit" }}
           />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={lbl}>사진 (선택)</label>
+          {imgUrl ? (
+            <div style={{ position: "relative", marginTop: 4 }}>
+              <img
+                src={imgUrl}
+                alt="첨부 사진"
+                style={{ width: "100%", borderRadius: 10, display: "block" }}
+              />
+              <button
+                onClick={() => { setImgUrl(""); setImgPath(""); }}
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  background: "rgba(0,0,0,0.6)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                사진 제거
+              </button>
+            </div>
+          ) : (
+            <label
+              style={{
+                display: "block",
+                textAlign: "center",
+                padding: 14,
+                background: "#fff",
+                border: "1px dashed #C7D2FE",
+                borderRadius: 8,
+                color: "#4F46E5",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {imgUploading ? "올리는 중..." : "📷 사진 첨부"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={pickImage}
+                style={{ display: "none" }}
+              />
+            </label>
+          )}
         </div>
         <div style={{ marginBottom: 20 }}>
           <label style={lbl}>표시 여부</label>
