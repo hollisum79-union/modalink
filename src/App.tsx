@@ -14839,65 +14839,7 @@ const getKyobunWork = (member: any, date: Date) => {
   const renderKyobunTab = () => {
     if (subScreen === "contacts") return renderContacts();
     if (subScreen === "compare") return renderCompare();
-    if (!selectedGroup)
-      return (
-        <div style={{ padding: "24px 16px" }}>
-          <button
-            onClick={() => setSelectedGroup(user?.work_group as any)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#6366F1",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              marginBottom: 16,
-              padding: 0,
-            }}
-          >
-            ← 내 근무표 보기
-          </button>
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#1F2937",
-              marginBottom: 16,
-              textAlign: "center",
-            }}
-          >
-            대공원 승무 사업소
-          </div>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-          >
-            {[
-              { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
-              { label: "업무용 전화번호", action: () => setSubScreen("phones") },
-              { label: "직원 연락처", action: () => setSubScreen("contacts") },
-              { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
-            ].map((c) => (
-              <button
-                key={c.label}
-                onClick={c.action}
-                style={{
-                  padding: "28px 12px",
-                  borderRadius: 16,
-                  border: "2px solid #E5E7EB",
-                  background: "#fff",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "#374151",
-                  cursor: "pointer",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                }}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      );
+   if (!selectedGroup) return renderMenu();
     if (!selectedMember)
       // ============================================================
       // [교체 위치] renderKyobunTab 함수 안에서
@@ -14919,7 +14861,7 @@ const getKyobunWork = (member: any, date: Date) => {
           >
             <button
               onClick={() => {
-                setSelectedGroup(null);
+               setSubScreen("menu");
                 setMemberSearch("");
               }}
               style={{
