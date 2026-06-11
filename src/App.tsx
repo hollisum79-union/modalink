@@ -15413,7 +15413,6 @@ const getKyobunWork = (member: any, date: Date) => {
           </span>
           <button
             onClick={() => setSubScreen("menu")}
-            }}
             style={{
               background: "#EEF2FF",
               border: "none",
