@@ -13061,7 +13061,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
-  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites">(null);
+ const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites" | "phones">(null);
   const [searchList, setSearchList] = React.useState<any[]>([]);
   const [searchQ, setSearchQ] = React.useState("");
   const searchPickRef = React.useRef<any>(null);
@@ -14641,7 +14641,27 @@ const getKyobunWork = (member: any, date: Date) => {
             <tbody>
               {rows.map((m: any, ri: number) => (
                 <tr key={m.id || ri}>
-                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: "#fff", padding: "10px 4px", fontSize: 13, fontWeight: 700, color: "#1F2937", textAlign: "center", borderBottom: "1px solid #F3F4F6", borderRight: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>{m.name}</td>
+                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: "#fff", padding: "10px 2px", fontSize: 13, fontWeight: 700, color: "#1F2937", textAlign: "center", borderBottom: "1px solid #F3F4F6", borderRight: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>
+                    {m.name}
+                    {m.fav_id ? (
+                      <span
+                        onClick={() => { if (window.confirm(m.name + "님을 즐겨찾기에서 해제할까요?")) removeFavorite(m.fav_id); }}
+                        style={{ cursor: "pointer", fontSize: 12, marginLeft: 3 }}
+                      >
+                        ⭐
+                      </span>
+                    ) : null}
+                  </td>
+                    {m.name}
+                    {m.fav_id ? (
+                      <span
+                        onClick={() => { if (window.confirm(m.name + "님을 즐겨찾기에서 해제할까요?")) removeFavorite(m.fav_id); }}
+                        style={{ cursor: "pointer", fontSize: 12, marginLeft: 3 }}
+                      >
+                        ⭐
+                      </span>
+                    ) : null}
+                  </td>
                   {dates.map((d, i) => {
                     const c = horizCell(m, d);
                     return (
@@ -14679,7 +14699,41 @@ const getKyobunWork = (member: any, date: Date) => {
     </div>
   );
 
- const goMySchedule = () => {
+ const renderWorkPhones = () => {
+    const phoneList = [
+      { label: "대공원 승무운용", nums: ["02-6311-7966", "02-6311-7967"] },
+      { label: "대공원 팩스", nums: ["02-6311-4312"] },
+      { label: "도봉기지 신호취급실", nums: ["02-6311-7976", "02-6311-7977"] },
+      { label: "도봉기지 승무운용", nums: ["02-6311-7973"] },
+      { label: "도봉기지 팩스", nums: ["02-6311-4361"] },
+      { label: "신풍 승무운용", nums: ["02-6311-7986", "02-6311-7987"] },
+      { label: "천왕기지 신호취급실", nums: ["02-6311-7996", "02-6311-7997"] },
+      { label: "천왕기지 승무운용", nums: ["02-6311-7992"] },
+    ];
+    return (
+      <div style={{ padding: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <button onClick={() => setSubScreen("menu")} style={cmpBackStyle}>← 메뉴화면</button>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>📞 업무용 전화번호</span>
+        </div>
+        {phoneList.map((p) => (
+          <div key={p.label} style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 14, padding: "13px 14px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{p.label}</span>
+            <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+              {p.nums.map((n) => (
+                <a key={n} href={p.label.includes("팩스") ? undefined : `tel:${n.replace(/-/g, "")}`} style={{ fontSize: 14, fontWeight: 700, color: p.label.includes("팩스") ? "#6B7280" : "#4F46E5", background: p.label.includes("팩스") ? "#F3F4F6" : "#EEF2FF", padding: "6px 12px", borderRadius: 999, textDecoration: "none" }}>
+                  {n}
+                </a>
+              ))}
+            </span>
+          </div>
+        ))}
+        <div style={{ textAlign: "center", fontSize: 11, color: "#9CA3AF", marginTop: 12 }}>번호를 누르면 바로 전화가 걸립니다 (팩스 제외)</div>
+      </div>
+    );
+  };
+
+  const goMySchedule = () => {
     setSubScreen(null);
     setSearchQ("");
     if (user?.work_type === "교번" && (user?.work_group === "대공원" || user?.work_group === "도봉")) {
@@ -14707,7 +14761,7 @@ const getKyobunWork = (member: any, date: Date) => {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         {[
           { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
-          { label: "업무용 전화번호", action: () => alert("업무용 전화번호 (준비중)") },
+          { label: "업무용 전화번호", action: () => setSubScreen("phones") },
           { label: "직원 연락처", action: () => setSubScreen("contacts") },
           { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
           { label: "편승 도우미", action: () => alert("편승 도우미 (준비중)") },
@@ -14829,7 +14883,7 @@ const getKyobunWork = (member: any, date: Date) => {
           >
             {[
               { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
-              { label: "업무용 전화번호", action: () => alert("업무용 전화번호 (준비중)") },
+              { label: "업무용 전화번호", action: () => setSubScreen("phones") },
               { label: "직원 연락처", action: () => setSubScreen("contacts") },
               { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
             ].map((c) => (
@@ -15757,6 +15811,7 @@ const getKyobunWork = (member: any, date: Date) => {
         {subScreen === "contacts" && renderContacts()}
         {subScreen === "compare" && renderCompare()}
         {subScreen === "favorites" && renderFavorites()}
+        {subScreen === "phones" && renderWorkPhones()}
         {subScreen === null && activeTab === "교대" && (
           <>
             {!crewLoaded && (
