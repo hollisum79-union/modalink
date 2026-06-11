@@ -12968,7 +12968,10 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
-  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare">(null);
+  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search">(null);
+  const [searchList, setSearchList] = React.useState<any[]>([]);
+  const [searchQ, setSearchQ] = React.useState("");
+  const searchPickRef = React.useRef<any>(null);
   const [contactList, setContactList] = React.useState<any[]>([]);
   const [contactSearch, setContactSearch] = React.useState("");
   const [compareMembers, setCompareMembers] = React.useState<any[]>([]);
@@ -13135,7 +13138,10 @@ if (data) {
               .maybeSingle();
             if (own) me = own;
           }
-          if (me) setSelectedMember(me);
+          if (searchPickRef.current) {
+            setSelectedMember(searchPickRef.current);
+            searchPickRef.current = null;
+          } else if (me) setSelectedMember(me);
         }
       }
       setLoadingMembers(false);
@@ -13194,6 +13200,15 @@ if (data) {
       .select("name, phone, employee_number")
       .order("name")
       .then(({ data }) => { if (data) setContactList(data); });
+  }, [subScreen]);
+
+  React.useEffect(() => {
+    if (subScreen !== "search") return;
+    supabase
+      .from("members")
+      .select("id, name, employee_number, work_type, work_group, start_position, schedule_total")
+      .order("name")
+      .then(({ data }) => { if (data) setSearchList(data); });
   }, [subScreen]);
 
   React.useEffect(() => {
@@ -14464,6 +14479,64 @@ const getKyobunWork = (member: any, date: Date) => {
     );
   };
 
+  const renderSearch = () => {
+    const nq = searchQ.replace(/\s+/g, "").toLowerCase();
+    const results = nq
+      ? searchList.filter(
+          (m) =>
+            String(m.name || "").replace(/\s+/g, "").toLowerCase().includes(nq) ||
+            String(m.employee_number || "").includes(nq)
+        )
+      : [];
+    const openMember = (m: any) => {
+      if (m.work_type === "교번" && (m.work_group === "대공원" || m.work_group === "도봉")) {
+        setSubScreen(null);
+        setActiveTab("교번");
+        if (selectedGroup === m.work_group) setSelectedMember(m);
+        else { searchPickRef.current = m; setSelectedGroup(m.work_group); }
+      } else if (["A", "B", "C", "D"].includes(String(m.work_group))) {
+        setSubScreen(null);
+        setActiveTab("교대");
+        setSelectedCrew(m.work_group);
+        setShiftViewMode("crew");
+      } else {
+        alert("통상근무자 근무표 보기는 준비중입니다.");
+      }
+    };
+    return (
+      <div style={{ padding: "16px 16px 24px" }}>
+        <button onClick={() => { setSubScreen(null); setSearchQ(""); }} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 돌아가기</button>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>직원 근무 검색</div>
+        <input
+          value={searchQ}
+          onChange={(e) => setSearchQ(e.target.value)}
+          placeholder="이름 또는 사번으로 검색"
+          style={{ width: "100%", padding: "12px 14px", border: "1.5px solid #E8E8F0", borderRadius: 13, background: "#FAFAFD", fontSize: 14, boxSizing: "border-box", outline: "none" }}
+        />
+        <div style={{ marginTop: 14 }}>
+          {nq && results.length === 0 && (
+            <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>검색 결과가 없습니다</div>
+          )}
+          {results.map((m) => {
+            const isK = m.work_type === "교번";
+            const isS = ["A", "B", "C", "D"].includes(String(m.work_group));
+            return (
+              <div key={m.id} onClick={() => openMember(m)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 6px", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}>
+                <div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{m.name}</span>
+                  <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: 8 }}>{m.employee_number}</span>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: isK ? "#F4F3FF" : isS ? "#EFF6FF" : "#F3F4F6", color: isK ? "#7C3AED" : isS ? "#2563EB" : "#6B7280" }}>
+                  {isK ? `교번 · ${m.work_group}` : isS ? `교대 · ${m.work_group}조` : m.work_type || "통상"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderKyobunTab = () => {
     if (subScreen === "contacts") return renderContacts();
     if (subScreen === "compare") return renderCompare();
@@ -15337,6 +15410,21 @@ const getKyobunWork = (member: any, date: Date) => {
           >
             메뉴화면
           </button>
+          <button
+            onClick={() => { setSearchQ(""); setSubScreen("search"); }}
+            style={{
+              background: "#F4F3FF",
+              border: "none",
+              color: "#7C3AED",
+              fontSize: 12,
+              cursor: "pointer",
+              padding: "3px 11px",
+              borderRadius: 999,
+              fontFamily: "inherit",
+            }}
+          >
+            직원검색
+          </button>
         </div>
 
         <div
@@ -15396,7 +15484,8 @@ const getKyobunWork = (member: any, date: Date) => {
       </div>
 
                        <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
-        {activeTab === "교대" && (
+        {subScreen === "search" && renderSearch()}
+        {subScreen !== "search" && activeTab === "교대" && (
           <>
             {!crewLoaded && (
               <div
@@ -15414,8 +15503,8 @@ const getKyobunWork = (member: any, date: Date) => {
             {crewLoaded && shiftViewMode === "all" && renderAllCrews()}
           </>
         )}
-        {activeTab === "교번" && renderKyobunTab()}
-        {activeTab === "통상" && renderTongsangTab()}
+        {subScreen !== "search" && activeTab === "교번" && renderKyobunTab()}
+        {subScreen !== "search" && activeTab === "통상" && renderTongsangTab()}
         {activeTab === "변형통상" && (
           <div
             style={{
