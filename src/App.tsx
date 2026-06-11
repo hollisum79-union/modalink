@@ -12968,7 +12968,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
-  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search">(null);
+  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu">(null);
   const [searchList, setSearchList] = React.useState<any[]>([]);
   const [searchQ, setSearchQ] = React.useState("");
   const searchPickRef = React.useRef<any>(null);
@@ -14277,7 +14277,7 @@ const getKyobunWork = (member: any, date: Date) => {
     return (
       <div style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <button onClick={() => { setSubScreen(null); setContactSearch(""); }} style={cmpBackStyle}>← 메뉴화면</button>
+          <button onClick={() => { setSubScreen("menu"); setContactSearch(""); }} style={cmpBackStyle}>← 메뉴화면</button>
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>직원 연락처</span>
         </div>
         <input
@@ -14358,7 +14358,7 @@ const getKyobunWork = (member: any, date: Date) => {
     return (
       <div style={{ padding: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <button onClick={() => { setSubScreen(null); setTimePopup(null); }} style={cmpBackStyle}>← 메뉴화면</button>
+          <button onClick={() => { setSubScreen("menu"); setTimePopup(null); }} style={cmpBackStyle}>← 메뉴화면</button>
           <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>기관사 교번 비교</span>
         </div>
 
@@ -14478,6 +14478,26 @@ const getKyobunWork = (member: any, date: Date) => {
       </div>
     );
   };
+
+  const renderMenu = () => (
+    <div style={{ padding: "24px 16px" }}>
+      <button onClick={() => setSubScreen(null)} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 16, padding: 0 }}>← 내 근무표 보기</button>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 16, textAlign: "center" }}>근무표 홈</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {[
+          { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
+          { label: "업무용 전화번호", action: () => alert("업무용 전화번호 (준비중)") },
+          { label: "직원 연락처", action: () => setSubScreen("contacts") },
+          { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
+          { label: "편승 도우미", action: () => alert("편승 도우미 (준비중)") },
+        ].map((c) => (
+          <button key={c.label} onClick={c.action} style={{ padding: "28px 12px", borderRadius: 16, border: "2px solid #E5E7EB", background: "#fff", fontSize: 15, fontWeight: 700, color: "#374151", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   const renderSearch = () => {
     const nq = searchQ.replace(/\s+/g, "").toLowerCase();
@@ -15392,10 +15412,7 @@ const getKyobunWork = (member: any, date: Date) => {
             {user?.work_group ? ` ( ${user.work_group} )` : ""}
           </span>
           <button
-            onClick={() => {
-              setSelectedGroup(null);
-              setSelectedMember(null);
-              setSelectedCrew(null);
+            onClick={() => setSubScreen("menu")}
             }}
             style={{
               background: "#EEF2FF",
@@ -15485,7 +15502,10 @@ const getKyobunWork = (member: any, date: Date) => {
 
                        <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
         {subScreen === "search" && renderSearch()}
-        {subScreen !== "search" && activeTab === "교대" && (
+        {subScreen === "menu" && renderMenu()}
+        {subScreen === "contacts" && renderContacts()}
+        {subScreen === "compare" && renderCompare()}
+        {subScreen === null && activeTab === "교대" && (
           <>
             {!crewLoaded && (
               <div
@@ -15503,9 +15523,9 @@ const getKyobunWork = (member: any, date: Date) => {
             {crewLoaded && shiftViewMode === "all" && renderAllCrews()}
           </>
         )}
-        {subScreen !== "search" && activeTab === "교번" && renderKyobunTab()}
-        {subScreen !== "search" && activeTab === "통상" && renderTongsangTab()}
-        {activeTab === "변형통상" && (
+       {subScreen === null && activeTab === "교번" && renderKyobunTab()}
+       {subScreen === null && activeTab === "통상" && renderTongsangTab()}
+        {subScreen === null && activeTab === "변형통상" && (
           <div
             style={{
               padding: 32,
