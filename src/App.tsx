@@ -13061,7 +13061,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
-  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu">(null);
+  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites">(null);
   const [searchList, setSearchList] = React.useState<any[]>([]);
   const [searchQ, setSearchQ] = React.useState("");
   const searchPickRef = React.useRef<any>(null);
@@ -14507,43 +14507,9 @@ const getKyobunWork = (member: any, date: Date) => {
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 10 }}>
-          <span onClick={goPrev} style={{ cursor: "pointer", color: "#9CA3AF", fontSize: 18 }}>‹</span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{currentYear}년 {currentMonth}월</span>
-          <span onClick={goNext} style={{ cursor: "pointer", color: "#9CA3AF", fontSize: 18 }}>›</span>
-        </div>
-
         {picks.length === 0 ? (
           <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "30px 0" }}>비교할 기관사를 추가하세요</div>
-        ) : (
-          <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: colTmpl, background: "#F9FAFB" }}>
-              <div style={{ padding: "8px 4px", fontSize: 10, color: "#6B7280", fontWeight: 600 }}>날짜</div>
-              {picks.map((pk: any, i: number) => (
-                <div key={i} style={{ padding: "8px 2px", textAlign: "center", fontSize: 12, fontWeight: 600, color: i === 0 ? "#4F46E5" : "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pk.name}</div>
-              ))}
-            </div>
-            {Array.from({ length: daysInMonth }, (_, idx) => idx + 1).map((d) => {
-              const date = new Date(currentYear, currentMonth - 1, d);
-              const dow = date.getDay();
-              const holi = isHolidayDate(date) && dow !== 0 && dow !== 6;
-              const dcolor = dow === 0 || holi ? "#EF4444" : dow === 6 ? "#3B82F6" : "#6B7280";
-              return (
-                <div key={d} style={{ display: "grid", gridTemplateColumns: colTmpl, borderTop: "1px solid #F3F4F6", alignItems: "center" }}>
-                  <div style={{ padding: "8px 4px", fontSize: 11, color: dcolor }}>{d} {wd[dow]}</div>
-                  {picks.map((pk: any, i: number) => {
-                    const c = cellOf(pk, date);
-                    return (
-                      <div key={i} onClick={() => { if (c.clickable && c.work) openTime(pk, date, c.work); }} style={{ padding: "7px 2px", textAlign: "center", cursor: c.clickable ? "pointer" : "default" }}>
-                        <span style={{ fontSize: c.clickable ? 13 : 11, fontWeight: c.clickable ? 700 : 500, color: c.color }}>{c.txt}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        ) : renderHorizTable(picks)}
 
         {comparePickerOpen && (
           <div onClick={() => setComparePickerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -14568,31 +14534,144 @@ const getKyobunWork = (member: any, date: Date) => {
           </div>
         )}
 
-        {timePopup && (
-          <div onClick={() => setTimePopup(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.42)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 280, padding: "20px 18px 18px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>{timePopup.name} · {timePopup.dateLabel}</span>
-                <span onClick={() => setTimePopup(null)} style={{ cursor: "pointer", color: "#9CA3AF", fontSize: 18, fontWeight: 700 }}>×</span>
-              </div>
-              <div style={{ textAlign: "center", fontSize: 13, color: "#4F46E5", fontWeight: 700, marginBottom: 14 }}>교번 {timePopup.dia}번 {timePopup.dayType ? <span style={{ color: "#9CA3AF", fontWeight: 400 }}>· {timePopup.dayType}</span> : null}</div>
-              <div style={{ display: "flex", gap: 10, marginBottom: timePopup.hours ? 14 : 0 }}>
-                <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 10, padding: 10, textAlign: "center" }}>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>출근</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: "#7C3AED" }}>{timePopup.start}</div>
-                </div>
-                <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 10, padding: 10, textAlign: "center" }}>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>퇴근</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: "#7C3AED" }}>{timePopup.end}</div>
-                </div>
-              </div>
-              {timePopup.hours ? <div style={{ textAlign: "center", fontSize: 12, color: "#6B7280" }}>근무시간 {timePopup.hours}</div> : null}
-            </div>
-          </div>
-        )}
+        {renderTimePopup()}
       </div>
     );
   };
+
+  const horizWd = ["일", "월", "화", "수", "목", "금", "토"];
+
+  const horizCell = (m: any, date: Date) => {
+    if (["A", "B", "C", "D"].includes(String(m.work_group))) {
+      const w = shiftBase ? getShiftWork(m.work_group, date) : null;
+      const wi = w ? workInfo(w) : null;
+      return { txt: wi ? wi.short : "-", clickable: false, color: wi ? wi.text : "#D1D5DB", work: null as any };
+    }
+    const w = getKyobunWork(m, date);
+    if (!w) return { txt: "-", clickable: false, color: "#D1D5DB", work: null as any };
+    if (w.type === "비번") return { txt: "비", clickable: false, color: "#9CA3AF", work: w };
+    if (w.type === "휴무") return { txt: "휴", clickable: false, color: "#EF4444", work: w };
+    if (w.type === "주간") return { txt: String(w.dia), clickable: true, color: "#1F2937", work: w };
+    if (w.type === "야간") return { txt: String(w.dia), clickable: true, color: "#7C3AED", work: w };
+    const wi = workInfo(w.type);
+    return { txt: wi.short, clickable: false, color: wi.text, work: w };
+  };
+
+  const openHorizTime = (m: any, date: Date, w: any) => {
+    const dt = getDiaDayType(w.type, date);
+    const info = getDiaInfo(w.dia, dt);
+    setTimePopup({
+      name: m.name,
+      dateLabel: `${date.getMonth() + 1}/${date.getDate()} ${horizWd[date.getDay()]}`,
+      dia: w.dia,
+      dayType: dt,
+      start: (info && info.start_time) || "-",
+      end: (info && info.end_time) || "-",
+      hours: info && info.work_hours,
+    });
+  };
+
+  const renderTimePopup = () =>
+    timePopup ? (
+      <div onClick={() => setTimePopup(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.42)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 280, padding: "20px 18px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>{timePopup.name} · {timePopup.dateLabel}</span>
+            <span onClick={() => setTimePopup(null)} style={{ cursor: "pointer", color: "#9CA3AF", fontSize: 18, fontWeight: 700 }}>×</span>
+          </div>
+          <div style={{ textAlign: "center", fontSize: 13, color: "#4F46E5", fontWeight: 700, marginBottom: 14 }}>교번 {timePopup.dia}번 {timePopup.dayType ? <span style={{ color: "#9CA3AF", fontWeight: 400 }}>· {timePopup.dayType}</span> : null}</div>
+          <div style={{ display: "flex", gap: 10, marginBottom: timePopup.hours ? 14 : 0 }}>
+            <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 10, padding: 10, textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>출근</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "#7C3AED" }}>{timePopup.start}</div>
+            </div>
+            <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 10, padding: 10, textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 3 }}>퇴근</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "#7C3AED" }}>{timePopup.end}</div>
+            </div>
+          </div>
+          {timePopup.hours ? <div style={{ textAlign: "center", fontSize: 12, color: "#6B7280" }}>근무시간 {timePopup.hours}</div> : null}
+        </div>
+      </div>
+    ) : null;
+
+  const renderHorizTable = (rows: any[]) => {
+    const baseT = new Date();
+    baseT.setHours(0, 0, 0, 0);
+    const dates: Date[] = [];
+    for (let i = -30; i <= 30; i++) {
+      const d = new Date(baseT);
+      d.setDate(d.getDate() + i);
+      dates.push(d);
+    }
+    const todayIdx = 30;
+    return (
+      <>
+        <div
+          ref={(el: any) => {
+            if (el && !el.dataset.scrolled) {
+              el.dataset.scrolled = "1";
+              el.scrollLeft = 64 + 52 * todayIdx - el.clientWidth / 2 + 26;
+            }
+          }}
+          style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16 }}
+        >
+          <table style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ position: "sticky", left: 0, zIndex: 2, background: "#F5F3FF", width: 64, minWidth: 64, padding: "8px 4px", fontSize: 11, color: "#6B7280", borderBottom: "1px solid #EEE", borderRight: "1px solid #E5E7EB" }}>이름</th>
+                {dates.map((d, i) => {
+                  const dow = d.getDay();
+                  const holi = isHolidayDate(d) && dow !== 0 && dow !== 6;
+                  const col = dow === 0 || holi ? "#EF4444" : dow === 6 ? "#3B82F6" : "#6B7280";
+                  return (
+                    <th key={i} style={{ width: 52, minWidth: 52, padding: "8px 2px", fontSize: 10, fontWeight: 700, color: col, background: i === todayIdx ? "#DBEAFE" : "#FAFAFA", borderBottom: "1px solid #EEE", whiteSpace: "nowrap" }}>
+                      {d.getMonth() + 1}/{d.getDate()} {horizWd[dow]}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((m: any, ri: number) => (
+                <tr key={m.id || ri}>
+                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: "#fff", padding: "10px 4px", fontSize: 13, fontWeight: 700, color: "#1F2937", textAlign: "center", borderBottom: "1px solid #F3F4F6", borderRight: "1px solid #E5E7EB", whiteSpace: "nowrap" }}>{m.name}</td>
+                  {dates.map((d, i) => {
+                    const c = horizCell(m, d);
+                    return (
+                      <td
+                        key={i}
+                        onClick={() => { if (c.clickable && c.work) openHorizTime(m, d, c.work); }}
+                        style={{ textAlign: "center", padding: "10px 2px", fontSize: c.clickable ? 13 : 11, fontWeight: c.clickable ? 700 : 600, color: c.color, background: i === todayIdx ? "#EFF6FF" : undefined, borderBottom: "1px solid #F3F4F6", cursor: c.clickable ? "pointer" : "default" }}
+                      >
+                        {c.txt}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {renderTimePopup()}
+      </>
+    );
+  };
+
+  const renderFavorites = () => (
+    <div style={{ padding: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <button onClick={() => setSubScreen(null)} style={cmpBackStyle}>← 근무표</button>
+        <span style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>⭐ 즐겨찾기</span>
+        <button onClick={() => { setSubScreen(null); setSelectedMember(null); }} style={{ background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 11px", borderRadius: 999, fontFamily: "inherit" }}>관리</button>
+      </div>
+      {favorites.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "30px 0" }}>
+          즐겨찾기가 없습니다. 우측 위 "관리"에서 ⭐를 눌러 추가하세요.
+        </div>
+      ) : renderHorizTable(favorites)}
+    </div>
+  );
 
   const renderMenu = () => (
     <div style={{ padding: "24px 16px" }}>
@@ -14972,7 +15051,7 @@ const getKyobunWork = (member: any, date: Date) => {
             </span>
           </div>
           <button
-            onClick={() => setSelectedMember(null)}
+           onClick={() => setSubScreen("favorites")}
             style={{
               background: "#EEF2FF",
               border: "none",
@@ -14984,7 +15063,7 @@ const getKyobunWork = (member: any, date: Date) => {
               fontFamily: "inherit",
             }}
           >
-            🔍 기관사 검색
+            ⭐ 즐겨찾기
           </button>
         </div>
         <div
@@ -15636,6 +15715,7 @@ const getKyobunWork = (member: any, date: Date) => {
         {subScreen === "menu" && renderMenu()}
         {subScreen === "contacts" && renderContacts()}
         {subScreen === "compare" && renderCompare()}
+        {subScreen === "favorites" && renderFavorites()}
         {subScreen === null && activeTab === "교대" && (
           <>
             {!crewLoaded && (
