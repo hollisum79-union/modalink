@@ -7363,7 +7363,13 @@ const [showAddCat, setShowAddCat] = useState(false);
             <input
               type="file"
               accept="application/pdf"
-              onChange={(e) => setUpFile(e.target.files?.[0] || null)}
+                        onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                setUpFile(f);
+                if (f && !upName.trim()) {
+                  setUpName(f.name.replace(/\.[^/.]+$/, ""));
+                }
+              }}
               style={{ width: "100%", marginBottom: 14, fontSize: 13 }}
             />
 
@@ -8983,7 +8989,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                     textAlign: "center",
                   }}
                 >
-                  입사일
+                  입사연도
                 </div>
               </div>
               {members
@@ -9079,7 +9085,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                   </div>
                   <div style={{ flex: 0.9, textAlign: "center" }}>
                     <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                      {m.joinDate}
+                                            {m.join_year || "-"}
                     </span>
                   </div>
                 </div>
@@ -16484,7 +16490,7 @@ function MySettingsScreen({
                   </div>
                 </div>
 
-                {/* 입사년도 */}
+                {/* 입사연도 */}
 
                 <div style={{ marginBottom: 10 }}>
                   <div
@@ -16495,7 +16501,7 @@ function MySettingsScreen({
                       fontWeight: 600,
                     }}
                   >
-                    입사년도
+                    입사연도
                   </div>
                   <input
                     value={editJoinYear}
@@ -17119,7 +17125,7 @@ function MySettingsScreen({
                 { label: "직급", value: editGrade ? `${editGrade}급` : "-" },
                 { label: "현재 호봉", value: editPayStep ? `${editPayStep}호봉` : "-" },
                 { label: "다음 승급일", value: editPayStepNextDate || "-" },
-                { label: "입사년도", value: editJoinYear || "-" },
+                { label: "입사연도", value: editJoinYear || "-" },
                 { label: "출생연도", value: editBirthYear || "-" },
               ].map((it, i, arr) => (
                 <div key={it.label} style={{ display: "flex", justifyContent: "space-between", padding: "11px 0", borderBottom: i < arr.length - 1 ? "1px solid #F3F4F6" : "none" }}>
@@ -17175,7 +17181,7 @@ function MySettingsScreen({
                   },
                   { label: "직급", value: savedWorkData.grade },
                   {
-                  label: "입사년도",
+                  label: "입사연도",
                   value: savedWorkData.joinYear
                     ? `${savedWorkData.joinYear}년`
                     : "미제공",
