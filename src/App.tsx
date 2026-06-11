@@ -25403,6 +25403,8 @@ export default function App() {
       return () => window.removeEventListener("popstate", onBack);
     }, []);
   const [adjustInitDate, setAdjustInitDate] = useState("");
+  const [adjustReturn, setAdjustReturn] = useState("home");
+  const [leaveReturn, setLeaveReturn] = useState("home");
   const [adjustInitTab, setAdjustInitTab] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
@@ -26702,7 +26704,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "notice-admin")
     return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("home"); }} />;
   if (screen === "workAdjust")
-        return <WorkAdjustScreen onBack={() => setScreen("home")} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
+        return <WorkAdjustScreen onBack={() => setScreen(adjustReturn)} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
   if (screen === "salary")
     return (
       <>
@@ -26711,7 +26713,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       </>
     );
   if (screen === "leave")
-      return <LeaveScreen onBack={() => setScreen("home")} user={user} initialDate={leaveInitDate} />;
+      return <LeaveScreen onBack={() => setScreen(leaveReturn)} user={user} initialDate={leaveInitDate} />;
   if (screen === "distance")
     return <DistanceScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "logbook")
@@ -26723,8 +26725,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         user={user}
         refreshUser={refreshUser}
-        onGoAdjust={(d) => { setAdjustInitDate(d); setScreen("workAdjust"); }}
-        onGoLeave={(d) => { setLeaveInitDate(d); setScreen("leave"); }}
+        onGoAdjust={(d) => { setAdjustInitDate(d); setAdjustReturn("schedule"); setScreen("workAdjust"); }}
+        onGoLeave={(d) => { setLeaveInitDate(d); setLeaveReturn("schedule"); setScreen("leave"); }}
       />
         <BottomTabBar screen={screen} setScreen={setScreen} />
       </>
@@ -27652,7 +27654,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             );
           })()}
           <div
-                    onClick={() => { setAdjustInitDate(""); setScreen("workAdjust"); }}
+       onClick={() => { setAdjustInitDate(""); setAdjustReturn("home"); setScreen("workAdjust"); }}
             style={{
               background: "#fff",
               borderRadius: 16,
@@ -27890,7 +27892,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         )}
         {swapReqCount > 0 && (
           <div
-            onClick={() => { setAdjustInitTab("교번교체"); setScreen("workAdjust"); }}
+           onClick={() => { setAdjustInitTab("교번교체"); setAdjustReturn("home"); setScreen("workAdjust"); }}
             style={{ background: "#fff", border: "2px solid #4F46E5", borderRadius: 14, padding: "14px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}
           >
             <div style={{ fontSize: 22 }}>📥</div>
@@ -28142,7 +28144,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   if (item.id === "anonymous") setScreen("anonymous");
                   if (item.id === "archive") setScreen("archive");
                   if (item.id === "about") setScreen("about");
-                  if (item.id === "leave") setScreen("leave");
+                if (item.id === "leave") { setLeaveReturn("home"); setScreen("leave"); }
                   if (item.id === "salary") setScreen("salary");
                   if (item.id === "schedule") setScreen("schedule");
                   if (item.id === "distance") setScreen("distance");
