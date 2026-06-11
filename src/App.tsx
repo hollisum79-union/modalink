@@ -6522,6 +6522,7 @@ function ArchiveScreen({ onBack, user }) {
   const [showUpload, setShowUpload] = useState(false);
   const [favorites, setFavorites] = useState([]);
 const [showAddCat, setShowAddCat] = useState(false);
+  const [moveFile, setMoveFile] = useState(null);
   const [newCatName, setNewCatName] = useState("");
 
   // 새 분류 추가
@@ -6717,8 +6718,28 @@ const [showAddCat, setShowAddCat] = useState(false);
       setDbFiles(data || []);
       alert("삭제되었습니다.");
     } catch (err) {
-      alert("삭제 실패: " + err.message);
+            alert("삭제 실패: " + err.message);
     }
+  };
+
+  // 파일을 다른 분류로 이동 (정보만 변경, 스토리지 파일은 그대로 둠)
+  const handleMove = async (targetCat) => {
+    if (!moveFile) return;
+    if (targetCat.id === moveFile.category_id) { setMoveFile(null); return; }
+    const { error } = await supabase
+      .from("archive_files")
+      .update({ category_id: targetCat.id, category_label: targetCat.label })
+      .eq("id", moveFile.id);
+    if (error) { alert("이동 실패: " + error.message); return; }
+    setDbFiles((prev) =>
+      prev.map((f) =>
+        f.id === moveFile.id
+          ? { ...f, category_id: targetCat.id, category_label: targetCat.label }
+          : f
+      )
+    );
+    setMoveFile(null);
+    alert("'" + targetCat.label + "' 분류로 이동했습니다.");
   };
 
   return (
@@ -7245,8 +7266,29 @@ const [showAddCat, setShowAddCat] = useState(false);
                       lineHeight: 1,
                     }}
                   >
-                    {favorites.includes(String(file.id)) ? "⭐" : "☆"}
+                                        {favorites.includes(String(file.id)) ? "⭐" : "☆"}
                   </button>
+                  {isAdmin && file.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMoveFile(file);
+                      }}
+                      style={{
+                        background: "#EEF2FF",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        color: "#4F46E5",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                      }}
+                    >
+                      이동
+                    </button>
+                  )}
                   {isAdmin && file.id && (
                     <button
                       onClick={(e) => {
@@ -7504,6 +7546,91 @@ const [showAddCat, setShowAddCat] = useState(false);
                 추가
               </button>
             </div>
+          </div>
+        </div>
+            )}
+
+      {moveFile && (
+        <div
+          onClick={() => setMoveFile(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: "22px 22px 0 0",
+              padding: "8px 18px 28px",
+              width: "100%",
+              maxWidth: 430,
+            }}
+          >
+            <div
+              style={{
+                width: 38,
+                height: 4,
+                background: "#E5E7EB",
+                borderRadius: 4,
+                margin: "8px auto 14px",
+              }}
+            />
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>
+              분류 이동
+            </div>
+            <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 16 }}>
+              "{moveFile.name}"을(를) 옮길 분류를 선택하세요
+            </div>
+            {allCats.map((cat) => {
+              const isCur = cat.id === moveFile.category_id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => handleMove(cat)}
+                  disabled={isCur}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    textAlign: "left",
+                    background: isCur ? "#EEF2FF" : "#F9FAFB",
+                    border: isCur ? "1.5px solid #C7D2FE" : "1.5px solid transparent",
+                    borderRadius: 12,
+                    padding: 14,
+                    marginBottom: 8,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: isCur ? "#4F46E5" : "#374151",
+                    cursor: isCur ? "default" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: "50%",
+                      background: "#7C3AED",
+                      flexShrink: 0,
+                    }}
+                  />
+                  {cat.label}
+                  {isCur && (
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>
+                      현재 위치
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
