@@ -28905,7 +28905,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
             gap: 8,
             marginBottom: 12,
           }}
@@ -28916,6 +28916,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               borderRadius: 16,
               padding: "14px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+              minWidth: 0,
             }}
           >
             <div
