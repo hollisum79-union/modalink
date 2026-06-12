@@ -26792,8 +26792,16 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         initialFilter={boardTab}
         onSelect={(p) => {
-          setSelectedPost(p);
+          const nv = (p.views || 0) + 1;
+          setSelectedPost({ ...p, views: nv });
           setScreen("boardDetail");
+          supabase
+            .from("posts")
+            .update({ views: nv })
+            .eq("id", p.id)
+            .then(({ error }) => {
+              if (error) console.error("조회수 업데이트 실패:", error);
+            });
         }}
                 onWrite={() => { setEditingPost(null); setScreen("boardWrite"); }}
         user={user}
