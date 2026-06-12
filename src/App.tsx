@@ -24752,7 +24752,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         background: "#FFF5F5",
         border: "1px solid #FED7D7",
         borderRadius: 12,
-        padding: "12px 16px",
+        padding: "10px 14px",
         cursor: "pointer",
       }}
     >
@@ -24834,7 +24834,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const condolenceCard = (
     <div
       onClick={condolences.length > 0 ? onCondolenceClick : (showActs && onActivityClick ? onActivityClick : undefined)}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "12px 16px", cursor: condolences.length > 0 || showActs ? "pointer" : "default" }}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
@@ -24852,7 +24852,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           return (
             <>
               {hero && hero.url ? (
-                <img src={hero.url} alt="" style={{ width: "100%", height: 86, objectFit: "cover", borderRadius: 10, display: "block", marginBottom: 8 }} />
+                <img src={hero.url} alt="" style={{ width: "100%", height: 60, objectFit: "cover", borderRadius: 10, display: "block", marginBottom: 8 }} />
               ) : (
                 <div style={{ width: "100%", height: 56, borderRadius: 10, background: "rgba(91,33,182,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, marginBottom: 8 }}>🚩</div>
               )}
@@ -24889,7 +24889,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
               background: "linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)",
               border: "1px solid #FCD34D",
               borderRadius: 12,
-              padding: "12px 16px",
+              padding: "10px 14px",
             }}
           >
             <div
@@ -24993,7 +24993,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   })();
 
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: 8 }}>
 
       {promoToday && (
         <div style={{ background: "#6D28D9", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10 }}>
@@ -25023,6 +25023,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         <div
           style={{
             display: "flex",
+            alignItems: "flex-start",
             transform: `translateX(-${index * 100}%)`,
             transition: transitionOn ? "transform 0.5s ease" : "none",
           }}
@@ -25049,7 +25050,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           display: "flex",
           justifyContent: "center",
           gap: 6,
-          marginTop: 10,
+          marginTop: 6,
         }}
       >
         {(() => {
@@ -28309,51 +28310,15 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <div
-            onClick={() => {
-              setAboutInitialTab("members");
-              setScreen("about");
-            }}
-            style={{
-              flex: 1,
-              background: "rgba(255,255,255,0.15)",
-              borderRadius: 14,
-              padding: "8px 6px",
-              cursor: "pointer",
-              textAlign: "center",
-            }}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", marginTop: 10, background: "rgba(255,255,255,0.15)", borderRadius: 11, padding: "7px 4px" }}>
+          <span
+            onClick={() => { setAboutInitialTab("members"); setScreen("about"); }}
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer" }}
           >
-            <div
-              style={{
-                fontSize: 9,
-                color: "rgba(255,255,255,0.7)",
-                marginBottom: 3,
-              }}
-            >
-              조합원
-            </div>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 900,
-                color: "#fff",
-                lineHeight: 1,
-              }}
-            >
-              {memberCount}
-            </div>
-            <div
-              style={{
-                fontSize: 9,
-                color: "rgba(255,255,255,0.6)",
-                marginTop: 2,
-              }}
-            >
-              명
-            </div>
-          </div>
-          <div
+            조합원 <b style={{ fontSize: 14, color: "#fff" }}>{memberCount}</b>명
+          </span>
+          <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
+          <span
             onClick={() => {
               if (!user?.is_admin) return;
               supabase
@@ -28366,95 +28331,18 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   setShowAppUserModal(true);
                 });
             }}
-            style={{
-              flex: 1,
-              background: "rgba(255,255,255,0.15)",
-              borderRadius: 14,
-              padding: "8px 6px",
-              cursor: user?.is_admin ? "pointer" : "default",
-              textAlign: "center",
-            }}
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: user?.is_admin ? "pointer" : "default" }}
           >
-            <div
-              style={{
-                fontSize: 9,
-                color: "rgba(255,255,255,0.7)",
-                marginBottom: 3,
-              }}
-            >
-              앱이용
-            </div>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 900,
-                color: "#C4B5FD",
-                lineHeight: 1,
-              }}
-            >
-              {appUserCount}
-            </div>
-            <div
-              style={{
-                fontSize: 9,
-                color: "rgba(255,255,255,0.6)",
-                marginTop: 2,
-              }}
-            >
-              명
-            </div>
-          </div>
-          <div
+            앱이용 <b style={{ fontSize: 14, color: "#C4B5FD" }}>{appUserCount}</b>명
+          </span>
+          <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
+          <span
             onClick={() => setShowOnlineModal(true)}
-            style={{
-              flex: 1,
-              background: "rgba(255,255,255,0.15)",
-              borderRadius: 14,
-              padding: "8px 6px",
-              textAlign: "center",
-            }}
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 3,
-                marginBottom: 3,
-              }}
-            >
-              <div
-                style={{
-                  width: 5,
-                  height: 5,
-                  borderRadius: "50%",
-                  background: "#4ADE80",
-                }}
-              />
-              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.7)" }}>
-                접속중
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 900,
-                color: "#4ADE80",
-                lineHeight: 1,
-              }}
-            >
-              {onlineCount}
-            </div>
-            <div
-              style={{
-                fontSize: 9,
-                color: "rgba(255,255,255,0.6)",
-                marginTop: 2,
-              }}
-            >
-              명
-            </div>
-          </div>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ADE80", display: "inline-block" }} />
+            접속중 <b style={{ fontSize: 14, color: "#4ADE80" }}>{onlineCount}</b>명
+          </span>
         </div>
       </div>
 
@@ -28472,7 +28360,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             style={{
               background: "#fff",
               borderRadius: 16,
-              padding: "14px 12px",
+              padding: "11px 12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
               cursor: "pointer",
             }}
@@ -28579,7 +28467,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 style={{
                   background: "#fff",
                   borderRadius: 16,
-                  padding: "14px 12px",
+                  padding: "11px 12px",
                   boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
                   cursor: "pointer",
                 }}
@@ -28630,7 +28518,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               background: adjustCount === 0 ? "#FFFBF5" : "#fff",
               border: adjustCount === 0 ? "1.5px solid #F59E0B" : "1.5px solid transparent",
               borderRadius: 16,
-              padding: "14px 12px",
+              padding: "11px 12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
               cursor: "pointer",
               boxSizing: "border-box",
@@ -28703,7 +28591,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           style={{
             background: "#fff",
             borderRadius: 16,
-            padding: "16px 18px",
+            padding: "9px 14px",
             boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
             cursor: "pointer",
             marginBottom: 12,
@@ -28718,13 +28606,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>
                 무사고 주행키로
               </div>
-              <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>
-                안전운행 누적
-              </div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-            <div style={{ fontSize: 24, fontWeight: 900, color: "#1F2937", letterSpacing: -0.5 }}>
+            <div style={{ fontSize: 19, fontWeight: 900, color: "#1F2937", letterSpacing: -0.5 }}>
               {homeTotalKm.toLocaleString("ko-KR")}
             </div>
             <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>km</span>
