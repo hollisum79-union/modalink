@@ -26799,6 +26799,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           onBack={() => setScreen("home")}
           onSelect={(n) => {
             const nv = markViewed("notice", "notices", n, !!(user as any)?.is_admin);
+            if (nv !== (n.views || 0)) setNotices((prev: any[]) => prev.map((x: any) => (x.id === n.id ? { ...x, views: nv } : x)));
             setSelectedNotice({ ...n, views: nv });
             setScreen("noticeDetail");
           }}
@@ -28607,6 +28608,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               key={n.id}
               onClick={() => {
                 const nv = markViewed("notice", "notices", n, !!(user as any)?.is_admin);
+                if (nv !== (n.views || 0)) setNotices((prev: any[]) => prev.map((x: any) => (x.id === n.id ? { ...x, views: nv } : x)));
                 setSelectedNotice({ ...n, views: nv });
                 setScreen("noticeDetail");
               }}
