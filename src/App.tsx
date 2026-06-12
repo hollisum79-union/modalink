@@ -1793,6 +1793,14 @@ function CanteenScreen({ onBack, user }) {
   const todayKey = (today.getMonth() + 1) + "/" + today.getDate();
   const [pickedDate, setPickedDate] = useState(null);
   const [showDates, setShowDates] = useState(false);
+  // ── 뒤로가기: 날짜선택 팝업 닫기 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (showDates) { setShowDates(false); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
   const allDates = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean))).sort((a, b) => toNum(a) - toNum(b));
   const viewDate = pickedDate || todayKey;
     const isAdmin = user?.is_admin;
@@ -4145,6 +4153,15 @@ function WelfareScreen({ onBack, user }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [welfareItems, setWelfareItems] = useState([]);
   const [welfareForm, setWelfareForm] = useState(null);
+  // ── 뒤로가기: 신청폼 → 상세 → 목록 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (welfareForm) { setWelfareForm(null); return true; }
+      if (selectedItem) { setSelectedItem(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
   const isAdmin = user?.is_admin;
 
   const catStyle = {
@@ -5109,6 +5126,14 @@ const [nameMap, setNameMap] = useState({});
 function VoteScreen({ onBack, user }) {
   const [filter, setFilter] = useState("전체");
   const [selectedVote, setSelectedVote] = useState(null);
+  // ── 뒤로가기: 투표 상세 → 목록 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (selectedVote) { setSelectedVote(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
   const [votes, setVotes] = useState([]);
   const [editVote, setEditVote] = useState(null);
   const isAdmin = user?.is_admin;
@@ -6525,6 +6550,18 @@ const [showAddCat, setShowAddCat] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [moveFile, setMoveFile] = useState(null);
+  // ── 뒤로가기: 팝업 닫기 → 카테고리 목록 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (showUpload) { setShowUpload(false); return true; }
+      if (showAddCat) { setShowAddCat(false); return true; }
+      if (renameFile) { setRenameFile(null); return true; }
+      if (moveFile) { setMoveFile(null); return true; }
+      if (selectedCat) { setSelectedCat(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
   const [newCatName, setNewCatName] = useState("");
 
   // 새 분류 추가
@@ -13109,6 +13146,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
       if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites") { setSubScreen("menu"); return true; }
       if (subScreen === "menu" || subScreen === "search") { setSubScreen(null); return true; }
       if (activeTab === "교번" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { setSelectedMember(null); return true; }
+      if (activeTab === "교대" && shiftViewMode === "all") { setShiftViewMode("crew"); return true; }
       return false;
     };
     return () => { (window as any).__backHandler = null; };
@@ -23325,6 +23363,14 @@ function LogbookScreen({ goBack }: { goBack: () => void }) {
   const [mode, setMode] = React.useState<"list" | "write" | "detail">("list");
   const [logs, setLogs] = React.useState(myDummyLogs);
   const [selectedLog, setSelectedLog] = React.useState<any>(null);
+  // ── 뒤로가기: 상세/작성 → 목록 ──
+  React.useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (mode !== "list") { setMode("list"); setSelectedLog(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
 
   // 작성 폼 상태
   const [formDate, setFormDate] = React.useState(
