@@ -10357,15 +10357,20 @@ function PointRankingAdmin() {
     let q = supabase.from("user_points").select("employee_number, point, created_at").gte("created_at", range.start.toISOString());
     if (range.end) q = q.lt("created_at", range.end.toISOString());
     const { data: pts } = await q;
-    const { data: mem } = await supabase.from("members").select("employee_number, name");
+    const { data: mem } = await supabase.from("members").select("employee_number, name, is_union");
     const nameMap: any = {};
-    (mem || []).forEach((m: any) => { nameMap[String(m.employee_number)] = m.name; });
+    const unionSet = new Set<string>();
+    (mem || []).forEach((m: any) => {
+      nameMap[String(m.employee_number)] = m.name;
+      if (m.is_union === true) unionSet.add(String(m.employee_number));
+    });
     const sums: any = {};
     (pts || []).forEach((r: any) => {
       const k = String(r.employee_number);
       sums[k] = (sums[k] || 0) + (r.point || 0);
     });
     const ranked = Object.entries(sums)
+      .filter(([emp]) => unionSet.has(String(emp)))
       .map(([emp, total]) => ({ emp, name: nameMap[emp] || "(미등록)", total: total as number }))
       .sort((a, b) => b.total - a.total);
     setRows(ranked);
@@ -12865,6 +12870,7 @@ function PointSection({ user }) {
   const empId = getUserId(user);
   const [pointData, setPointData] = React.useState(() => loadPointData(empId));
   const [showLogs, setShowLogs] = React.useState(false);
+  const [showGuide, setShowGuide] = React.useState(false);
   const [toast, setToast] = React.useState("");
 const [dbRows, setDbRows] = React.useState<any[]>([]);
   const loadDb = async () => {
@@ -12933,8 +12939,39 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937" }}>🏆 나의 포인트</div>
-        <div style={{ fontSize: 10, color: "#9CA3AF", background: "#F3F4F6", padding: "5px 10px", borderRadius: 10, fontWeight: 600, whiteSpace: "nowrap" }}>🔄 매월 1일 0시 초기화</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ fontSize: 10, color: "#9CA3AF", background: "#F3F4F6", padding: "5px 10px", borderRadius: 10, fontWeight: 600, whiteSpace: "nowrap" }}>🔄 매월 1일 0시 초기화</div>
+          <button
+            onClick={() => setShowGuide((v) => !v)}
+            style={{ width: 26, height: 26, borderRadius: "50%", border: showGuide ? "none" : "1px solid #E5E7EB", background: showGuide ? "#4F46E5" : "#F9FAFB", color: showGuide ? "#fff" : "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0 }}
+          >
+            {showGuide ? "✕" : "?"}
+          </button>
+        </div>
       </div>
+      {showGuide && (
+        <div style={{ background: "#F9FAFB", borderRadius: 14, padding: "13px 15px", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 9 }}>포인트, 이렇게 모아요</div>
+          {[
+            ["앱 접속 (하루 1회)", "+5P"],
+            ["출석 체크 (하루 1회)", "+10P"],
+            ["공지사항 읽기 (하루 5회까지)", "+3P"],
+            ["근무표 확인 (하루 1회)", "+3P"],
+            ["투표·설문 참여", "+20P"],
+            ["게시글 작성", "+15P"],
+            ["댓글 작성", "+5P"],
+            ["조합 활동 참여 (지회 지정)", "+α"],
+          ].map(([l, p], i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6B7280", padding: "3px 0" }}>
+              <span>{l}</span>
+              <span style={{ color: "#4F46E5", fontWeight: 700 }}>{p}</span>
+            </div>
+          ))}
+          <div style={{ borderTop: "1px solid #E5E7EB", marginTop: 8, paddingTop: 8, fontSize: 12, color: "#92400E", fontWeight: 600 }}>
+            🎁 매월 1일 0시에 새로 시작 · 그달 1등에게 지회에서 상품을 드려요
+          </div>
+        </div>
+      )}
 
       <div style={{ background: "#F5F3FF", borderRadius: 16, padding: "20px 16px", textAlign: "center", marginBottom: 8 }}>
         <div style={{ fontSize: 13, color: "#7C6FDA", marginBottom: 6 }}>이번 달 포인트</div>
@@ -24574,14 +24611,18 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         .select("employee_number, point, created_at")
         .gte("created_at", monthStart);
       if (!data) return;
+      const { data: memU } = await supabase.from("members").select("employee_number, is_union");
+      const unionSet = new Set<string>();
+      (memU || []).forEach((m: any) => { if (m.is_union === true) unionSet.add(String(m.employee_number)); });
       const sums: any = {};
       data.forEach((r: any) => {
         sums[r.employee_number] = (sums[r.employee_number] || 0) + (r.point || 0);
       });
       const ranked = Object.entries(sums)
+        .filter(([emp]) => unionSet.has(String(emp)))
         .map(([emp, total]) => ({ emp, total: total as number }))
         .sort((a, b) => b.total - a.total);
-      const myId = String(user?.emp_id || user?.id || "");
+      const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
       const myIdx = ranked.findIndex((r) => r.emp === myId);
       setMyRank(myIdx >= 0 ? { rank: myIdx + 1, total: ranked[myIdx].total } : null);
       setTopUsers(
@@ -24927,6 +24968,9 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
                 <span>{myRank.rank}위 ({myRank.total}P)</span>
               </div>
             )}
+            <div style={{ borderTop: "1px solid rgba(146,64,14,0.15)", marginTop: 7, paddingTop: 7, fontSize: 11, color: "#92400E", fontWeight: 600 }}>
+              🎁 매달 1등에게 지회에서 상품을 드려요
+            </div>
           </div>
   );
 
