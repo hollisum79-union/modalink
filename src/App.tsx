@@ -10402,7 +10402,7 @@ function PointRankingAdmin() {
 function FieldRegister() {
   const [title, setTitle] = React.useState("");
   const [date, setDate] = React.useState("");
-  const [point, setPoint] = React.useState("");
+  const [point, setPoint] = React.useState("0");
   const [desc, setDesc] = React.useState("");
   const [photos, setPhotos] = React.useState<any[]>([]);
   const [uploading, setUploading] = React.useState(false);
@@ -10502,7 +10502,7 @@ function FieldRegister() {
       } else {
         setDoneMsg("활동이 기록되었습니다!");
       }
-      setTitle(""); setDate(""); setPoint(""); setSelected([]); setDesc(""); setPhotos([]);
+      setTitle(""); setDate(""); setPoint("0"); setSelected([]); setDesc(""); setPhotos([]);
       setTimeout(() => setDoneMsg(""), 4000);
     } catch (e) {
       alert("오류가 발생했어요");
@@ -10643,11 +10643,11 @@ function FieldRanking() {
 
   return (
     <div>
-      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>올해 현장활동 참여가 많은 순 · 이름을 누르면 상세</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>올해 조합 활동 참여가 많은 순 · 이름을 누르면 상세</div>
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
       ) : rows.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>아직 현장활동 기록이 없어요</div>
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>아직 조합 활동 기록이 없어요</div>
       ) : (
         <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1px solid #F3F4F6" }}>
           {rows.map((r, i) => (
@@ -10683,6 +10683,7 @@ function UnionScheduleAdmin() {
   const [title, setTitle] = React.useState("");
   const [date, setDate] = React.useState("");
   const [time, setTime] = React.useState("");
+  const [timeEnd, setTimeEnd] = React.useState("");
   const [loc, setLoc] = React.useState("");
   const [list, setList] = React.useState<any[]>([]);
   const [saving, setSaving] = React.useState(false);
@@ -10697,10 +10698,12 @@ function UnionScheduleAdmin() {
     if (!title.trim()) { alert("일정 제목을 입력하세요"); return; }
     if (!date) { alert("날짜를 선택하세요"); return; }
     setSaving(true);
-    const { error } = await supabase.from("union_schedule").insert({ title: title.trim(), event_date: date, event_time: time.trim() || null, location: loc.trim() || null });
+    const tv = time.trim() ? (timeEnd.trim() ? `${time.trim()}~${timeEnd.trim()}` : time.trim()) : null;
+    if (!time.trim() && timeEnd.trim()) { alert("종료 시간만 입력할 수 없어요. 시작 시간을 먼저 입력하세요"); setSaving(false); return; }
+    const { error } = await supabase.from("union_schedule").insert({ title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null });
     setSaving(false);
     if (error) { alert("등록 실패: " + error.message); return; }
-    setTitle(""); setDate(""); setTime(""); setLoc("");
+    setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc("");
     load();
   };
   const handleDelete = async (s: any) => {
@@ -10717,16 +10720,20 @@ function UnionScheduleAdmin() {
       <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, padding: 16, marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>일정 제목</div>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 2/4분기 분과협의회" style={{ ...inputStyle, marginBottom: 14 }} />
-        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>날짜</div>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, marginBottom: 14 }} />
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 4 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>날짜</div>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>시작 시간 (선택)</div>
+            <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="예: 08:00" style={inputStyle} />
           </div>
-          <div style={{ width: 110 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>시간 (선택)</div>
-            <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="예: 14:00" style={inputStyle} />
+          <span style={{ fontSize: 14, color: "#9CA3AF", paddingBottom: 11 }}>~</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>종료 시간 (선택)</div>
+            <input value={timeEnd} onChange={(e) => setTimeEnd(e.target.value)} placeholder="예: 10:00" style={inputStyle} />
           </div>
         </div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>종료를 비우면 "08:00", 채우면 "08:00~10:00"으로 표시됩니다</div>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>장소 (선택)</div>
         <input value={loc} onChange={(e) => setLoc(e.target.value)} placeholder="예: 지회 사무실" style={{ ...inputStyle, marginBottom: 14 }} />
         <button onClick={handleAdd} disabled={saving} style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
@@ -10825,7 +10832,7 @@ function FieldActivityAdmin() {
   const [tab, setTab] = React.useState("register");
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 14 }}>🚩 현장활동</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 14 }}>🚩 조합 활동</div>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => setTab("register")} style={{ flex: 1, padding: 10, borderRadius: 8, border: tab === "register" ? "none" : "1px solid #E5E7EB", background: tab === "register" ? "#4F46E5" : "#fff", color: tab === "register" ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>활동 등록</button>
         <button onClick={() => setTab("ranking")} style={{ flex: 1, padding: 10, borderRadius: 8, border: tab === "ranking" ? "none" : "1px solid #E5E7EB", background: tab === "ranking" ? "#4F46E5" : "#fff", color: tab === "ranking" ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>참여 순위</button>
@@ -10913,7 +10920,7 @@ useEffect(() => {
     },
     {
       id: "field",
-      label: "현장활동",
+      label: "조합 활동",
       icon: "M3 21V5a2 2 0 012-2h6l1 2h7a1 1 0 011 1v9a1 1 0 01-1 1h-7l-1-2H5",
       color: "#EC4899",
       bg: "#FCE7F3",
@@ -10937,7 +10944,7 @@ useEffect(() => {
     },
     {
       id: "unionschedule",
-      label: "조합 일정",
+      label: "지회·조합 일정",
       icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
       color: "#0EA5E9",
       bg: "#E0F2FE",
@@ -24239,8 +24246,8 @@ function UnionScheduleScreen({ onBack }: { onBack: () => void }) {
   const row = (s: any, isPast: boolean) => {
     const inf = info(s.event_date);
     return (
-      <div key={s.id} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10, opacity: isPast ? 0.6 : 1 }}>
-        <span style={{ background: isPast ? "#F3F4F6" : inf.d === 0 ? "#4F46E5" : "#EEF0FF", color: isPast ? "#9CA3AF" : inf.d === 0 ? "#fff" : "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>
+      <div key={s.id} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10, opacity: isPast ? 0.6 : 1, border: !isPast && inf.d >= 1 && inf.d <= 3 ? "1.5px solid #FBBF24" : "1.5px solid transparent" }}>
+        <span style={{ background: isPast ? "#F3F4F6" : inf.d === 0 ? "#4F46E5" : inf.d <= 3 ? "#FEF3C7" : "#EEF0FF", color: isPast ? "#9CA3AF" : inf.d === 0 ? "#fff" : inf.d <= 3 ? "#92400E" : "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>
           {isPast ? "지남" : inf.d === 0 ? "오늘" : `D-${inf.d}`}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -24256,7 +24263,7 @@ function UnionScheduleScreen({ onBack }: { onBack: () => void }) {
     <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 40 }}>
       <div style={{ background: "linear-gradient(135deg, #3730A3, #4F46E5, #6D28D9)", borderRadius: 28, padding: "52px 20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: 20, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>←</button>
-        <span style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>📅 조합 일정</span>
+        <span style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>📅 지회·조합 일정</span>
       </div>
       <div style={{ padding: "20px 16px" }}>
         {loading ? (
@@ -26580,6 +26587,11 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     const loadUpcoming = async () => {
       const t = new Date();
       const ts = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+      const old = new Date(t.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const oldTs = `${old.getFullYear()}-${String(old.getMonth() + 1).padStart(2, "0")}-${String(old.getDate()).padStart(2, "0")}`;
+      supabase.from("union_schedule").delete().lt("event_date", oldTs).then(({ error }: any) => {
+        if (error) console.error("지난 일정 정리 실패:", error);
+      });
       const { data, error } = await supabase
         .from("union_schedule")
         .select("*")
@@ -28727,7 +28739,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               }}
             >
               <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>
-                {activeVote ? "진행 중인 투표" : "조합 일정"}
+                {activeVote ? "진행 중인 투표" : "지회·조합 일정"}
               </span>
               <span
                 onClick={() => setScreen(activeVote ? "vote" : "unionSchedule")}
@@ -28817,14 +28829,16 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   const dt = new Date(pp[0], pp[1] - 1, pp[2]);
                   const d = Math.round((dt.getTime() - base.getTime()) / 86400000);
                   const dow = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
+                  const urgent = d >= 1 && d <= 3;
+                  const today = d === 0;
                   return (
-                    <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: i === 0 && upcomingEvents.length > 1 ? 8 : 0 }}>
-                      <span style={{ background: i === 0 ? "#EEF0FF" : "#F3F4F6", color: i === 0 ? "#4F46E5" : "#6B7280", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
-                        {d === 0 ? "오늘" : `D-${d}`}
+                    <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: i < upcomingEvents.length - 1 ? 8 : 0, background: urgent ? "#FFF7ED" : "transparent", borderRadius: urgent ? 8 : 0, padding: urgent ? "6px 8px" : "0" }}>
+                      <span style={{ background: today ? "#4F46E5" : urgent ? "#F59E0B" : "#EEF0FF", color: today || urgent ? "#fff" : "#4F46E5", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
+                        {today ? "오늘" : `D-${d}`}
                       </span>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
-                        <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: urgent ? "#7C2D12" : "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
+                        <div style={{ fontSize: 11, color: urgent ? "#B45309" : "#9CA3AF" }}>
                           {pp[1]}월 {pp[2]}일 ({dow}){ev.event_time ? ` ${ev.event_time}` : ""}
                         </div>
                       </div>
@@ -28841,7 +28855,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   marginTop: 16,
                 }}
               >
-                예정된 조합 일정이 없습니다
+                예정된 일정이 없습니다
               </div>
             )}
           </div>
