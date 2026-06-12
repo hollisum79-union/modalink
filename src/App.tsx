@@ -24353,11 +24353,12 @@ function UnionScheduleScreen({ onBack }: { onBack: () => void }) {
   };
   const upcoming = list.filter((s: any) => info(s.event_date).d >= 0);
   const past = list.filter((s: any) => info(s.event_date).d < 0).reverse().slice(0, 10);
-  const row = (s: any, isPast: boolean) => {
+  const row = (s: any, isPast: boolean, isFirst: boolean) => {
     const inf = info(s.event_date);
+    const hot = !isPast && isFirst;
     return (
-      <div key={s.id} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10, opacity: isPast ? 0.6 : 1, border: !isPast && inf.d >= 1 && inf.d <= 3 ? "1.5px solid #FBBF24" : "1.5px solid transparent" }}>
-        <span style={{ background: isPast ? "#F3F4F6" : inf.d === 0 ? "#4F46E5" : inf.d <= 3 ? "#FEF3C7" : "#EEF0FF", color: isPast ? "#9CA3AF" : inf.d === 0 ? "#fff" : inf.d <= 3 ? "#92400E" : "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>
+      <div key={s.id} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10, opacity: isPast ? 0.6 : 1, border: hot && inf.d >= 1 ? "1.5px solid #FBBF24" : "1.5px solid transparent" }}>
+        <span style={{ background: isPast ? "#F3F4F6" : inf.d === 0 ? "#4F46E5" : hot ? "#FEF3C7" : "#EEF0FF", color: isPast ? "#9CA3AF" : inf.d === 0 ? "#fff" : hot ? "#92400E" : "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>
           {isPast ? "지남" : inf.d === 0 ? "오늘" : `D-${inf.d}`}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -24384,12 +24385,12 @@ function UnionScheduleScreen({ onBack }: { onBack: () => void }) {
             {upcoming.length === 0 ? (
               <div style={{ textAlign: "center", padding: 24, color: "#9CA3AF", fontSize: 13 }}>예정된 일정이 없어요</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{upcoming.map((s: any) => row(s, false))}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{upcoming.map((s: any, idx: number) => row(s, false, idx === 0))}</div>
             )}
             {past.length > 0 && (
               <>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", margin: "22px 2px 10px" }}>지난 일정</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{past.map((s: any) => row(s, true))}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{past.map((s: any) => row(s, true, false))}</div>
               </>
             )}
           </>
@@ -24723,6 +24724,13 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     );
 
   const showActs = condolences.length === 0 && recentActs.length > 0;
+  const actIsNew = (() => {
+    if (!showActs) return false;
+    const d = recentActs[0] && recentActs[0].activity_date;
+    if (!d) return false;
+    const pp = String(d).split("-").map(Number);
+    return (Date.now() - new Date(pp[0], pp[1] - 1, pp[2]).getTime()) / 86400000 <= 7;
+  })();
   const condolenceCard = (
     <div
       onClick={condolences.length > 0 ? onCondolenceClick : (showActs && onActivityClick ? onActivityClick : undefined)}
@@ -24731,17 +24739,34 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>{showActs ? "조합 활동" : "조합원 경조사"}</span>
+        {showActs && actIsNew && (
+          <span style={{ marginLeft: "auto", background: "#F97316", color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 5, padding: "2px 7px" }}>NEW</span>
+        )}
       </div>
       {showActs ? (
-        recentActs.map((a: any, i: number) => {
-          const dd = a.activity_date ? `${parseInt(a.activity_date.slice(5, 7))}월 ${parseInt(a.activity_date.slice(8, 10))}일` : "";
+        (() => {
+          const a0: any = recentActs[0];
+          const a1: any = recentActs[1];
+          const fmt = (d: any) => (d ? `${parseInt(String(d).slice(5, 7))}월 ${parseInt(String(d).slice(8, 10))}일` : "");
+          const hero = ((a0 && a0.photos) || [])[0];
           return (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, color: "#4C1D95" }}>
-              <span style={{ flex: 1, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span>
-              <span style={{ fontSize: 11, opacity: 0.7, flexShrink: 0 }}>{[dd, a.count > 0 ? `참여 ${a.count}명` : ""].filter(Boolean).join(" · ")}</span>
-            </div>
+            <>
+              {hero && hero.url ? (
+                <img src={hero.url} alt="" style={{ width: "100%", height: 86, objectFit: "cover", borderRadius: 10, display: "block", marginBottom: 8 }} />
+              ) : (
+                <div style={{ width: "100%", height: 56, borderRadius: 10, background: "rgba(91,33,182,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, marginBottom: 8 }}>🚩</div>
+              )}
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#4C1D95", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a0.title}</div>
+              <div style={{ fontSize: 11, color: "#6D28D9", opacity: 0.75, marginTop: 2 }}>{[fmt(a0.activity_date), a0.count > 0 ? `참여 ${a0.count}명` : ""].filter(Boolean).join(" · ")}</div>
+              {a1 && (
+                <div style={{ borderTop: "1px solid rgba(91,33,182,0.18)", marginTop: 7, paddingTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 12, color: "#4C1D95", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a1.title}</span>
+                  <span style={{ fontSize: 11, color: "#6D28D9", opacity: 0.7, flexShrink: 0 }}>{fmt(a1.activity_date)}</span>
+                </div>
+              )}
+            </>
           );
-        })
+        })()
       ) : condolences.length === 0 ? (
         <div style={{ fontSize: 12, color: "#6B7280", padding: "4px 0" }}>현재 경조사 안내가 없습니다</div>
       ) : (
@@ -28941,7 +28966,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   const dt = new Date(pp[0], pp[1] - 1, pp[2]);
                   const d = Math.round((dt.getTime() - base.getTime()) / 86400000);
                   const dow = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
-                  const urgent = d >= 1 && d <= 3;
+                  const urgent = i === 0 && d >= 1;
                   const today = d === 0;
                   return (
                     <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: i < upcomingEvents.length - 1 ? 8 : 0, background: urgent ? "#FFF7ED" : "transparent", borderRadius: urgent ? 8 : 0, padding: urgent ? "6px 8px" : "0" }}>
