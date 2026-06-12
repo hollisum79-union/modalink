@@ -10403,6 +10403,56 @@ function FieldRegister() {
   const [title, setTitle] = React.useState("");
   const [date, setDate] = React.useState("");
   const [point, setPoint] = React.useState("");
+  const [desc, setDesc] = React.useState("");
+  const [photos, setPhotos] = React.useState<any[]>([]);
+  const [uploading, setUploading] = React.useState(false);
+  const resizeImage = (file: File): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1280;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w >= h) { h = Math.round((h * MAX) / w); w = MAX; }
+          else { w = Math.round((w * MAX) / h); h = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("canvas")); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/jpeg", 0.85);
+      };
+      img.onerror = () => reject(new Error("이미지 로드 실패"));
+      img.src = URL.createObjectURL(file);
+    });
+  const handlePhotoPick = async (e: any) => {
+    const files: File[] = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    if (photos.length + files.length > 6) { alert("사진은 최대 6장까지 첨부할 수 있어요"); return; }
+    setUploading(true);
+    try {
+      const added: any[] = [];
+      for (const f of files) {
+        const blob = await resizeImage(f);
+        const path = `activities/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+        const { error } = await supabase.storage.from("archive").upload(path, blob, { contentType: "image/jpeg" });
+        if (error) { alert("사진 업로드 실패: " + error.message); break; }
+        const { data } = supabase.storage.from("archive").getPublicUrl(path);
+        added.push({ url: data.publicUrl, path });
+      }
+      setPhotos((prev) => [...prev, ...added]);
+    } catch (err: any) {
+      alert("사진 처리 실패: " + (err?.message || err));
+    }
+    setUploading(false);
+    e.target.value = "";
+  };
+  const removePhoto = async (idx: number) => {
+    const p = photos[idx];
+    if (p?.path) { try { await supabase.storage.from("archive").remove([p.path]); } catch (e) {} }
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
   const [members, setMembers] = React.useState<any[]>([]);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [saving, setSaving] = React.useState(false);
@@ -10432,7 +10482,7 @@ function FieldRegister() {
     try {
       const { data: act, error } = await supabase
         .from("field_activities")
-        .insert({ title: title.trim(), activity_date: date || null, point: pt })
+        .insert({ title: title.trim(), activity_date: date || null, point: pt, description: desc.trim() || null, photos: photos })
         .select()
         .single();
       if (error || !act) { alert("활동 등록 실패"); setSaving(false); return; }
@@ -10452,7 +10502,7 @@ function FieldRegister() {
       } else {
         setDoneMsg("활동이 기록되었습니다!");
       }
-      setTitle(""); setDate(""); setPoint(""); setSelected([]);
+      setTitle(""); setDate(""); setPoint(""); setSelected([]); setDesc(""); setPhotos([]);
       setTimeout(() => setDoneMsg(""), 4000);
     } catch (e) {
       alert("오류가 발생했어요");
@@ -10485,6 +10535,23 @@ function FieldRegister() {
             <input type="number" value={point} onChange={(e) => setPoint(e.target.value)} placeholder="50" style={inputStyle} />
           </div>
         </div>
+        <div style={{ fontSize: 12, color: "#6B7280", margin: "14px 0 5px" }}>활동 설명 (선택)</div>
+        <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={3} placeholder="활동 내용을 간단히 적어주세요 (조합원에게 보여집니다)" style={{ ...inputStyle, resize: "none" }} />
+        <div style={{ fontSize: 12, color: "#6B7280", margin: "14px 0 5px" }}>사진 (선택 · 최대 6장)</div>
+        {photos.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+            {photos.map((p: any, i: number) => (
+              <div key={i} style={{ position: "relative" }}>
+                <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10, display: "block" }} />
+                <button onClick={() => removePhoto(i)} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <label style={{ display: "block", textAlign: "center", padding: "11px 0", borderRadius: 10, border: "1.5px dashed #C7D2FE", background: "#F8F7FE", color: "#4F46E5", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          {uploading ? "업로드 중..." : "📷 사진 추가"}
+          <input type="file" accept="image/*" multiple onChange={handlePhotoPick} disabled={uploading} style={{ display: "none" }} />
+        </label>
       </div>
 
       <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, padding: 16, marginBottom: 14 }}>
@@ -10612,6 +10679,68 @@ function FieldRanking() {
   );
 }
 
+function FieldActivityList() {
+  const [acts, setActs] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    (async () => {
+      const { data: list } = await supabase
+        .from("field_activities")
+        .select("*")
+        .order("activity_date", { ascending: false });
+      const ids = (list || []).map((a: any) => a.id);
+      let cnt: Record<string, number> = {};
+      if (ids.length > 0) {
+        const { data: parts } = await supabase
+          .from("field_participants")
+          .select("activity_id")
+          .in("activity_id", ids);
+        (parts || []).forEach((p: any) => { cnt[p.activity_id] = (cnt[p.activity_id] || 0) + 1; });
+      }
+      setActs((list || []).map((a: any) => ({ ...a, count: cnt[a.id] || 0 })));
+      setLoading(false);
+    })();
+  }, []);
+  const handleDelete = async (a: any) => {
+    const warn = a.point > 0 && a.count > 0 ? "\n(이미 지급된 포인트는 회수되지 않습니다)" : "";
+    if (!window.confirm(`'${a.title}' 활동을 삭제할까요?${warn}`)) return;
+    try {
+      const paths = (a.photos || []).map((p: any) => p && p.path).filter(Boolean);
+      if (paths.length > 0) await supabase.storage.from("archive").remove(paths);
+    } catch (e) { console.error("활동 사진 삭제 실패:", e); }
+    const { error: pErr } = await supabase.from("field_participants").delete().eq("activity_id", a.id);
+    if (pErr) { alert("참여자 기록 삭제 실패: " + pErr.message); return; }
+    const { error } = await supabase.from("field_activities").delete().eq("id", a.id);
+    if (error) { alert("삭제 실패: " + error.message); return; }
+    setActs((prev) => prev.filter((x) => x.id !== a.id));
+  };
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>등록된 활동 전체 · 삭제하면 홈 캐러셀에서도 사라집니다</div>
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
+      ) : acts.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>등록된 활동이 없어요</div>
+      ) : (
+        <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1px solid #F3F4F6" }}>
+          {acts.map((a: any, i: number) => (
+            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", borderBottom: i < acts.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
+                  {a.activity_date || "날짜 없음"} · 참여 {a.count}명{a.point > 0 ? ` · ${a.point}P` : ""}
+                </div>
+              </div>
+              <button onClick={() => handleDelete(a)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function FieldActivityAdmin() {
   const [tab, setTab] = React.useState("register");
   return (
@@ -10620,9 +10749,11 @@ function FieldActivityAdmin() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => setTab("register")} style={{ flex: 1, padding: 10, borderRadius: 8, border: tab === "register" ? "none" : "1px solid #E5E7EB", background: tab === "register" ? "#4F46E5" : "#fff", color: tab === "register" ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>활동 등록</button>
         <button onClick={() => setTab("ranking")} style={{ flex: 1, padding: 10, borderRadius: 8, border: tab === "ranking" ? "none" : "1px solid #E5E7EB", background: tab === "ranking" ? "#4F46E5" : "#fff", color: tab === "ranking" ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>참여 순위</button>
+        <button onClick={() => setTab("list")} style={{ flex: 1, padding: 10, borderRadius: 8, border: tab === "list" ? "none" : "1px solid #E5E7EB", background: tab === "list" ? "#4F46E5" : "#fff", color: tab === "list" ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>활동 목록</button>
       </div>
       {tab === "register" && <FieldRegister />}
       {tab === "ranking" && <FieldRanking />}
+      {tab === "list" && <FieldActivityList />}
     </div>
   );
 }
@@ -23997,6 +24128,86 @@ const dummyTopUsers = [
   { rank: 3, memberId: "129", count: 131 },
 ];
 
+function UnionActivityScreen({ onBack }: { onBack: () => void }) {
+  const [acts, setActs] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [sel, setSel] = React.useState<any>(null);
+  React.useEffect(() => {
+    (async () => {
+      const { data: list } = await supabase
+        .from("field_activities")
+        .select("*")
+        .order("activity_date", { ascending: false });
+      const ids = (list || []).map((a: any) => a.id);
+      let cnt: Record<string, number> = {};
+      if (ids.length > 0) {
+        const { data: parts } = await supabase.from("field_participants").select("activity_id").in("activity_id", ids);
+        (parts || []).forEach((p: any) => { cnt[p.activity_id] = (cnt[p.activity_id] || 0) + 1; });
+      }
+      setActs((list || []).map((a: any) => ({ ...a, count: cnt[a.id] || 0 })));
+      setLoading(false);
+    })();
+  }, []);
+  React.useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (sel) { setSel(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  const fmtDate = (d: string) => (d ? `${parseInt(d.slice(5, 7))}월 ${parseInt(d.slice(8, 10))}일` : "");
+  return (
+    <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 40 }}>
+      <div style={{ background: "linear-gradient(135deg, #3730A3, #4F46E5, #6D28D9)", borderRadius: 28, padding: "52px 20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={() => (sel ? setSel(null) : onBack())} style={{ width: 40, height: 40, borderRadius: 20, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>←</button>
+        <span style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>🚩 조합 활동</span>
+      </div>
+      <div style={{ padding: "20px 16px" }}>
+        {sel ? (
+          <div style={{ background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", margin: 0 }}>{sel.title}</h2>
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+              {sel.activity_date || ""}{sel.count > 0 ? ` · 참여 ${sel.count}명` : ""}
+            </div>
+            {(sel.photos || []).length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+                {(sel.photos || []).map((p: any, i: number) => (
+                  <img key={i} src={p.url} alt="" style={{ width: "100%", borderRadius: 12, display: "block" }} />
+                ))}
+              </div>
+            )}
+            {sel.description && (
+              <p style={{ fontSize: 15, color: "#374151", lineHeight: 1.8, marginTop: 16, whiteSpace: "pre-wrap" }}>{sel.description}</p>
+            )}
+          </div>
+        ) : loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
+        ) : acts.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>아직 등록된 활동이 없어요</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {acts.map((a: any) => (
+              <div key={a.id} onClick={() => setSel(a)} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                {(a.photos || [])[0]?.url ? (
+                  <img src={a.photos[0].url} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 56, height: 56, borderRadius: 12, background: "#EEF0FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>🚩</div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
+                  <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
+                    {fmtDate(a.activity_date)}{a.count > 0 ? ` · 참여 ${a.count}명` : ""}
+                  </div>
+                </div>
+                <span style={{ color: "#D1D5DB", fontSize: 16 }}>›</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 const dummyCondolences = [
   { name: "김조합", type: "결혼", date: "2026-05-25", relation: "본인" },
   { name: "이승무", type: "부친상", date: "2026-05-19", relation: "본인" },
@@ -24008,12 +24219,14 @@ function HomeCarousel({
   onUrgentClick,
   carouselNotices = [],
   onCondolenceClick,
+  onActivityClick,
   user,
 }: {
   urgentNotice?: any;
   carouselNotices?: any[];
   onUrgentClick: () => void;
   onCondolenceClick: () => void;
+  onActivityClick?: () => void;
   user?: any;
 }) {
   // 경조사 데이터 (Supabase events에서)
@@ -24242,8 +24455,8 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const showActs = condolences.length === 0 && recentActs.length > 0;
   const condolenceCard = (
     <div
-      onClick={condolences.length > 0 ? onCondolenceClick : undefined}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "12px 16px", cursor: condolences.length > 0 ? "pointer" : "default" }}
+      onClick={condolences.length > 0 ? onCondolenceClick : (showActs && onActivityClick ? onActivityClick : undefined)}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "12px 16px", cursor: condolences.length > 0 || showActs ? "pointer" : "default" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
@@ -26847,6 +27060,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     );
   if (screen === "canteen")
         return <CanteenScreen onBack={() => setScreen("home")} user={user} />;
+  if (screen === "unionActivity")
+    return <UnionActivityScreen onBack={() => setScreen("home")} />;
   if (screen === "board")
     return (
       <BoardList
@@ -28227,6 +28442,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           urgentNotice={urgentNotice}
           carouselNotices={carouselNotices}
           onUrgentClick={() => setScreen("noticeList")}
+          onActivityClick={() => setScreen("unionActivity")}
           onCondolenceClick={() => { setBoardTab("경조사"); setScreen("board"); }}
           user={user}
         />
