@@ -25669,6 +25669,26 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [boardTab, setBoardTab] = useState("전체");
   const [selectedNotice, setSelectedNotice] = useState(null);
    const [selectedPost, setSelectedPost] = useState(null);
+  // 조회수: 1인 1회(기기 기준), 본인 글/관리자 제외 — localStorage 읽음 기록
+  const markViewed = (kind: string, table: string, item: any, skipCount: boolean) => {
+    let nv = (item && item.views) || 0;
+    if (!item || !item.id) return nv;
+    try {
+      const key = `mdl_read_${kind}_${(user as any)?.employee_number || "anon"}`;
+      const read: any[] = JSON.parse(localStorage.getItem(key) || "[]");
+      if (!skipCount && !read.includes(item.id)) {
+        nv += 1;
+        supabase.from(table).update({ views: nv }).eq("id", item.id).then(({ error }: any) => {
+          if (error) console.error("조회수 업데이트 실패:", table, error);
+        });
+        read.push(item.id);
+        localStorage.setItem(key, JSON.stringify(read.slice(-500)));
+      }
+    } catch (e) {
+      console.error("조회수 처리 실패:", e);
+    }
+    return nv;
+  };
   const [editingPost, setEditingPost] = useState<any>(null);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [aboutInitialTab, setAboutInitialTab] = useState("intro");
@@ -26705,6 +26725,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             {(selectedNotice as any)?.created_at && (
               <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
                 {(selectedNotice as any).created_at.slice(0, 10)}
+                {typeof (selectedNotice as any)?.views === "number" ? ` · 조회 ${(selectedNotice as any).views}` : ""}
               </div>
             )}
                         <div
@@ -26777,7 +26798,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           notices={displayNotices}
           onBack={() => setScreen("home")}
           onSelect={(n) => {
-            setSelectedNotice(n);
+            const nv = markViewed("notice", "notices", n, !!(user as any)?.is_admin);
+            setSelectedNotice({ ...n, views: nv });
             setScreen("noticeDetail");
           }}
         />
@@ -28584,7 +28606,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             <div
               key={n.id}
               onClick={() => {
-                setSelectedNotice(n);
+                const nv = markViewed("notice", "notices", n, !!(user as any)?.is_admin);
+                setSelectedNotice({ ...n, views: nv });
                 setScreen("noticeDetail");
               }}
               style={{
