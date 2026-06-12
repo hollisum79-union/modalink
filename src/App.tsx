@@ -15339,6 +15339,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   })()}
 {(() => {
                     const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
                     const recs = adjustRecords.filter((r) => r.work_date === dstr);
                     if (recs.length === 0) return null;
                     const LABEL = {
@@ -15380,6 +15381,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   })()}
                 {(() => {
                     const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
                     const lv = leaveRecords.filter((r) => r.used_date === dstr);
                     if (lv.length === 0) return null;
                     const LV: Record<string, string> = {
