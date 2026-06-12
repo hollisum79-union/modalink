@@ -1801,7 +1801,6 @@ function CanteenScreen({ onBack, user }) {
     };
     return () => { (window as any).__backHandler = null; };
   });
-  useEffect(() => { window.history.pushState(null, ""); }, [showDates]);
   const allDates = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean))).sort((a, b) => toNum(a) - toNum(b));
   const viewDate = pickedDate || todayKey;
     const isAdmin = user?.is_admin;
@@ -4163,7 +4162,6 @@ function WelfareScreen({ onBack, user }) {
     };
     return () => { (window as any).__backHandler = null; };
   });
-  useEffect(() => { window.history.pushState(null, ""); }, [welfareForm, selectedItem]);
   const isAdmin = user?.is_admin;
 
   const catStyle = {
@@ -5136,7 +5134,6 @@ function VoteScreen({ onBack, user }) {
     };
     return () => { (window as any).__backHandler = null; };
   });
-  useEffect(() => { window.history.pushState(null, ""); }, [selectedVote]);
   const [votes, setVotes] = useState([]);
   const [editVote, setEditVote] = useState(null);
   const isAdmin = user?.is_admin;
@@ -6565,7 +6562,6 @@ const [showAddCat, setShowAddCat] = useState(false);
     };
     return () => { (window as any).__backHandler = null; };
   });
-  useEffect(() => { window.history.pushState(null, ""); }, [showUpload, showAddCat, renameFile, moveFile, selectedCat]);
   const [newCatName, setNewCatName] = useState("");
 
   // 새 분류 추가
@@ -10633,7 +10629,6 @@ function AdminScreen({ onBack, user, onNavigate }) {
     };
     return () => { (window as any).__backHandler = null; };
   });
-  useEffect(() => { window.history.pushState(null, ""); }, [activeMenu]);
   const [diaPhoto, setDiaPhoto] = useState(null);
   const [diaLoading, setDiaLoading] = useState(false);
   const [diaResult, setDiaResult] = useState(null);
@@ -13156,7 +13151,6 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     };
     return () => { (window as any).__backHandler = null; };
   });
-  React.useEffect(() => { window.history.pushState(null, ""); }, [subScreen, selectedMember, timePopup, shiftViewMode]);
   React.useEffect(() => {
     if (activeTab === "통상" && user?.employee_number && (!selectedMember || String(selectedMember.employee_number) !== String(user.employee_number))) {
       setSelectedMember(user);
@@ -15913,7 +15907,6 @@ function MySettingsScreen({
     };
     return () => { (window as any).__backHandler = null; };
   });
-  useEffect(() => { window.history.pushState(null, ""); }, [isEditingPhone, editMode]);
   const [editNotify, setEditNotify] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
@@ -23378,7 +23371,6 @@ function LogbookScreen({ goBack }: { goBack: () => void }) {
     };
     return () => { (window as any).__backHandler = null; };
   });
-  React.useEffect(() => { window.history.pushState(null, ""); }, [mode]);
 
   // 작성 폼 상태
   const [formDate, setFormDate] = React.useState(
@@ -25582,13 +25574,16 @@ export default function App() {
       const [screen, setScreen] = useState("login");
     const screenRef = React.useRef("login");
     React.useEffect(() => { screenRef.current = screen; }, [screen]);
-    // 화면 이동(사용자 탭) 때마다 히스토리 1장 적립 → 뒤로가기 1회분
-    React.useEffect(() => { window.history.pushState(null, ""); }, [screen]);
     React.useEffect(() => {
-      // 빠른 연속 뒤로가기에도 앱이 종료되지 않도록 버퍼 3장
+      // ── 탭 기반 히스토리 충전 ──
+      // 크롬은 사용자 제스처 없이 만든 히스토리를 건너뛰므로,
+      // 실제 탭 이벤트 안에서 5장까지 충전한다 (제스처 컨텍스트 = 크롬이 인정)
+      let guards = 1;
       window.history.pushState(null, "");
-      window.history.pushState(null, "");
-      window.history.pushState(null, "");
+      const topUpGuards = () => {
+        while (guards < 5) { window.history.pushState(null, ""); guards++; }
+      };
+      document.addEventListener("pointerdown", topUpGuards, true);
       // ── 임시 디버그 띠 (원인 확인 후 제거 예정) ──
       const dbg = (msg: string) => {
         let el = document.getElementById("backdbg");
@@ -25603,18 +25598,18 @@ export default function App() {
       (window as any).__popCount = 0;
       dbg("v0612-D 대기중");
       const onBack = () => {
-        window.history.pushState(null, "");
+        guards = Math.max(0, guards - 1);
         const n = ++(window as any).__popCount;
         const s = screenRef.current;
-        if (s === "home" || s === "login") { dbg(`v0612-D #${n} ${s} → 무시(홈고정)`); return; }
+        if (s === "home" || s === "login") { dbg(`v0612-E g${guards} #${n} ${s} → 무시(홈고정)`); return; }
         // 1) 화면 내부 단계 먼저 처리 (팝업, 서브화면 등)
         const h = (window as any).__backHandler;
         if (typeof h === "function") {
-          try { if (h()) { dbg(`v0612-D #${n} ${s} → 내부 한단계`); return; } } catch (e) { dbg(`v0612-D #${n} ${s} → 핸들러 에러!`); }
+          try { if (h()) { dbg(`v0612-E g${guards} #${n} ${s} → 내부 한단계`); return; } } catch (e) { dbg(`v0612-E g${guards} #${n} ${s} → 핸들러 에러!`); }
         }
         // 2) 출발지 기억 화면
-        if (s === "workAdjust") { dbg(`v0612-D #${n} 조정→복귀`); setScreen(adjustReturnRef.current || "home"); return; }
-        if (s === "leave") { dbg(`v0612-D #${n} 휴가→복귀`); setScreen(leaveReturnRef.current || "home"); return; }
+        if (s === "workAdjust") { dbg(`v0612-E g${guards} #${n} 조정→복귀`); setScreen(adjustReturnRef.current || "home"); return; }
+        if (s === "leave") { dbg(`v0612-E g${guards} #${n} 휴가→복귀`); setScreen(leaveReturnRef.current || "home"); return; }
         // 3) 부모 화면으로 한 단계
         const backMap: any = {
           noticeDetail: "noticeList",
@@ -25627,11 +25622,14 @@ export default function App() {
           admin: "mySettings",
           register: "login",
         };
-        dbg(`v0612-D #${n} ${s} → ${backMap[s] || "home"}(부모)`);
+        dbg(`v0612-E g${guards} #${n} ${s} → ${backMap[s] || "home"}(부모)`);
         setScreen(backMap[s] || "home");
       };
       window.addEventListener("popstate", onBack);
-      return () => window.removeEventListener("popstate", onBack);
+      return () => {
+        window.removeEventListener("popstate", onBack);
+        document.removeEventListener("pointerdown", topUpGuards, true);
+      };
     }, []);
   const [adjustInitDate, setAdjustInitDate] = useState("");
   const [adjustReturn, setAdjustReturn] = useState("home");
