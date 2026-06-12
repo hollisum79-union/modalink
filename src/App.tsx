@@ -1793,6 +1793,15 @@ function CanteenScreen({ onBack, user }) {
   const todayKey = (today.getMonth() + 1) + "/" + today.getDate();
   const [pickedDate, setPickedDate] = useState(null);
   const [showDates, setShowDates] = useState(false);
+  // ── 뒤로가기: 날짜선택 팝업 닫기 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (showDates) { setShowDates(false); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  useEffect(() => { window.history.pushState(null, ""); }, [showDates]);
   const allDates = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean))).sort((a, b) => toNum(a) - toNum(b));
   const viewDate = pickedDate || todayKey;
     const isAdmin = user?.is_admin;
@@ -4145,6 +4154,16 @@ function WelfareScreen({ onBack, user }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [welfareItems, setWelfareItems] = useState([]);
   const [welfareForm, setWelfareForm] = useState(null);
+  // ── 뒤로가기: 신청폼 → 상세 → 목록 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (welfareForm) { setWelfareForm(null); return true; }
+      if (selectedItem) { setSelectedItem(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  useEffect(() => { window.history.pushState(null, ""); }, [welfareForm, selectedItem]);
   const isAdmin = user?.is_admin;
 
   const catStyle = {
@@ -5109,6 +5128,15 @@ const [nameMap, setNameMap] = useState({});
 function VoteScreen({ onBack, user }) {
   const [filter, setFilter] = useState("전체");
   const [selectedVote, setSelectedVote] = useState(null);
+  // ── 뒤로가기: 투표 상세 → 목록 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (selectedVote) { setSelectedVote(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  useEffect(() => { window.history.pushState(null, ""); }, [selectedVote]);
   const [votes, setVotes] = useState([]);
   const [editVote, setEditVote] = useState(null);
   const isAdmin = user?.is_admin;
@@ -6525,6 +6553,19 @@ const [showAddCat, setShowAddCat] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [moveFile, setMoveFile] = useState(null);
+  // ── 뒤로가기: 팝업 닫기 → 카테고리 목록 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (showUpload) { setShowUpload(false); return true; }
+      if (showAddCat) { setShowAddCat(false); return true; }
+      if (renameFile) { setRenameFile(null); return true; }
+      if (moveFile) { setMoveFile(null); return true; }
+      if (selectedCat) { setSelectedCat(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  useEffect(() => { window.history.pushState(null, ""); }, [showUpload, showAddCat, renameFile, moveFile, selectedCat]);
   const [newCatName, setNewCatName] = useState("");
 
   // 새 분류 추가
@@ -10584,6 +10625,15 @@ function FieldActivityAdmin() {
 }
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
+  // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 관리자 홈 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (activeMenu !== "home") { setActiveMenu("home"); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  useEffect(() => { window.history.pushState(null, ""); }, [activeMenu]);
   const [diaPhoto, setDiaPhoto] = useState(null);
   const [diaLoading, setDiaLoading] = useState(false);
   const [diaResult, setDiaResult] = useState(null);
@@ -13094,6 +13144,19 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [comparePickerOpen, setComparePickerOpen] = React.useState(false);
   const [compareSearch, setCompareSearch] = React.useState("");
   const [timePopup, setTimePopup] = React.useState<any>(null);
+  // ── 안드로이드 뒤로가기: 근무표 안에서 한 단계씩 ──
+  React.useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (timePopup) { setTimePopup(null); return true; }
+      if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites") { setSubScreen("menu"); return true; }
+      if (subScreen === "menu" || subScreen === "search") { setSubScreen(null); return true; }
+      if (activeTab === "교번" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { setSelectedMember(null); return true; }
+      if (activeTab === "교대" && shiftViewMode === "all") { setShiftViewMode("crew"); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  React.useEffect(() => { window.history.pushState(null, ""); }, [subScreen, selectedMember, timePopup, shiftViewMode]);
   React.useEffect(() => {
     if (activeTab === "통상" && user?.employee_number && (!selectedMember || String(selectedMember.employee_number) !== String(user.employee_number))) {
       setSelectedMember(user);
@@ -15841,6 +15904,16 @@ function MySettingsScreen({
   const [savedWorkData, setSavedWorkData] = useState(null);
   const workTypes = ["교대", "교번", "통상", "변형통상"];
   const [editMode, setEditMode] = useState(!(user?.work_type));
+  // ── 안드로이드 뒤로가기: 수정모드 → 보기모드 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (isEditingPhone) { setIsEditingPhone(false); return true; }
+      if (editMode && user?.work_type) { setEditMode(false); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  useEffect(() => { window.history.pushState(null, ""); }, [isEditingPhone, editMode]);
   const [editNotify, setEditNotify] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
@@ -23297,6 +23370,15 @@ function LogbookScreen({ goBack }: { goBack: () => void }) {
   const [mode, setMode] = React.useState<"list" | "write" | "detail">("list");
   const [logs, setLogs] = React.useState(myDummyLogs);
   const [selectedLog, setSelectedLog] = React.useState<any>(null);
+  // ── 뒤로가기: 상세/작성 → 목록 ──
+  React.useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (mode !== "list") { setMode("list"); setSelectedLog(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+  React.useEffect(() => { window.history.pushState(null, ""); }, [mode]);
 
   // 작성 폼 상태
   const [formDate, setFormDate] = React.useState(
@@ -25500,13 +25582,38 @@ export default function App() {
       const [screen, setScreen] = useState("login");
     const screenRef = React.useRef("login");
     React.useEffect(() => { screenRef.current = screen; }, [screen]);
+    // 화면 이동(사용자 탭) 때마다 히스토리 1장 적립 → 뒤로가기 1회분
+    React.useEffect(() => { window.history.pushState(null, ""); }, [screen]);
     React.useEffect(() => {
+      // 빠른 연속 뒤로가기에도 앱이 종료되지 않도록 버퍼 3장
+      window.history.pushState(null, "");
+      window.history.pushState(null, "");
       window.history.pushState(null, "");
       const onBack = () => {
         window.history.pushState(null, "");
-        if (screenRef.current !== "home" && screenRef.current !== "login") {
-          setScreen("home");
+        const s = screenRef.current;
+        if (s === "home" || s === "login") return;
+        // 1) 화면 내부 단계 먼저 처리 (팝업, 서브화면 등)
+        const h = (window as any).__backHandler;
+        if (typeof h === "function") {
+          try { if (h()) return; } catch (e) {}
         }
+        // 2) 출발지 기억 화면
+        if (s === "workAdjust") { setScreen(adjustReturnRef.current || "home"); return; }
+        if (s === "leave") { setScreen(leaveReturnRef.current || "home"); return; }
+        // 3) 부모 화면으로 한 단계
+        const backMap: any = {
+          noticeDetail: "noticeList",
+          boardDetail: "board",
+          boardWrite: "board",
+          inquiryDetail: "inquiry",
+          inquiryWrite: "inquiry",
+          anonymousWrite: "anonymous",
+          notifications: "mySettings",
+          admin: "mySettings",
+          register: "login",
+        };
+        setScreen(backMap[s] || "home");
       };
       window.addEventListener("popstate", onBack);
       return () => window.removeEventListener("popstate", onBack);
@@ -25514,6 +25621,10 @@ export default function App() {
   const [adjustInitDate, setAdjustInitDate] = useState("");
   const [adjustReturn, setAdjustReturn] = useState("home");
   const [leaveReturn, setLeaveReturn] = useState("home");
+  const adjustReturnRef = React.useRef("home");
+  const leaveReturnRef = React.useRef("home");
+  React.useEffect(() => { adjustReturnRef.current = adjustReturn; }, [adjustReturn]);
+  React.useEffect(() => { leaveReturnRef.current = leaveReturn; }, [leaveReturn]);
   const [adjustInitTab, setAdjustInitTab] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
