@@ -335,6 +335,65 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   return { netPay: totalGross - totalDeduction, totalGross, totalDeduction, tongsangWage };
 }
+// 근무조정 기록 → 수당 환산 (computeNetPay의 휴무충당/지원/야간취급 산식과 동일하게 유지할 것)
+function estimateAdjustPay(records: any[], hourlyWage: number, diaTable: any[], holidays: string[]) {
+  if (!hourlyWage || hourlyWage <= 0) return 0;
+  let total = 0;
+  let supportOtHours = 0;
+  (records || []).forEach((rec: any) => {
+    if (rec.adjust_type === "holiday_fill") {
+      let workHours = 0, nightHours = 0;
+      if (rec.is_temp_dia) {
+        workHours = Number(rec.temp_work_hours) || 0;
+        nightHours = Number(rec.temp_night_hours) || 0;
+      } else {
+        const m = (rec.memo || "").match(/다이아\s*(\d+)/);
+        if (!m) return;
+        const hres = calcHolidayFillHours(m[1], rec.work_shift, rec.work_date, diaTable, holidays);
+        workHours = hres.workHours;
+        nightHours = hres.nightHours;
+      }
+      if (workHours <= 0) return;
+      const within8 = Math.min(workHours, 8);
+      const over8 = Math.max(workHours - 8, 0);
+      total += hourlyWage * (within8 * 1.5 + over8 * 2.0) + hourlyWage * 0.5 * nightHours;
+      return;
+    }
+    if (rec.adjust_type === "support") {
+      if (rec.work_shift === "야간") return;
+      if (rec.is_temp_dia) {
+        const toHr = (t: any) => { const p = String(t).split(":"); return (Number(p[0]) || 0) + (Number(p[1]) || 0) / 60; };
+        const s = toHr(rec.temp_start_time), e = toHr(rec.temp_end_time);
+        const START = 8 + 50 / 60, END = 18.5;
+        let ot = 0;
+        if (s < START) ot += START - s;
+        if (e > END) ot += e - END;
+        supportOtHours += ot;
+        return;
+      }
+      const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
+      if (!sm) return;
+      supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
+      return;
+    }
+    if (rec.adjust_type === "standby" || rec.adjust_type === "designated") {
+      if (rec.work_shift !== "야간") return;
+      let nightHours = 0;
+      if (rec.is_temp_dia) {
+        nightHours = Number(rec.temp_night_hours) || 0;
+      } else {
+        const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
+        if (!dm) return;
+        nightHours = calcHolidayFillHours(dm[1], "야간", rec.work_date, diaTable, holidays).nightHours;
+      }
+      total += hourlyWage * 0.5 * nightHours;
+    }
+  });
+  const within8s = Math.min(supportOtHours, 8);
+  const over8s = Math.max(supportOtHours - 8, 0);
+  total += hourlyWage * (within8s * 1.5 + over8s * 2.0);
+  return Math.round(total);
+}
 function getTodayWorkInfo(member: any, rotationData: any[], diaTable: any[], holidays: string[], date = new Date(), swapData: any[] = [], allMembers: any[] = []) {
   const work = calcKyobunWork(member, date, rotationData, swapData, allMembers);
   if (!work) return null;
@@ -24557,7 +24616,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     const loadActs = async () => {
       const { data: acts } = await supabase
         .from("field_activities")
-        .select("id, title, activity_date")
+        .select("id, title, activity_date, photos")
         .order("activity_date", { ascending: false })
         .limit(2);
       if (!acts || acts.length === 0) { setRecentActs([]); return; }
@@ -26243,6 +26302,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [showOnlineModal, setShowOnlineModal] = useState(false);
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [adjustCount, setAdjustCount] = useState(0);
+  const [adjustPayEst, setAdjustPayEst] = useState(0);
   const [newNoticeCount, setNewNoticeCount] = useState(0);
   const [newPostCount, setNewPostCount] = useState(0);
   const [newVoteCount, setNewVoteCount] = useState(0);
@@ -26423,6 +26483,21 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       allMembers: d.allMembers || [],
     });
     if (!result) return;
+    (async () => {
+      const n2 = new Date();
+      const mm2 = String(n2.getMonth() + 1).padStart(2, "0");
+      const fd = `${n2.getFullYear()}-${mm2}-01`;
+      const ld = `${n2.getFullYear()}-${mm2}-${String(new Date(n2.getFullYear(), n2.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
+      const { data: curAdj, error: caErr } = await supabase
+        .from("work_adjust")
+        .select("*")
+        .eq("employee_number", user.employee_number)
+        .gte("work_date", fd)
+        .lte("work_date", ld);
+      if (caErr) { console.error("이번 달 조정 기록 로드 실패:", caErr); return; }
+      const hw = result.tongsangWage > 0 ? result.tongsangWage / 209 : 0;
+      setAdjustPayEst(estimateAdjustPay(curAdj || [], hw, homeDia, homeHolidays));
+    })();
     const now = new Date();
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     supabase
@@ -28511,11 +28586,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           <div
        onClick={() => { setAdjustInitDate(""); setAdjustReturn("home"); setScreen("workAdjust"); }}
             style={{
-              background: "#fff",
+              background: adjustCount === 0 ? "#FFFBF5" : "#fff",
+              border: adjustCount === 0 ? "1.5px solid #F59E0B" : "1.5px solid transparent",
               borderRadius: 16,
               padding: "14px 12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
               cursor: "pointer",
+              boxSizing: "border-box",
             }}
           >
             <div
@@ -28526,11 +28603,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 marginBottom: 6,
               }}
             >
-              <div style={{ fontSize: 10, color: "#9CA3AF" }}>근무조정</div>
+              <div style={{ fontSize: 10, color: adjustCount === 0 ? "#92400E" : "#9CA3AF" }}>근무조정</div>
               <span
                 style={{
-                  background: "#EEF0FF",
-                  color: "#4F46E5",
+                  background: adjustCount === 0 ? "#F59E0B" : "#EEF0FF",
+                  color: adjustCount === 0 ? "#fff" : "#4F46E5",
                   fontSize: 10,
                   fontWeight: 700,
                   borderRadius: 6,
@@ -28540,25 +28617,43 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 입력
               </span>
             </div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "#1F2937" }}>
-              {adjustCount}
-              <span style={{ fontSize: 11, fontWeight: 400 }}>건</span>
-            </div>
-            <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 4 }}>
-              이번 달 신청
-            </div>
-            <div
-              style={{
-                fontSize: 10,
-                color: "#4F46E5",
-                marginTop: 4,
-                fontWeight: 600,
-              }}
-            >
-              {lastDate
-                ? `최근 ${lastDate.slice(5).replace("-", "/")}`
-                : "기록 없음"}
-            </div>
+            {adjustCount === 0 ? (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#78350F", lineHeight: 1.45, marginTop: 2 }}>
+                  이번 달 기록이<br />아직 없어요
+                </div>
+                <div style={{ fontSize: 10, color: "#B45309", marginTop: 5, fontWeight: 600 }}>
+                  충당·지원했다면 입력 ›
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#1F2937" }}>
+                  {adjustCount}
+                  <span style={{ fontSize: 11, fontWeight: 400 }}>건</span>
+                </div>
+                {adjustPayEst > 0 && (
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#059669", marginTop: 3 }}>
+                    +{adjustPayEst.toLocaleString("ko-KR")}원
+                  </div>
+                )}
+                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3 }}>
+                  이번 달 기록{adjustPayEst > 0 ? " · 수당 환산" : ""}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#4F46E5",
+                    marginTop: 4,
+                    fontWeight: 600,
+                  }}
+                >
+                  {lastDate
+                    ? `최근 ${lastDate.slice(5).replace("-", "/")}`
+                    : "기록 없음"}
+                </div>
+              </>
+            )}
           </div>
         </div>
                 {/* 무사고 주행키로 카드 */}
