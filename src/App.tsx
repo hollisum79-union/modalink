@@ -24061,6 +24061,26 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     };
     loadCondolences();
   }, []);
+  const [recentActs, setRecentActs] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    const loadActs = async () => {
+      const { data: acts } = await supabase
+        .from("field_activities")
+        .select("id, title, activity_date")
+        .order("activity_date", { ascending: false })
+        .limit(2);
+      if (!acts || acts.length === 0) { setRecentActs([]); return; }
+      const ids = acts.map((a: any) => a.id);
+      const { data: parts } = await supabase
+        .from("field_participants")
+        .select("activity_id")
+        .in("activity_id", ids);
+      const cnt: Record<string, number> = {};
+      (parts || []).forEach((p: any) => { cnt[p.activity_id] = (cnt[p.activity_id] || 0) + 1; });
+      setRecentActs(acts.map((a: any) => ({ ...a, count: cnt[a.id] || 0 })));
+    };
+    loadActs();
+  }, []);
   React.useEffect(() => {
     const loadAward = async () => {
       const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -24212,16 +24232,27 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     </div>
     );
 
+  const showActs = condolences.length === 0 && recentActs.length > 0;
   const condolenceCard = (
     <div
-      onClick={onCondolenceClick}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "12px 16px", cursor: "pointer" }}
+      onClick={condolences.length > 0 ? onCondolenceClick : undefined}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "12px 16px", cursor: condolences.length > 0 ? "pointer" : "default" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 16 }}>💐</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>조합원 경조사</span>
+        <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>{showActs ? "조합 활동" : "조합원 경조사"}</span>
       </div>
-      {condolences.length === 0 ? (
+      {showActs ? (
+        recentActs.map((a: any, i: number) => {
+          const dd = a.activity_date ? `${parseInt(a.activity_date.slice(5, 7))}월 ${parseInt(a.activity_date.slice(8, 10))}일` : "";
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, color: "#4C1D95" }}>
+              <span style={{ flex: 1, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span>
+              <span style={{ fontSize: 11, opacity: 0.7, flexShrink: 0 }}>{dd}{dd ? " · " : ""}참여 {a.count}명</span>
+            </div>
+          );
+        })
+      ) : condolences.length === 0 ? (
         <div style={{ fontSize: 12, color: "#6B7280", padding: "4px 0" }}>현재 경조사 안내가 없습니다</div>
       ) : (
         condolences.map((c, i) => (
