@@ -12473,7 +12473,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
 // ── 포인트 시스템 ──
 // 사용자 ID 추출 헬퍼
 function getUserId(user) {
-  return String(user?.emp_id || user?.id || "guest");
+  return String(user?.employee_number || user?.emp_id || user?.id || "guest");
 }
 
 const POINT_RULES = {
@@ -28502,9 +28502,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               if (startIdx >= 0) type = cycle[(((startIdx + diff) % 4) + 4) % 4];
             }
             const dr = info?.diaRow;
-            const timeText =
-              dr && dr.start_time && dr.end_time
-                ? `${dr.start_time}~${dr.end_time}`
+            const isWork = type === "주간" || type === "야간";
+            const isStandby = info?.dia != null && String(info.dia).startsWith("대기");
+            const bigText =
+              info?.dia != null
+                ? (isStandby ? String(info.dia) : `다이아 ${info.dia}`)
                 : type === "비번"
                 ? "비번"
                 : type === "휴무"
@@ -28512,14 +28514,21 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 : type === "주간" || type === "야간"
                 ? type
                 : "-";
-            let workText = "";
-            const wh = dr?.work_hours;
-            if (wh != null && wh !== "") {
-              const h = Math.floor(Number(wh));
-              const mn = Math.round((Number(wh) - h) * 60);
-              workText = mn > 0 ? `${h}시간 ${mn}분` : `${h}시간`;
-            }
-            const isWork = type === "주간" || type === "야간";
+            const subText =
+              dr && dr.start_time
+                ? `${dr.start_time} 출근`
+                : type === "비번"
+                ? "푹 쉬세요"
+                : type === "휴무"
+                ? "좋은 하루 되세요"
+                : "";
+            const BADGE: any = {
+              주간: { bg: "#DBEAFE", fg: "#1D4ED8" },
+              야간: { bg: "#EDE9FE", fg: "#6D28D9" },
+              비번: { bg: "#F3F4F6", fg: "#6B7280" },
+              휴무: { bg: "#FEF3C7", fg: "#92400E" },
+            };
+            const bc = BADGE[type] || { bg: "#EEF0FF", fg: "#4F46E5" };
             return (
               <div
                 onClick={() => setScreen("schedule")}
@@ -28542,8 +28551,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   <div style={{ fontSize: 10, color: "#9CA3AF" }}>오늘 내 근무</div>
                   <span
                     style={{
-                      background: "#EEF0FF",
-                      color: type === "야간" ? "#6D28D9" : "#4F46E5",
+                      background: bc.bg,
+                      color: bc.fg,
                       fontSize: 10,
                       fontWeight: 700,
                       borderRadius: 6,
@@ -28561,23 +28570,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     letterSpacing: -0.5,
                   }}
                 >
-                  {timeText}
+                  {bigText}
                 </div>
-                {workText && (
-                  <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 4 }}>
-                    {workText}
-                  </div>
-                )}
-                {isWork && info?.dia != null && (
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: "#4F46E5",
-                      marginTop: 4,
-                      fontWeight: 600,
-                    }}
-                  >
-                    💎 승무다이아 : {info.dia}
+                {subText && (
+                  <div style={{ fontSize: 11, color: isWork ? "#4F46E5" : "#9CA3AF", marginTop: 4, fontWeight: isWork ? 700 : 400 }}>
+                    {subText}
                   </div>
                 )}
               </div>
