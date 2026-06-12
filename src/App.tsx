@@ -25575,6 +25575,9 @@ export default function App() {
     const screenRef = React.useRef("login");
     React.useEffect(() => { screenRef.current = screen; }, [screen]);
     React.useEffect(() => {
+      // 빠른 연속 뒤로가기에도 앱이 종료되지 않도록 버퍼 3장
+      window.history.pushState(null, "");
+      window.history.pushState(null, "");
       window.history.pushState(null, "");
       const onBack = () => {
         window.history.pushState(null, "");
