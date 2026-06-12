@@ -13146,6 +13146,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
       if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites") { setSubScreen("menu"); return true; }
       if (subScreen === "menu" || subScreen === "search") { setSubScreen(null); return true; }
       if (activeTab === "교번" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { setSelectedMember(null); return true; }
+      if (activeTab === "통상" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { goMySchedule(); return true; }
       if (activeTab === "교대" && shiftViewMode === "all") { setShiftViewMode("crew"); return true; }
       return false;
     };
@@ -14294,9 +14295,29 @@ const getKyobunWork = (member: any, date: Date) => {
     return calcTongsangWork(member, date, holidays);
   };
   const renderTongsangTab = () => {
-    const me = user;
+    const viewingOther =
+      selectedMember &&
+      String(selectedMember.work_type || "") === "통상" &&
+      String(selectedMember.employee_number) !== String(user?.employee_number)
+        ? selectedMember
+        : null;
+    const me = viewingOther || user;
+    const isSelf = !viewingOther;
     const hasBase = me?.tongsang_base_date && me?.tongsang_base_dia != null;
     if (!hasBase) {
+      if (!isSelf) {
+        return (
+          <div style={{ padding: 24 }}>
+            <button onClick={goMySchedule} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 내 근무표 보기</button>
+            <div style={{ background: "#fff", border: "1px solid #EEE", borderRadius: 14, padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>{me?.name}님의 통상 근무표</div>
+              <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6 }}>
+                아직 근무 기준이 설정되지 않아 표시할 수 없어요.<br />본인이 근무표 탭에서 한 번만 설정하면 보입니다.
+              </div>
+            </div>
+          </div>
+        );
+      }
       return (
         <div style={{ padding: 24 }}>
           <div style={{ background: "#fff", border: "1px solid #EEE", borderRadius: 14, padding: 20 }}>
@@ -14342,10 +14363,13 @@ const getKyobunWork = (member: any, date: Date) => {
         <div style={{ padding: "10px 16px", background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #EEF0F3" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
             <span onClick={() => { const p = getPrevMonth(currentYear, currentMonth); setCurrentYear(p.y); setCurrentMonth(p.m); }} style={{ fontSize: 18, color: "#9CA3AF", cursor: "pointer" }}>‹</span>
-            <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{currentYear}년 {currentMonth}월</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{currentYear}년 {currentMonth}월{!isSelf && <span style={{ fontSize: 12, fontWeight: 700, color: "#6366F1", marginLeft: 8 }}>{me?.name}</span>}</span>
             <span onClick={() => { const n = getNextMonth(currentYear, currentMonth); setCurrentYear(n.y); setCurrentMonth(n.m); }} style={{ fontSize: 18, color: "#9CA3AF", cursor: "pointer" }}>›</span>
           </div>
-          <button
+          {!isSelf && (
+            <button onClick={goMySchedule} style={{ background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 12, cursor: "pointer", padding: "3px 11px", borderRadius: 999, fontFamily: "inherit" }}>← 내 근무표</button>
+          )}
+          {isSelf && <button
             onClick={async () => {
               if (!window.confirm("기준을 다시 설정할까요?")) return;
               const { error } = await supabase
@@ -14358,7 +14382,7 @@ const getKyobunWork = (member: any, date: Date) => {
             style={{ background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 12, cursor: "pointer", padding: "3px 11px", borderRadius: 999, fontFamily: "inherit" }}
           >
             기준 재설정
-          </button>
+          </button>}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid #F3F4F6" }}>
           {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
@@ -14378,14 +14402,14 @@ const getKyobunWork = (member: any, date: Date) => {
               const dayColor = isSun || isHoli ? "#EF4444" : isSat ? "#3B82F6" : "#111827";
               const subColor = isSun || isHoli ? "#F87171" : "#93C5FD";
               const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-              const dayMemos = memos[dstr] || [];
-              const adjs = adjustRecords.filter((r) => r.work_date === dstr);
-              const lvs = leaveRecords.filter((r) => r.used_date === dstr);
+              const dayMemos = isSelf ? (memos[dstr] || []) : [];
+              const adjs = isSelf ? adjustRecords.filter((r) => r.work_date === dstr) : [];
+              const lvs = isSelf ? leaveRecords.filter((r) => r.used_date === dstr) : [];
               const ADJL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
               const ADJC: any = { standby: { bg: "#EDE9FE", fg: "#6D28D9" }, holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" }, designated: { bg: "#E1F5EE", fg: "#0F6E56" }, support: { bg: "#E6F1FB", fg: "#185FA5" } };
               const LVL: any = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체", study: "학습", longService: "장기재직" };
               return (
-                <div key={di} onClick={() => setEditingDate(editingDate === dstr ? null : dstr)} style={{ padding: "6px 4px", background: "#fff", borderRight: "1px solid #F3F4F6", cursor: "pointer" }}>
+                <div key={di} onClick={() => { if (isSelf) setEditingDate(editingDate === dstr ? null : dstr); }} style={{ padding: "6px 4px", background: "#fff", borderRight: "1px solid #F3F4F6", cursor: isSelf ? "pointer" : "default" }}>
                   <div style={{ fontSize: 10, fontWeight: 600, textAlign: "center", marginBottom: 4, color: isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#9CA3AF" }}>
                     {isT ? (
                       <span style={{ background: "#4F46E5", color: "#fff", borderRadius: "50%", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>{day}</span>
@@ -14842,8 +14866,12 @@ const getKyobunWork = (member: any, date: Date) => {
         setActiveTab("교대");
         setSelectedCrew(m.work_group);
         setShiftViewMode("crew");
+      } else if (String(m.work_type || "") === "통상") {
+        setSubScreen(null);
+        setActiveTab("통상");
+        setSelectedMember(m);
       } else {
-        alert("통상근무자 근무표 보기는 준비중입니다.");
+        alert("해당 직원의 근무표 보기는 준비중입니다.");
       }
     };
     return (
