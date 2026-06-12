@@ -24754,6 +24754,10 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         borderRadius: 12,
         padding: "10px 14px",
         cursor: "pointer",
+        height: 168,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <div
@@ -24780,7 +24784,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         </span>
       </div>
 
-      {carouselNotices.slice(0, 4).map((notice, idx) => {
+      {carouselNotices.slice(0, 3).map((notice, idx) => {
         const isUrgent = notice.tag === "긴급";
         return (
           <div
@@ -24820,6 +24824,9 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           </div>
         );
       })}
+      <div style={{ marginTop: "auto", fontSize: 11, color: "#B91C1C", fontWeight: 600, textAlign: "right" }}>
+        전체 공지 보기 ›
+      </div>
     </div>
     );
 
@@ -24834,7 +24841,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const condolenceCard = (
     <div
       onClick={condolences.length > 0 ? onCondolenceClick : (showActs && onActivityClick ? onActivityClick : undefined)}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default" }}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default", height: 168, overflow: "hidden" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
@@ -24890,6 +24897,8 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
               border: "1px solid #FCD34D",
               borderRadius: 12,
               padding: "10px 14px",
+              height: 168,
+              overflow: "hidden",
             }}
           >
             <div
@@ -24934,7 +24943,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    padding: "4px 0",
+                    padding: "2.5px 0",
                     fontSize: 12,
                     color: "#78350F",
                   }}
@@ -24968,7 +24977,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
                 <span>{myRank.rank}위 ({myRank.total}P)</span>
               </div>
             )}
-            <div style={{ borderTop: "1px solid rgba(146,64,14,0.15)", marginTop: 7, paddingTop: 7, fontSize: 11, color: "#92400E", fontWeight: 600 }}>
+            <div style={{ borderTop: "1px solid rgba(146,64,14,0.15)", marginTop: 5, paddingTop: 5, fontSize: 11, color: "#92400E", fontWeight: 600 }}>
               🎁 매달 1등에게 지회에서 상품을 드려요
             </div>
           </div>
