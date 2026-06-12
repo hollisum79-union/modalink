@@ -10679,6 +10679,86 @@ function FieldRanking() {
   );
 }
 
+function UnionScheduleAdmin() {
+  const [title, setTitle] = React.useState("");
+  const [date, setDate] = React.useState("");
+  const [time, setTime] = React.useState("");
+  const [loc, setLoc] = React.useState("");
+  const [list, setList] = React.useState<any[]>([]);
+  const [saving, setSaving] = React.useState(false);
+  const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const, maxWidth: "100%" };
+  const load = async () => {
+    const { data, error } = await supabase.from("union_schedule").select("*").order("event_date", { ascending: false });
+    if (error) { console.error("일정 로드 실패:", error); return; }
+    setList(data || []);
+  };
+  React.useEffect(() => { load(); }, []);
+  const handleAdd = async () => {
+    if (!title.trim()) { alert("일정 제목을 입력하세요"); return; }
+    if (!date) { alert("날짜를 선택하세요"); return; }
+    setSaving(true);
+    const { error } = await supabase.from("union_schedule").insert({ title: title.trim(), event_date: date, event_time: time.trim() || null, location: loc.trim() || null });
+    setSaving(false);
+    if (error) { alert("등록 실패: " + error.message); return; }
+    setTitle(""); setDate(""); setTime(""); setLoc("");
+    load();
+  };
+  const handleDelete = async (s: any) => {
+    if (!window.confirm(`'${s.title}' 일정을 삭제할까요?`)) return;
+    const { error } = await supabase.from("union_schedule").delete().eq("id", s.id);
+    if (error) { alert("삭제 실패: " + error.message); return; }
+    setList((prev) => prev.filter((x: any) => x.id !== s.id));
+  };
+  const t0 = new Date();
+  const base = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate());
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>홈 화면에 다가오는 일정 2건이 자동 표시됩니다</div>
+      <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>일정 제목</div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 2/4분기 분과협의회" style={{ ...inputStyle, marginBottom: 14 }} />
+        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>날짜</div>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ width: 110 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>시간 (선택)</div>
+            <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="예: 14:00" style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>장소 (선택)</div>
+        <input value={loc} onChange={(e) => setLoc(e.target.value)} placeholder="예: 지회 사무실" style={{ ...inputStyle, marginBottom: 14 }} />
+        <button onClick={handleAdd} disabled={saving} style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          {saving ? "등록 중..." : "일정 등록"}
+        </button>
+      </div>
+      {list.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1px solid #F3F4F6" }}>
+          {list.map((s: any, i: number) => {
+            const pp = String(s.event_date).split("-").map(Number);
+            const dt = new Date(pp[0], pp[1] - 1, pp[2]);
+            const d = Math.round((dt.getTime() - base.getTime()) / 86400000);
+            return (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", borderBottom: i < list.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                <span style={{ background: d < 0 ? "#F3F4F6" : "#EEF0FF", color: d < 0 ? "#9CA3AF" : "#4F46E5", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {d < 0 ? "지남" : d === 0 ? "오늘" : `D-${d}`}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
+                  <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
+                    {s.event_date}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
+                  </div>
+                </div>
+                <button onClick={() => handleDelete(s)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>삭제</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 function FieldActivityList() {
   const [acts, setActs] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -10853,6 +10933,14 @@ useEffect(() => {
       icon: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
       color: "#EC4899",
       bg: "#FCE7F3",
+      badge: 0,
+    },
+    {
+      id: "unionschedule",
+      label: "조합 일정",
+      icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+      color: "#0EA5E9",
+      bg: "#E0F2FE",
       badge: 0,
     },
     {
@@ -11126,6 +11214,7 @@ useEffect(() => {
         )}
         {activeMenu === "ranking" && <PointRankingAdmin />}
         {activeMenu === "field" && <FieldActivityAdmin />}
+        {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
@@ -24128,6 +24217,70 @@ const dummyTopUsers = [
   { rank: 3, memberId: "129", count: 131 },
 ];
 
+function UnionScheduleScreen({ onBack }: { onBack: () => void }) {
+  const [list, setList] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("union_schedule").select("*").order("event_date", { ascending: true });
+      setList(data || []);
+      setLoading(false);
+    })();
+  }, []);
+  const t0 = new Date();
+  const base = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate());
+  const info = (ds: string) => {
+    const pp = String(ds).split("-").map(Number);
+    const dt = new Date(pp[0], pp[1] - 1, pp[2]);
+    return { d: Math.round((dt.getTime() - base.getTime()) / 86400000), label: `${pp[1]}월 ${pp[2]}일 (${["일", "월", "화", "수", "목", "금", "토"][dt.getDay()]})` };
+  };
+  const upcoming = list.filter((s: any) => info(s.event_date).d >= 0);
+  const past = list.filter((s: any) => info(s.event_date).d < 0).reverse().slice(0, 10);
+  const row = (s: any, isPast: boolean) => {
+    const inf = info(s.event_date);
+    return (
+      <div key={s.id} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10, opacity: isPast ? 0.6 : 1 }}>
+        <span style={{ background: isPast ? "#F3F4F6" : inf.d === 0 ? "#4F46E5" : "#EEF0FF", color: isPast ? "#9CA3AF" : inf.d === 0 ? "#fff" : "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>
+          {isPast ? "지남" : inf.d === 0 ? "오늘" : `D-${inf.d}`}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
+          <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
+            {inf.label}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 40 }}>
+      <div style={{ background: "linear-gradient(135deg, #3730A3, #4F46E5, #6D28D9)", borderRadius: 28, padding: "52px 20px 24px", display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={onBack} style={{ width: 40, height: 40, borderRadius: 20, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>←</button>
+        <span style={{ fontSize: 18, fontWeight: 800, color: "#fff" }}>📅 조합 일정</span>
+      </div>
+      <div style={{ padding: "20px 16px" }}>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", margin: "0 2px 10px" }}>다가오는 일정</div>
+            {upcoming.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 24, color: "#9CA3AF", fontSize: 13 }}>예정된 일정이 없어요</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{upcoming.map((s: any) => row(s, false))}</div>
+            )}
+            {past.length > 0 && (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", margin: "22px 2px 10px" }}>지난 일정</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{past.map((s: any) => row(s, true))}</div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 function UnionActivityScreen({ onBack }: { onBack: () => void }) {
   const [acts, setActs] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -26422,6 +26575,22 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   React.useEffect(() => {
     loadNotices();
   }, []);
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  React.useEffect(() => {
+    const loadUpcoming = async () => {
+      const t = new Date();
+      const ts = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+      const { data, error } = await supabase
+        .from("union_schedule")
+        .select("*")
+        .gte("event_date", ts)
+        .order("event_date", { ascending: true })
+        .limit(2);
+      if (error) { console.error("조합 일정 로드 실패:", error); return; }
+      setUpcomingEvents(data || []);
+    };
+    loadUpcoming();
+  }, []);
   React.useEffect(() => {
     supabase
       .from("shift_base")
@@ -27062,6 +27231,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         return <CanteenScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "unionActivity")
     return <UnionActivityScreen onBack={() => setScreen("home")} />;
+  if (screen === "unionSchedule")
+    return <UnionScheduleScreen onBack={() => setScreen("home")} />;
   if (screen === "board")
     return (
       <BoardList
@@ -28556,10 +28727,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               }}
             >
               <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>
-                진행 중인 투표
+                {activeVote ? "진행 중인 투표" : "조합 일정"}
               </span>
               <span
-                onClick={() => setScreen("vote")}
+                onClick={() => setScreen(activeVote ? "vote" : "unionSchedule")}
                 style={{ fontSize: 11, color: "#4F46E5", cursor: "pointer" }}
               >
                 더보기 ›
@@ -28637,6 +28808,30 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   />
                 </div>
               </>
+            ) : upcomingEvents.length > 0 ? (
+              <div>
+                {upcomingEvents.map((ev: any, i: number) => {
+                  const t0 = new Date();
+                  const base = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate());
+                  const pp = String(ev.event_date).split("-").map(Number);
+                  const dt = new Date(pp[0], pp[1] - 1, pp[2]);
+                  const d = Math.round((dt.getTime() - base.getTime()) / 86400000);
+                  const dow = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
+                  return (
+                    <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: i === 0 && upcomingEvents.length > 1 ? 8 : 0 }}>
+                      <span style={{ background: i === 0 ? "#EEF0FF" : "#F3F4F6", color: i === 0 ? "#4F46E5" : "#6B7280", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
+                        {d === 0 ? "오늘" : `D-${d}`}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
+                        <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+                          {pp[1]}월 {pp[2]}일 ({dow}){ev.event_time ? ` ${ev.event_time}` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
               <div
                 style={{
@@ -28646,7 +28841,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   marginTop: 16,
                 }}
               >
-                진행중인 투표가 없습니다
+                예정된 조합 일정이 없습니다
               </div>
             )}
           </div>
