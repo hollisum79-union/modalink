@@ -25589,18 +25589,32 @@ export default function App() {
       window.history.pushState(null, "");
       window.history.pushState(null, "");
       window.history.pushState(null, "");
+      // ── 임시 디버그 띠 (원인 확인 후 제거 예정) ──
+      const dbg = (msg: string) => {
+        let el = document.getElementById("backdbg");
+        if (!el) {
+          el = document.createElement("div");
+          el.id = "backdbg";
+          el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#000;color:#0f0;font-size:11px;padding:3px 8px;opacity:0.85;pointer-events:none;font-family:monospace";
+          document.body.appendChild(el);
+        }
+        el.textContent = msg;
+      };
+      (window as any).__popCount = 0;
+      dbg("v0612-D 대기중");
       const onBack = () => {
         window.history.pushState(null, "");
+        const n = ++(window as any).__popCount;
         const s = screenRef.current;
-        if (s === "home" || s === "login") return;
+        if (s === "home" || s === "login") { dbg(`v0612-D #${n} ${s} → 무시(홈고정)`); return; }
         // 1) 화면 내부 단계 먼저 처리 (팝업, 서브화면 등)
         const h = (window as any).__backHandler;
         if (typeof h === "function") {
-          try { if (h()) return; } catch (e) {}
+          try { if (h()) { dbg(`v0612-D #${n} ${s} → 내부 한단계`); return; } } catch (e) { dbg(`v0612-D #${n} ${s} → 핸들러 에러!`); }
         }
         // 2) 출발지 기억 화면
-        if (s === "workAdjust") { setScreen(adjustReturnRef.current || "home"); return; }
-        if (s === "leave") { setScreen(leaveReturnRef.current || "home"); return; }
+        if (s === "workAdjust") { dbg(`v0612-D #${n} 조정→복귀`); setScreen(adjustReturnRef.current || "home"); return; }
+        if (s === "leave") { dbg(`v0612-D #${n} 휴가→복귀`); setScreen(leaveReturnRef.current || "home"); return; }
         // 3) 부모 화면으로 한 단계
         const backMap: any = {
           noticeDetail: "noticeList",
@@ -25613,6 +25627,7 @@ export default function App() {
           admin: "mySettings",
           register: "login",
         };
+        dbg(`v0612-D #${n} ${s} → ${backMap[s] || "home"}(부모)`);
         setScreen(backMap[s] || "home");
       };
       window.addEventListener("popstate", onBack);
