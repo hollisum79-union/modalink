@@ -10584,6 +10584,14 @@ function FieldActivityAdmin() {
 }
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
+  // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 관리자 홈 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (activeMenu !== "home") { setActiveMenu("home"); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
   const [diaPhoto, setDiaPhoto] = useState(null);
   const [diaLoading, setDiaLoading] = useState(false);
   const [diaResult, setDiaResult] = useState(null);
@@ -13094,6 +13102,17 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [comparePickerOpen, setComparePickerOpen] = React.useState(false);
   const [compareSearch, setCompareSearch] = React.useState("");
   const [timePopup, setTimePopup] = React.useState<any>(null);
+  // ── 안드로이드 뒤로가기: 근무표 안에서 한 단계씩 ──
+  React.useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (timePopup) { setTimePopup(null); return true; }
+      if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites") { setSubScreen("menu"); return true; }
+      if (subScreen === "menu" || subScreen === "search") { setSubScreen(null); return true; }
+      if (activeTab === "교번" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { setSelectedMember(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
   React.useEffect(() => {
     if (activeTab === "통상" && user?.employee_number && (!selectedMember || String(selectedMember.employee_number) !== String(user.employee_number))) {
       setSelectedMember(user);
@@ -14691,6 +14710,7 @@ const getKyobunWork = (member: any, date: Date) => {
 
  const renderWorkPhones = () => {
     const phoneList = [
+      { label: "7호선 관제", nums: ["02-6311-7005"] },
       { label: "대공원 승무운용", nums: ["02-6311-7966", "02-6311-7967"] },
       { label: "대공원 팩스", nums: ["02-6311-4312"] },
       { label: "도봉기지 신호취급실", nums: ["02-6311-7976", "02-6311-7977"] },
@@ -14839,65 +14859,7 @@ const getKyobunWork = (member: any, date: Date) => {
   const renderKyobunTab = () => {
     if (subScreen === "contacts") return renderContacts();
     if (subScreen === "compare") return renderCompare();
-    if (!selectedGroup)
-      return (
-        <div style={{ padding: "24px 16px" }}>
-          <button
-            onClick={() => setSelectedGroup(user?.work_group as any)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#6366F1",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              marginBottom: 16,
-              padding: 0,
-            }}
-          >
-            ← 내 근무표 보기
-          </button>
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#1F2937",
-              marginBottom: 16,
-              textAlign: "center",
-            }}
-          >
-            대공원 승무 사업소
-          </div>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-          >
-            {[
-              { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
-              { label: "업무용 전화번호", action: () => setSubScreen("phones") },
-              { label: "직원 연락처", action: () => setSubScreen("contacts") },
-              { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
-            ].map((c) => (
-              <button
-                key={c.label}
-                onClick={c.action}
-                style={{
-                  padding: "28px 12px",
-                  borderRadius: 16,
-                  border: "2px solid #E5E7EB",
-                  background: "#fff",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "#374151",
-                  cursor: "pointer",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                }}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      );
+    if (!selectedGroup) return renderMenu();
     if (!selectedMember)
       // ============================================================
       // [교체 위치] renderKyobunTab 함수 안에서
@@ -14919,7 +14881,7 @@ const getKyobunWork = (member: any, date: Date) => {
           >
             <button
               onClick={() => {
-                setSelectedGroup(null);
+                setSubScreen("menu");
                 setMemberSearch("");
               }}
               style={{
@@ -15898,6 +15860,15 @@ function MySettingsScreen({
   const [savedWorkData, setSavedWorkData] = useState(null);
   const workTypes = ["교대", "교번", "통상", "변형통상"];
   const [editMode, setEditMode] = useState(!(user?.work_type));
+  // ── 안드로이드 뒤로가기: 수정모드 → 보기모드 ──
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (isEditingPhone) { setIsEditingPhone(false); return true; }
+      if (editMode && user?.work_type) { setEditMode(false); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
   const [editNotify, setEditNotify] = useState(false);
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
@@ -25561,9 +25532,29 @@ export default function App() {
       window.history.pushState(null, "");
       const onBack = () => {
         window.history.pushState(null, "");
-        if (screenRef.current !== "home" && screenRef.current !== "login") {
-          setScreen("home");
+        const s = screenRef.current;
+        if (s === "home" || s === "login") return;
+        // 1) 화면 내부 단계 먼저 처리 (팝업, 서브화면 등)
+        const h = (window as any).__backHandler;
+        if (typeof h === "function") {
+          try { if (h()) return; } catch (e) {}
         }
+        // 2) 출발지 기억 화면
+        if (s === "workAdjust") { setScreen(adjustReturnRef.current || "home"); return; }
+        if (s === "leave") { setScreen(leaveReturnRef.current || "home"); return; }
+        // 3) 부모 화면으로 한 단계
+        const backMap: any = {
+          noticeDetail: "noticeList",
+          boardDetail: "board",
+          boardWrite: "board",
+          inquiryDetail: "inquiry",
+          inquiryWrite: "inquiry",
+          anonymousWrite: "anonymous",
+          notifications: "mySettings",
+          admin: "mySettings",
+          register: "login",
+        };
+        setScreen(backMap[s] || "home");
       };
       window.addEventListener("popstate", onBack);
       return () => window.removeEventListener("popstate", onBack);
@@ -25571,6 +25562,10 @@ export default function App() {
   const [adjustInitDate, setAdjustInitDate] = useState("");
   const [adjustReturn, setAdjustReturn] = useState("home");
   const [leaveReturn, setLeaveReturn] = useState("home");
+  const adjustReturnRef = React.useRef("home");
+  const leaveReturnRef = React.useRef("home");
+  React.useEffect(() => { adjustReturnRef.current = adjustReturn; }, [adjustReturn]);
+  React.useEffect(() => { leaveReturnRef.current = leaveReturn; }, [leaveReturn]);
   const [adjustInitTab, setAdjustInitTab] = useState("");
   const [leaveInitDate, setLeaveInitDate] = useState("");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale")) || 1);
