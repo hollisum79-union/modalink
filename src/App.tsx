@@ -13950,6 +13950,7 @@ const getKyobunWork = (member: any, date: Date) => {
     const LABEL_MAP: Record<string, string> = { 주: "주간", 야: "야간", 비: "비번", 휴: "휴무" };
     const COLOR_MAP: Record<string, string> = { 주: "#3B82F6", 야: "#7C3AED", 비: "#9CA3AF", 휴: "#92400E" };
     const isKyobun = activeTab === "교번";
+    const isOtherKyobun = isKyobun && selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number);
     const isTongsang = activeTab === "통상";
     const tWork = isTongsang ? getTongsangWork(user, dateObj) : null;
     const tDayType = tWork ? getDiaDayType(tWork.type, dateObj) : null;
@@ -14072,7 +14073,7 @@ const getKyobunWork = (member: any, date: Date) => {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 16px" }}>
-            {!(activeTab === "교번" && selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) && (
+            {!isOtherKyobun && (
             <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
               <button onClick={() => onGoAdjust && onGoAdjust(dateStr)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8", background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 🔧 근무조정
@@ -14083,6 +14084,7 @@ const getKyobunWork = (member: any, date: Date) => {
             </div>
             )}
 
+            {!isOtherKyobun && (<>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "2px 2px 12px" }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "#1a1a1a" }}>📝 메모</span>
               <span style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 600 }}>{dayMemos.length} / 5</span>
@@ -14127,6 +14129,7 @@ const getKyobunWork = (member: any, date: Date) => {
                 </button>
               </div>
             )}
+            </>)}
           </div>
         </div>
       </>
@@ -15336,6 +15339,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   })()}
 {(() => {
                     const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
                     const recs = adjustRecords.filter((r) => r.work_date === dstr);
                     if (recs.length === 0) return null;
                     const LABEL = {
@@ -15377,6 +15381,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   })()}
                 {(() => {
                     const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
                     const lv = leaveRecords.filter((r) => r.used_date === dstr);
                     if (lv.length === 0) return null;
                     const LV: Record<string, string> = {
@@ -15398,7 +15403,7 @@ const getKyobunWork = (member: any, date: Date) => {
                       </div>
                     );
                   })()}  
-                                {dayMemos.length > 0 && (
+                                {dayMemos.length > 0 && String(selectedMember?.employee_number) === String(user?.employee_number) && (
                     <div style={{ textAlign: "center", marginTop: 3 }}>
                       {dayMemos.slice(0, 3).map((_, i) => (
                         <span
@@ -25664,6 +25669,26 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [boardTab, setBoardTab] = useState("전체");
   const [selectedNotice, setSelectedNotice] = useState(null);
    const [selectedPost, setSelectedPost] = useState(null);
+  // 조회수: 1인 1회(기기 기준), 본인 글/관리자 제외 — localStorage 읽음 기록
+  const markViewed = (kind: string, table: string, item: any, skipCount: boolean) => {
+    let nv = (item && item.views) || 0;
+    if (!item || !item.id) return nv;
+    try {
+      const key = `mdl_read_${kind}_${(user as any)?.employee_number || "anon"}`;
+      const read: any[] = JSON.parse(localStorage.getItem(key) || "[]");
+      if (!skipCount && !read.includes(item.id)) {
+        nv += 1;
+        supabase.from(table).update({ views: nv }).eq("id", item.id).then(({ error }: any) => {
+          if (error) console.error("조회수 업데이트 실패:", table, error);
+        });
+        read.push(item.id);
+        localStorage.setItem(key, JSON.stringify(read.slice(-500)));
+      }
+    } catch (e) {
+      console.error("조회수 처리 실패:", e);
+    }
+    return nv;
+  };
   const [editingPost, setEditingPost] = useState<any>(null);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [aboutInitialTab, setAboutInitialTab] = useState("intro");
@@ -26700,6 +26725,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             {(selectedNotice as any)?.created_at && (
               <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
                 {(selectedNotice as any).created_at.slice(0, 10)}
+                {typeof (selectedNotice as any)?.views === "number" ? ` · 조회 ${(selectedNotice as any).views}` : ""}
               </div>
             )}
                         <div
@@ -26772,7 +26798,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           notices={displayNotices}
           onBack={() => setScreen("home")}
           onSelect={(n) => {
-            setSelectedNotice(n);
+            const nv = markViewed("notice", "notices", n, !!(user as any)?.is_admin);
+            if (nv !== (n.views || 0)) setNotices((prev: any[]) => prev.map((x: any) => (x.id === n.id ? { ...x, views: nv } : x)));
+            setSelectedNotice({ ...n, views: nv });
             setScreen("noticeDetail");
           }}
         />
@@ -26787,8 +26815,16 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         initialFilter={boardTab}
         onSelect={(p) => {
-          setSelectedPost(p);
+          const nv = (p.views || 0) + 1;
+          setSelectedPost({ ...p, views: nv });
           setScreen("boardDetail");
+          supabase
+            .from("posts")
+            .update({ views: nv })
+            .eq("id", p.id)
+            .then(({ error }) => {
+              if (error) console.error("조회수 업데이트 실패:", error);
+            });
         }}
                 onWrite={() => { setEditingPost(null); setScreen("boardWrite"); }}
         user={user}
@@ -28571,7 +28607,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             <div
               key={n.id}
               onClick={() => {
-                setSelectedNotice(n);
+                const nv = markViewed("notice", "notices", n, !!(user as any)?.is_admin);
+                if (nv !== (n.views || 0)) setNotices((prev: any[]) => prev.map((x: any) => (x.id === n.id ? { ...x, views: nv } : x)));
+                setSelectedNotice({ ...n, views: nv });
                 setScreen("noticeDetail");
               }}
               style={{
