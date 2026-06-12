@@ -26589,8 +26589,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       if (error) { console.error("조합 일정 로드 실패:", error); return; }
       setUpcomingEvents(data || []);
     };
-    loadUpcoming();
-  }, []);
+    if (screen === "home") loadUpcoming();
+  }, [screen]);
   React.useEffect(() => {
     supabase
       .from("shift_base")
