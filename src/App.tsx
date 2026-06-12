@@ -13379,7 +13379,7 @@ if (data) {
     if (subScreen !== "search") return;
     supabase
       .from("members")
-      .select("id, name, employee_number, work_type, work_group, start_position, schedule_total, is_union")
+      .select("id, name, employee_number, work_type, work_group, start_position, schedule_total, is_union, tongsang_base_date, tongsang_base_dia")
       .order("name")
       .then(({ data }) => { if (data) setSearchList(data); });
   }, [subScreen]);
