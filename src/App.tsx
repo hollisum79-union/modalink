@@ -10399,6 +10399,26 @@ function PointRankingAdmin() {
     </div>
   );
 }
+const resizeImageToJpeg = (file: File): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1280;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w >= h) { h = Math.round((h * MAX) / w); w = MAX; }
+        else { w = Math.round((w * MAX) / h); h = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { reject(new Error("canvas")); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/jpeg", 0.85);
+    };
+    img.onerror = () => reject(new Error("이미지 로드 실패"));
+    img.src = URL.createObjectURL(file);
+  });
 function FieldRegister() {
   const [title, setTitle] = React.useState("");
   const [date, setDate] = React.useState("");
@@ -10406,26 +10426,6 @@ function FieldRegister() {
   const [desc, setDesc] = React.useState("");
   const [photos, setPhotos] = React.useState<any[]>([]);
   const [uploading, setUploading] = React.useState(false);
-  const resizeImage = (file: File): Promise<Blob> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1280;
-        let w = img.width, h = img.height;
-        if (w > MAX || h > MAX) {
-          if (w >= h) { h = Math.round((h * MAX) / w); w = MAX; }
-          else { w = Math.round((w * MAX) / h); h = MAX; }
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("canvas")); return; }
-        ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/jpeg", 0.85);
-      };
-      img.onerror = () => reject(new Error("이미지 로드 실패"));
-      img.src = URL.createObjectURL(file);
-    });
   const handlePhotoPick = async (e: any) => {
     const files: File[] = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -10434,7 +10434,7 @@ function FieldRegister() {
     try {
       const added: any[] = [];
       for (const f of files) {
-        const blob = await resizeImage(f);
+        const blob = await resizeImageToJpeg(f);
         const path = `activities/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
         const { error } = await supabase.storage.from("archive").upload(path, blob, { contentType: "image/jpeg" });
         if (error) { alert("사진 업로드 실패: " + error.message); break; }
@@ -10687,7 +10687,9 @@ function UnionScheduleAdmin() {
   const [loc, setLoc] = React.useState("");
   const [list, setList] = React.useState<any[]>([]);
   const [saving, setSaving] = React.useState(false);
+  const [editId, setEditId] = React.useState<any>(null);
   const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const, maxWidth: "100%" };
+  const resetForm = () => { setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc(""); setEditId(null); };
   const load = async () => {
     const { data, error } = await supabase.from("union_schedule").select("*").order("event_date", { ascending: false });
     if (error) { console.error("일정 로드 실패:", error); return; }
@@ -10698,12 +10700,15 @@ function UnionScheduleAdmin() {
     if (!title.trim()) { alert("일정 제목을 입력하세요"); return; }
     if (!date) { alert("날짜를 선택하세요"); return; }
     setSaving(true);
-    const tv = time.trim() ? (timeEnd.trim() ? `${time.trim()}~${timeEnd.trim()}` : time.trim()) : null;
     if (!time.trim() && timeEnd.trim()) { alert("종료 시간만 입력할 수 없어요. 시작 시간을 먼저 입력하세요"); setSaving(false); return; }
-    const { error } = await supabase.from("union_schedule").insert({ title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null });
+    const tv = time.trim() ? (timeEnd.trim() ? `${time.trim()}~${timeEnd.trim()}` : time.trim()) : null;
+    const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null };
+    const { error } = editId
+      ? await supabase.from("union_schedule").update(payload).eq("id", editId)
+      : await supabase.from("union_schedule").insert(payload);
     setSaving(false);
-    if (error) { alert("등록 실패: " + error.message); return; }
-    setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc("");
+    if (error) { alert((editId ? "수정" : "등록") + " 실패: " + error.message); return; }
+    resetForm();
     load();
   };
   const handleDelete = async (s: any) => {
@@ -10736,9 +10741,14 @@ function UnionScheduleAdmin() {
         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>종료를 비우면 "08:00", 채우면 "08:00~10:00"으로 표시됩니다</div>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>장소 (선택)</div>
         <input value={loc} onChange={(e) => setLoc(e.target.value)} placeholder="예: 지회 사무실" style={{ ...inputStyle, marginBottom: 14 }} />
-        <button onClick={handleAdd} disabled={saving} style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-          {saving ? "등록 중..." : "일정 등록"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={handleAdd} disabled={saving} style={{ flex: 1, padding: "12px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            {saving ? "저장 중..." : editId ? "수정 저장" : "일정 등록"}
+          </button>
+          {editId && (
+            <button onClick={resetForm} style={{ padding: "12px 18px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>취소</button>
+          )}
+        </div>
       </div>
       {list.length > 0 && (
         <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1px solid #F3F4F6" }}>
@@ -10757,6 +10767,7 @@ function UnionScheduleAdmin() {
                     {s.event_date}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
                   </div>
                 </div>
+                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); setLoc(s.location || ""); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
                 <button onClick={() => handleDelete(s)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>삭제</button>
               </div>
             );
@@ -10769,6 +10780,68 @@ function UnionScheduleAdmin() {
 function FieldActivityList() {
   const [acts, setActs] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [editAct, setEditAct] = React.useState<any>(null);
+  const [edTitle, setEdTitle] = React.useState("");
+  const [edDate, setEdDate] = React.useState("");
+  const [edDesc, setEdDesc] = React.useState("");
+  const [edPhotos, setEdPhotos] = React.useState<any[]>([]);
+  const [edUploading, setEdUploading] = React.useState(false);
+  const [edSaving, setEdSaving] = React.useState(false);
+  const removedRef = React.useRef<string[]>([]);
+  const addedRef = React.useRef<string[]>([]);
+  const edInput = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const, maxWidth: "100%" };
+  const startEdit = (a: any) => {
+    setEditAct(a); setEdTitle(a.title || ""); setEdDate(a.activity_date || ""); setEdDesc(a.description || "");
+    setEdPhotos(Array.isArray(a.photos) ? a.photos : []);
+    removedRef.current = []; addedRef.current = [];
+  };
+  const edPhotoPick = async (e: any) => {
+    const files: File[] = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    if (edPhotos.length + files.length > 6) { alert("사진은 최대 6장까지 첨부할 수 있어요"); return; }
+    setEdUploading(true);
+    try {
+      const added: any[] = [];
+      for (const f of files) {
+        const blob = await resizeImageToJpeg(f);
+        const path = `activities/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+        const { error } = await supabase.storage.from("archive").upload(path, blob, { contentType: "image/jpeg" });
+        if (error) { alert("사진 업로드 실패: " + error.message); break; }
+        const { data } = supabase.storage.from("archive").getPublicUrl(path);
+        added.push({ url: data.publicUrl, path });
+        addedRef.current.push(path);
+      }
+      setEdPhotos((prev) => [...prev, ...added]);
+    } catch (err: any) {
+      alert("사진 처리 실패: " + (err?.message || err));
+    }
+    setEdUploading(false);
+    e.target.value = "";
+  };
+  const edRemovePhoto = (idx: number) => {
+    const p = edPhotos[idx];
+    if (p && p.path) removedRef.current.push(p.path);
+    setEdPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const saveEdit = async () => {
+    if (!edTitle.trim()) { alert("활동 이름을 입력하세요"); return; }
+    setEdSaving(true);
+    const payload = { title: edTitle.trim(), activity_date: edDate || null, description: edDesc.trim() || null, photos: edPhotos };
+    const { error } = await supabase.from("field_activities").update(payload).eq("id", editAct.id);
+    setEdSaving(false);
+    if (error) { alert("수정 실패: " + error.message); return; }
+    if (removedRef.current.length > 0) {
+      try { await supabase.storage.from("archive").remove(removedRef.current); } catch (e) { console.error("사진 정리 실패:", e); }
+    }
+    setActs((prev) => prev.map((x: any) => (x.id === editAct.id ? { ...x, ...payload } : x)));
+    setEditAct(null);
+  };
+  const cancelEdit = async () => {
+    if (addedRef.current.length > 0) {
+      try { await supabase.storage.from("archive").remove(addedRef.current); } catch (e) {}
+    }
+    setEditAct(null);
+  };
   React.useEffect(() => {
     (async () => {
       const { data: list } = await supabase
@@ -10804,6 +10877,39 @@ function FieldActivityList() {
   return (
     <div>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>등록된 활동 전체 · 삭제하면 홈 캐러셀에서도 사라집니다</div>
+      {editAct ? (
+        <div style={{ background: "#fff", border: "1px solid #F3F4F6", borderRadius: 16, padding: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>✏️ 활동 수정</div>
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>활동 이름</div>
+          <input value={edTitle} onChange={(e) => setEdTitle(e.target.value)} style={{ ...edInput, marginBottom: 14 }} />
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>날짜</div>
+          <input type="date" value={edDate} onChange={(e) => setEdDate(e.target.value)} style={{ ...edInput, marginBottom: 14 }} />
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>활동 설명 (선택)</div>
+          <textarea value={edDesc} onChange={(e) => setEdDesc(e.target.value)} rows={3} style={{ ...edInput, resize: "none", marginBottom: 14 }} />
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>사진 (최대 6장)</div>
+          {edPhotos.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+              {edPhotos.map((p: any, i: number) => (
+                <div key={i} style={{ position: "relative" }}>
+                  <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10, display: "block" }} />
+                  <button onClick={() => edRemovePhoto(i)} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <label style={{ display: "block", textAlign: "center", padding: "11px 0", borderRadius: 10, border: "1.5px dashed #C7D2FE", background: "#F8F7FE", color: "#4F46E5", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            {edUploading ? "업로드 중..." : "📷 사진 추가"}
+            <input type="file" accept="image/*" multiple onChange={edPhotoPick} disabled={edUploading} style={{ display: "none" }} />
+          </label>
+          <div style={{ fontSize: 11, color: "#9CA3AF", margin: "10px 0 14px" }}>포인트·참여자는 수정할 수 없어요 (잘못 지급한 경우 삭제 후 재등록)</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={saveEdit} disabled={edSaving || edUploading} style={{ flex: 1, padding: "12px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+              {edSaving ? "저장 중..." : "수정 저장"}
+            </button>
+            <button onClick={cancelEdit} style={{ padding: "12px 18px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>취소</button>
+          </div>
+        </div>
+      ) : (<>
       {loading ? (
         <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
       ) : acts.length === 0 ? (
@@ -10818,6 +10924,9 @@ function FieldActivityList() {
                   {a.activity_date || "날짜 없음"} · 참여 {a.count}명{a.point > 0 ? ` · ${a.point}P` : ""}
                 </div>
               </div>
+              <button onClick={() => startEdit(a)} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                수정
+              </button>
               <button onClick={() => handleDelete(a)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
                 삭제
               </button>
@@ -10825,6 +10934,7 @@ function FieldActivityList() {
           ))}
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -24646,68 +24756,8 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     </div>
  );
 
-  // 승급일 당일 축하 (본인, 한국시간 09~18시, 40호봉 미만)
-  const promoToday = (() => {
-    const jd = user?.join_date;
-    if (!jd || jd.length !== 8) return null;
-    const joinMonth = parseInt(jd.slice(4, 6));
-    if (isNaN(joinMonth)) return null;
-    let promoMonth = joinMonth + 1;
-    if (promoMonth > 12) promoMonth = 1;
-    const kst = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-    if (kst.getMonth() + 1 !== promoMonth) return null;
-    if (kst.getDate() !== 1) return null;
-    if (kst.getHours() < 9 || kst.getHours() >= 18) return null;
-    const add = parseInt(user?.add_pay_step || "0") || 0;
-    const step = Math.min(calcPayStep(jd).payStep + add, 40);
-    if (step >= 40) return null;
-    return { name: user?.name || "조합원", step };
-  })();
-
-  return (
-    <div style={{ marginBottom: 12 }}>
-
-      {promoToday && (
-        <div style={{ background: "#6D28D9", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 26, marginBottom: 4 }}>🎓✨</div>
-          <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>호봉 승급을 축하합니다</div>
-          <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{promoToday.name} 조합원님</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>오늘부터 {promoToday.step}호봉 적용 🎉</div>
-        </div>
-      )}
-
-      {awardWinner && (
-        <div style={{ background: "linear-gradient(135deg,#F59E0B,#EF4444)", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10, position: "relative", overflow: "hidden" }}>
-          <div style={{ fontSize: 26, marginBottom: 4 }}>🎉🏆🎉</div>
-          <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>{Number(awardWinner.year_month.split("-")[1])}월 포인트왕</div>
-          <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{awardWinner.member_name} 조합원님</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>축하합니다! 🎁 상품이 전달됩니다</div>
-        </div>
-      )}
-
-      {/* 캐러셀 컨테이너 */}
-      <div
-        style={{ overflow: "hidden", borderRadius: 12 }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div
-          style={{
-            display: "flex",
-            transform: `translateX(-${index * 100}%)`,
-            transition: transitionOn ? "transform 0.5s ease" : "none",
-          }}
-        >
-                    {/* ===== 0번: 경조사 복제 (이전 방향 무한용) ===== */}
-          {condolenceCard}
-
-          {/* ===== 1번 카드: 공지 (긴급+일반, 최대 4개) ===== */}
-          {noticeCard}
-
-
-          {/* ====== 2번 카드: 접속포인트 TOP3 ====== */}
-          <div
+  const top3Card = (
+    <div
             style={{
               minWidth: "100%",
               boxSizing: "border-box",
@@ -24794,13 +24844,75 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
               </div>
             )}
           </div>
+  );
 
-        {/* ====== 3번 카드: 경조사 ====== */}
+  // 승급일 당일 축하 (본인, 한국시간 09~18시, 40호봉 미만)
+  const promoToday = (() => {
+    const jd = user?.join_date;
+    if (!jd || jd.length !== 8) return null;
+    const joinMonth = parseInt(jd.slice(4, 6));
+    if (isNaN(joinMonth)) return null;
+    let promoMonth = joinMonth + 1;
+    if (promoMonth > 12) promoMonth = 1;
+    const kst = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    if (kst.getMonth() + 1 !== promoMonth) return null;
+    if (kst.getDate() !== 1) return null;
+    if (kst.getHours() < 9 || kst.getHours() >= 18) return null;
+    const add = parseInt(user?.add_pay_step || "0") || 0;
+    const step = Math.min(calcPayStep(jd).payStep + add, 40);
+    if (step >= 40) return null;
+    return { name: user?.name || "조합원", step };
+  })();
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+
+      {promoToday && (
+        <div style={{ background: "#6D28D9", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 26, marginBottom: 4 }}>🎓✨</div>
+          <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>호봉 승급을 축하합니다</div>
+          <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{promoToday.name} 조합원님</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>오늘부터 {promoToday.step}호봉 적용 🎉</div>
+        </div>
+      )}
+
+      {awardWinner && (
+        <div style={{ background: "linear-gradient(135deg,#F59E0B,#EF4444)", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10, position: "relative", overflow: "hidden" }}>
+          <div style={{ fontSize: 26, marginBottom: 4 }}>🎉🏆🎉</div>
+          <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>{Number(awardWinner.year_month.split("-")[1])}월 포인트왕</div>
+          <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{awardWinner.member_name} 조합원님</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>축하합니다! 🎁 상품이 전달됩니다</div>
+        </div>
+      )}
+
+      {/* 캐러셀 컨테이너 */}
+      <div
+        style={{ overflow: "hidden", borderRadius: 12 }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div
+          style={{
+            display: "flex",
+            transform: `translateX(-${index * 100}%)`,
+            transition: transitionOn ? "transform 0.5s ease" : "none",
+          }}
+        >
+                    {/* ===== 0번: TOP3 복제 (이전 방향 무한용) ===== */}
+          {top3Card}
+
+          {/* ===== 1번 카드: 경조사·조합활동 ===== */}
           {condolenceCard}
-      
-          {/* ====== 4번 카드: 긴급공지 복제본 (무한 루프용) ====== */}
 
-              {noticeCard}
+          {/* ===== 2번 카드: 공지 (긴급+일반, 최대 4개) ===== */}
+          {noticeCard}
+
+          {/* ====== 3번 카드: 접속포인트 TOP3 ====== */}
+          {top3Card}
+
+          {/* ====== 4번 카드: 경조사 복제본 (무한 루프용) ====== */}
+          {condolenceCard}
         </div>
       </div>
         {/* 점 인디케이터 */}
