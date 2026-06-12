@@ -10425,26 +10425,33 @@ function FieldRegister() {
 
   const handleSave = async () => {
     if (!title.trim()) { alert("활동 이름을 입력하세요"); return; }
-    if (!point || Number(point) <= 0) { alert("지급 포인트를 입력하세요"); return; }
-    if (selected.length === 0) { alert("참여자를 선택하세요"); return; }
+    const pt = Number(point) || 0;
+    if (pt < 0) { alert("포인트는 0 이상으로 입력하세요"); return; }
+    if (pt > 0 && selected.length === 0) { alert("포인트를 지급하려면 참여자를 선택하세요"); return; }
     setSaving(true);
     try {
       const { data: act, error } = await supabase
         .from("field_activities")
-        .insert({ title: title.trim(), activity_date: date || null, point: Number(point) })
+        .insert({ title: title.trim(), activity_date: date || null, point: pt })
         .select()
         .single();
       if (error || !act) { alert("활동 등록 실패"); setSaving(false); return; }
-      const partRows = selected.map((emp) => ({ activity_id: act.id, employee_number: emp }));
-      await supabase.from("field_participants").insert(partRows);
-      const pointRows = selected.map((emp) => ({
-        employee_number: emp,
-        action: "활동 참여",
-        point: Number(point),
-        ref: title.trim(),
-      }));
-      await supabase.from("user_points").insert(pointRows);
-      setDoneMsg(`${selected.length}명에게 ${point}P 지급 완료!`);
+      if (selected.length > 0) {
+        const partRows = selected.map((emp) => ({ activity_id: act.id, employee_number: emp }));
+        await supabase.from("field_participants").insert(partRows);
+      }
+      if (pt > 0 && selected.length > 0) {
+        const pointRows = selected.map((emp) => ({
+          employee_number: emp,
+          action: "활동 참여",
+          point: pt,
+          ref: title.trim(),
+        }));
+        await supabase.from("user_points").insert(pointRows);
+        setDoneMsg(`${selected.length}명에게 ${pt}P 지급 완료!`);
+      } else {
+        setDoneMsg("활동이 기록되었습니다!");
+      }
       setTitle(""); setDate(""); setPoint(""); setSelected([]);
       setTimeout(() => setDoneMsg(""), 4000);
     } catch (e) {
@@ -10457,7 +10464,7 @@ function FieldRegister() {
 
   return (
     <div>
-      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>참여자 전원에게 같은 포인트를 한 번에 지급</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>활동 기록 + 포인트 지급 · 포인트 없이 기록만도 가능 (회의·회식·일상 활동)</div>
 
       {doneMsg && (
         <div style={{ background: "#D1FAE5", color: "#065F46", borderRadius: 12, padding: "12px 14px", fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
@@ -10474,7 +10481,7 @@ function FieldRegister() {
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
           </div>
           <div style={{ width: 110 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>지급 포인트</div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>포인트 (선택)</div>
             <input type="number" value={point} onChange={(e) => setPoint(e.target.value)} placeholder="50" style={inputStyle} />
           </div>
         </div>
@@ -24248,7 +24255,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           return (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, color: "#4C1D95" }}>
               <span style={{ flex: 1, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span>
-              <span style={{ fontSize: 11, opacity: 0.7, flexShrink: 0 }}>{dd}{dd ? " · " : ""}참여 {a.count}명</span>
+              <span style={{ fontSize: 11, opacity: 0.7, flexShrink: 0 }}>{[dd, a.count > 0 ? `참여 ${a.count}명` : ""].filter(Boolean).join(" · ")}</span>
             </div>
           );
         })
