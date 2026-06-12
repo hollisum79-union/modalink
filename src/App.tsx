@@ -24754,7 +24754,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         borderRadius: 12,
         padding: "10px 14px",
         cursor: "pointer",
-        height: 168,
+        height: 172,
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -24841,9 +24841,9 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const condolenceCard = (
     <div
       onClick={condolences.length > 0 ? onCondolenceClick : (showActs && onActivityClick ? onActivityClick : undefined)}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default", height: 168, overflow: "hidden" }}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default", height: 172, overflow: "hidden", display: "flex", flexDirection: "column" }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>{showActs ? "조합 활동" : "조합원 경조사"}</span>
         {showActs && actIsNew && (
@@ -24859,14 +24859,16 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           return (
             <>
               {hero && hero.url ? (
-                <img src={hero.url} alt="" style={{ width: "100%", height: 60, objectFit: "cover", borderRadius: 10, display: "block", marginBottom: 8 }} />
+                <div style={{ flex: 1, minHeight: 30, borderRadius: 10, overflow: "hidden", marginBottom: 6 }}>
+                  <img src={hero.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                </div>
               ) : (
-                <div style={{ width: "100%", height: 56, borderRadius: 10, background: "rgba(91,33,182,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, marginBottom: 8 }}>🚩</div>
+                <div style={{ flex: 1, minHeight: 30, borderRadius: 10, background: "rgba(91,33,182,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, marginBottom: 6 }}>🚩</div>
               )}
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#4C1D95", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a0.title}</div>
-              <div style={{ fontSize: 11, color: "#6D28D9", opacity: 0.75, marginTop: 2 }}>{[fmt(a0.activity_date), a0.count > 0 ? `참여 ${a0.count}명` : ""].filter(Boolean).join(" · ")}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#4C1D95", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>{a0.title}</div>
+              <div style={{ fontSize: 11, color: "#6D28D9", opacity: 0.75, marginTop: 2, flexShrink: 0 }}>{[fmt(a0.activity_date), a0.count > 0 ? `참여 ${a0.count}명` : ""].filter(Boolean).join(" · ")}</div>
               {a1 && (
-                <div style={{ borderTop: "1px solid rgba(91,33,182,0.18)", marginTop: 7, paddingTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ borderTop: "1px solid rgba(91,33,182,0.18)", marginTop: 6, paddingTop: 5, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0 }}>
                   <span style={{ fontSize: 12, color: "#4C1D95", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a1.title}</span>
                   <span style={{ fontSize: 11, color: "#6D28D9", opacity: 0.7, flexShrink: 0 }}>{fmt(a1.activity_date)}</span>
                 </div>
@@ -24877,7 +24879,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       ) : condolences.length === 0 ? (
         <div style={{ fontSize: 12, color: "#6B7280", padding: "4px 0" }}>현재 경조사 안내가 없습니다</div>
       ) : (
-        condolences.map((c, i) => (
+        condolences.slice(0, 3).map((c, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, color: "#4C1D95" }}>
             <span style={{ background: c.type === "결혼" ? "#EC4899" : "#6B7280", color: "#fff", fontSize: 10, fontWeight: 600, borderRadius: 4, padding: "1px 6px" }}>{c.type}</span>
             <span style={{ flex: 1, fontWeight: 500 }}>{c.name} 조합원</span>
@@ -24897,7 +24899,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
               border: "1px solid #FCD34D",
               borderRadius: 12,
               padding: "10px 14px",
-              height: 168,
+              height: 172,
               overflow: "hidden",
             }}
           >
