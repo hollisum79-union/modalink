@@ -4764,7 +4764,7 @@ function VoteDetail({ vote, onBack, user }) {
     "#0EA5E9",
     "#9CA3AF",
   ];
-  const myId = String(user?.emp_id || user?.id || "guest");
+  const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
 
   const [results, setResults] = useState([]);
   const [myVote, setMyVote] = useState(null);
@@ -5198,7 +5198,7 @@ function VoteScreen({ onBack, user }) {
   const isAdmin = user?.is_admin;
    const [myVotedIds, setMyVotedIds] = useState([]);
   const loadMyVotes = () => {
-    const myId = String(user?.emp_id || user?.id || "");
+const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
     if (!myId) return;
     supabase
       .from("vote_results")
@@ -10749,11 +10749,12 @@ function UnionScheduleAdmin() {
   const [time, setTime] = React.useState("");
   const [timeEnd, setTimeEnd] = React.useState("");
   const [loc, setLoc] = React.useState("");
+  const [surveyOn, setSurveyOn] = React.useState(false);
   const [list, setList] = React.useState<any[]>([]);
   const [saving, setSaving] = React.useState(false);
   const [editId, setEditId] = React.useState<any>(null);
   const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const, maxWidth: "100%" };
-  const resetForm = () => { setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc(""); setEditId(null); };
+  const resetForm = () => { setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc(""); setSurveyOn(false); setEditId(null); };
   const load = async () => {
     const { data, error } = await supabase.from("union_schedule").select("*").order("event_date", { ascending: false });
     if (error) { console.error("일정 로드 실패:", error); return; }
@@ -10766,7 +10767,7 @@ function UnionScheduleAdmin() {
     setSaving(true);
     if (!time.trim() && timeEnd.trim()) { alert("종료 시간만 입력할 수 없어요. 시작 시간을 먼저 입력하세요"); setSaving(false); return; }
     const tv = time.trim() ? (timeEnd.trim() ? `${time.trim()}~${timeEnd.trim()}` : time.trim()) : null;
-    const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null };
+    const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null, survey_on: surveyOn };
     const { error } = editId
       ? await supabase.from("union_schedule").update(payload).eq("id", editId)
       : await supabase.from("union_schedule").insert(payload);
@@ -10804,7 +10805,16 @@ function UnionScheduleAdmin() {
         </div>
         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>종료를 비우면 "08:00", 채우면 "08:00~10:00"으로 표시됩니다</div>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>장소 (선택)</div>
-        <input value={loc} onChange={(e) => setLoc(e.target.value)} placeholder="예: 지회 사무실" style={{ ...inputStyle, marginBottom: 14 }} />
+                <input value={loc} onChange={(e) => setLoc(e.target.value)} placeholder="예: 지회 사무실" style={{ ...inputStyle, marginBottom: 14 }} />
+        <div onClick={() => setSurveyOn((v) => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 12px", border: "1px solid #E5E7EB", borderRadius: 10, marginBottom: 14, cursor: "pointer" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>참여 조사 받기</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>조합원이 참석/미정/불참을 응답할 수 있어요</div>
+          </div>
+          <div style={{ width: 44, height: 26, borderRadius: 13, background: surveyOn ? "#4F46E5" : "#D1D5DB", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: surveyOn ? 21 : 3, transition: "left 0.2s" }} />
+          </div>
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={handleAdd} disabled={saving} style={{ flex: 1, padding: "12px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
             {saving ? "저장 중..." : editId ? "수정 저장" : "일정 등록"}
@@ -10831,7 +10841,8 @@ function UnionScheduleAdmin() {
                     {s.event_date}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
                   </div>
                 </div>
-                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); setLoc(s.location || ""); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
+                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); setLoc(s.location || ""); setSurveyOn(!!s.survey_on); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+ style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
                 <button onClick={() => handleDelete(s)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>삭제</button>
               </div>
             );
@@ -26479,7 +26490,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     };
    checkNewPost();
         const checkNewVote = async () => {
-      const myId = String(user?.emp_id || user?.id || "");
+  const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
       const { data: activeVotes } = await supabase
         .from("votes")
         .select("id")
@@ -27038,7 +27049,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           .from("members")
           .select("*", { count: "exact", head: true })
           .eq("is_union", true);
-        const myId = String(user?.emp_id || user?.id || "");
+        const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
         const { data: mineData } = await supabase
           .from("vote_results")
           .select("id")
