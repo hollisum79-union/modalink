@@ -24754,7 +24754,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         borderRadius: 12,
         padding: "10px 14px",
         cursor: "pointer",
-        height: 172,
+        height: 158,
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -24841,7 +24841,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const condolenceCard = (
     <div
       onClick={condolences.length > 0 ? onCondolenceClick : (showActs && onActivityClick ? onActivityClick : undefined)}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default", height: 172, overflow: "hidden", display: "flex", flexDirection: "column" }}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default", height: 158, overflow: "hidden", display: "flex", flexDirection: "column" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
@@ -24899,7 +24899,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
               border: "1px solid #FCD34D",
               borderRadius: 12,
               padding: "10px 14px",
-              height: 172,
+              height: 158,
               overflow: "hidden",
             }}
           >
@@ -25061,7 +25061,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           display: "flex",
           justifyContent: "center",
           gap: 6,
-          marginTop: 6,
+          marginTop: 3,
         }}
       >
         {(() => {
@@ -28161,13 +28161,15 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         background: "#F4F3FF",
         minHeight: "100vh",
         paddingBottom: 80,
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <div
         style={{
           background:
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
-          padding: "44px 20px 18px",
+          padding: "14px 20px 14px",
           color: "#fff",
           borderRadius: 28,
           margin: "8px 8px 0",
@@ -28321,7 +28323,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", marginTop: 10, background: "rgba(255,255,255,0.15)", borderRadius: 11, padding: "7px 4px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", marginTop: 8, background: "rgba(255,255,255,0.15)", borderRadius: 11, padding: "7px 4px" }}>
           <span
             onClick={() => { setAboutInitialTab("members"); setScreen("about"); }}
             style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer" }}
@@ -28357,13 +28359,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         </div>
       </div>
 
-      <div style={{ padding: "12px 16px 0" }}>
+      <div style={{ padding: "7px 16px 0", flex: "1 1 auto", display: "flex", flexDirection: "column" }}>
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr 1fr",
             gap: 8,
-            marginBottom: 12,
+            marginBottom: 7,
           }}
         >
           <div
@@ -28605,7 +28607,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             padding: "9px 14px",
             boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
             cursor: "pointer",
-            marginBottom: 12,
+            marginBottom: 7,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -29030,6 +29032,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             )}
           </div>
         </div>
+        {/* 신축 간격: 남는 높이 자동 채움 → 빠른메뉴를 화면 아래로 */}
+        <div style={{ flex: "1 1 auto", minHeight: 12 }} />
         <div
           style={{
             background: "#fff",
