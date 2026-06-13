@@ -12503,8 +12503,8 @@ const POINT_RULES = {
   vote: { label: "투표·설문 참여", point: 20, maxPerDay: 3 },
   post: { label: "게시글 작성", point: 15, maxPerDay: 3 },
   comment: { label: "댓글 작성", point: 5, maxPerDay: 10 },
+  unionEvent: { label: "조합 일정 참여", point: 35, maxPerDay: 999, manual: true },
 };
-
 function getPointKey(empId) {
   return `points_${String(empId)}`;
 }
@@ -12534,15 +12534,22 @@ async function addPoint(empId, actionKey, ref?) {
   todayStart.setHours(0, 0, 0, 0);
 
   try {
-    if (actionKey === "notice" && ref) {
-      const { data } = await supabase
+        if (actionKey === "notice" && ref) {
+      const { data: dup } = await supabase
         .from("user_points")
         .select("id")
         .eq("employee_number", String(empId))
         .eq("action", rule.label)
         .eq("ref", String(ref))
         .limit(1);
-      if (data && data.length > 0) return null;
+      if (dup && dup.length > 0) return null;
+      const { data: today } = await supabase
+        .from("user_points")
+        .select("id")
+        .eq("employee_number", String(empId))
+        .eq("action", rule.label)
+        .gte("created_at", todayStart.toISOString());
+      if (today && today.length >= rule.maxPerDay) return null;
     } else {
       const { data } = await supabase
         .from("user_points")
@@ -24776,8 +24783,9 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     loadAward();
   }, []);
     const [index, setIndex] = React.useState(1);
-   const [actSlide, setActSlide] = React.useState(0);
-    React.useEffect(() => {
+  const [actSlide, setActSlide] = React.useState(0);
+    const [showPointGuide, setShowPointGuide] = React.useState(false); 
+  React.useEffect(() => {
       if (index === 2 && recentActs.length > 1) {
         setActSlide((p) => (p + 1) % recentActs.length);
       }
@@ -25022,7 +25030,13 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
                   color: "#92400E",
                 }}
               >
-                이번 달 활동 TOP 3
+                               이번 달 활동 TOP 3
+              </span>
+              <span
+                onClick={(e) => { e.stopPropagation(); setShowPointGuide(true); }}
+                style={{ fontSize: 10, fontWeight: 700, color: "#92400E", background: "rgba(146,64,14,0.13)", borderRadius: 999, padding: "2px 7px", cursor: "pointer", flexShrink: 0 }}
+              >
+                ⓘ 적립안내
               </span>
               <span
                 style={{
@@ -25187,15 +25201,38 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
               }}
             />
           ));
-        })()}
+                })()}
       </div>
+      {showPointGuide && (
+        <div onClick={() => setShowPointGuide(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: "#fff", borderRadius: "24px 24px 0 0", padding: "20px 18px 28px", maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 17, fontWeight: 800, color: "#1F2937" }}>🏆 포인트 적립 안내</span>
+              <span onClick={() => setShowPointGuide(false)} style={{ fontSize: 20, color: "#9CA3AF", cursor: "pointer", lineHeight: 1 }}>✕</span>
+            </div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>활동하면 포인트가 쌓여요. 순위는 매월 1일 0시에 초기화돼요.</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {Object.values(POINT_RULES).map((r: any, i: number) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: "#F9FAFB", borderRadius: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{r.label}</div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{r.manual ? "관리자가 지급해요" : r.maxPerDay >= 999 ? "횟수 무제한" : `하루 ${r.maxPerDay}회까지`}</div>
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5", flexShrink: 0, marginLeft: 10 }}>+{r.point}점</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // =====================================================
 // 🎀 경조사 추가/수정 폼
-// =====================================================
+
+        // =====================================================
 function EventForm({ event, eventTypes, onClose }) {
   const isEdit = !!event;
   const [memberName, setMemberName] = useState(event ? event.member_name : "");
