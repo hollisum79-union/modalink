@@ -24430,16 +24430,46 @@ const dummyTopUsers = [
   { rank: 3, memberId: "129", count: 131 },
 ];
 
-function UnionScheduleScreen({ onBack }: { onBack: () => void }) {
+function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any }) {
   const [list, setList] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [partsByEvent, setPartsByEvent] = React.useState<Record<string, { 참석: string[]; 미정: string[]; 불참: string[] }>>({});
+  const [myResp, setMyResp] = React.useState<Record<string, string>>({});
+  const [openRoster, setOpenRoster] = React.useState<string | null>(null);
+  const loadParts = async (ids: string[]) => {
+    if (ids.length === 0) { setPartsByEvent({}); setMyResp({}); return; }
+    const { data } = await supabase.from("event_participants").select("*").in("schedule_id", ids);
+    const by: Record<string, { 참석: string[]; 미정: string[]; 불참: string[] }> = {};
+    const mine: Record<string, string> = {};
+    (data || []).forEach((p: any) => {
+      if (!by[p.schedule_id]) by[p.schedule_id] = { 참석: [], 미정: [], 불참: [] };
+      if (by[p.schedule_id][p.response]) by[p.schedule_id][p.response].push(p.member_name || "이름없음");
+      if (user && String(p.employee_number) === String(user.employee_number)) mine[p.schedule_id] = p.response;
+    });
+    setPartsByEvent(by);
+    setMyResp(mine);
+  };
   React.useEffect(() => {
     (async () => {
       const { data } = await supabase.from("union_schedule").select("*").order("event_date", { ascending: true });
       setList(data || []);
       setLoading(false);
+      await loadParts((data || []).map((s: any) => s.id));
     })();
   }, []);
+  const respond = async (scheduleId: string, response: string) => {
+    if (!user?.employee_number) { alert("로그인 정보가 없어요."); return; }
+    const next = myResp[scheduleId] === response ? null : response;
+    if (next === null) {
+      await supabase.from("event_participants").delete().eq("schedule_id", scheduleId).eq("employee_number", String(user.employee_number));
+    } else {
+      await supabase.from("event_participants").upsert(
+        { schedule_id: scheduleId, employee_number: String(user.employee_number), member_name: user.name, response: next },
+        { onConflict: "schedule_id,employee_number" }
+      );
+    }
+    await loadParts(list.map((s: any) => s.id));
+  };
   const t0 = new Date();
   const base = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate());
   const info = (ds: string) => {
@@ -24449,20 +24479,66 @@ function UnionScheduleScreen({ onBack }: { onBack: () => void }) {
   };
   const upcoming = list.filter((s: any) => info(s.event_date).d >= 0);
   const past = list.filter((s: any) => info(s.event_date).d < 0).reverse().slice(0, 10);
-  const row = (s: any, isPast: boolean, isFirst: boolean) => {
+   const row = (s: any, isPast: boolean, isFirst: boolean) => {
     const inf = info(s.event_date);
     const hot = !isPast && isFirst;
+    const showSurvey = !isPast && s.survey_on;
+    const tally = partsByEvent[s.id] || { 참석: [], 미정: [], 불참: [] };
+    const responded = tally.참석.length + tally.미정.length + tally.불참.length;
+    const noResp = Math.max(0, 152 - responded);
+    const mine = myResp[s.id];
+    const segBtn = (val: string, emoji: string, onColor: string, onBg: string) => (
+      <button onClick={() => respond(s.id, val)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: mine === val ? `1.5px solid ${onColor}` : "1.5px solid #E5E7EB", background: mine === val ? onBg : "#fff", fontSize: 13, fontWeight: 700, color: mine === val ? onColor : "#6B7280", cursor: "pointer", fontFamily: "inherit" }}>{emoji} {val}</button>
+    );
+    const cell = (n: number, label: string, color: string, bg: string) => (
+      <div style={{ flex: 1, textAlign: "center", borderRadius: 10, padding: "8px 4px", background: bg }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color }}>{n}</div>
+        <div style={{ fontSize: 10, color, marginTop: 2 }}>{label}</div>
+      </div>
+    );
     return (
-      <div key={s.id} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10, opacity: isPast ? 0.6 : 1, border: hot && inf.d >= 1 ? "1.5px solid #FBBF24" : "1.5px solid transparent" }}>
-        <span style={{ background: isPast ? "#F3F4F6" : inf.d === 0 ? "#4F46E5" : hot ? "#FEF3C7" : "#EEF0FF", color: isPast ? "#9CA3AF" : inf.d === 0 ? "#fff" : hot ? "#92400E" : "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>
-          {isPast ? "지남" : inf.d === 0 ? "오늘" : `D-${inf.d}`}
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
-          <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
-            {inf.label}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
+      <div key={s.id} style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", opacity: isPast ? 0.6 : 1, border: hot && inf.d >= 1 ? "1.5px solid #FBBF24" : "1.5px solid transparent" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ background: isPast ? "#F3F4F6" : inf.d === 0 ? "#4F46E5" : hot ? "#FEF3C7" : "#EEF0FF", color: isPast ? "#9CA3AF" : inf.d === 0 ? "#fff" : hot ? "#92400E" : "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "5px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>
+            {isPast ? "지남" : inf.d === 0 ? "오늘" : `D-${inf.d}`}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
+              {inf.label}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
+            </div>
           </div>
         </div>
+        {showSurvey && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {segBtn("참석", "✅", "#16A34A", "#ECFDF5")}
+              {segBtn("미정", "🤔", "#D97706", "#FFFBEB")}
+              {segBtn("불참", "❌", "#DC2626", "#FEF2F2")}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {cell(tally.참석.length, "참석", "#16A34A", "#ECFDF5")}
+              {cell(tally.미정.length, "미정", "#D97706", "#FFFBEB")}
+              {cell(tally.불참.length, "불참", "#DC2626", "#FEF2F2")}
+              {cell(noResp, "미응답", "#6B7280", "#F3F4F6")}
+            </div>
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 10 }}>
+              <div onClick={() => setOpenRoster(openRoster === s.id ? null : s.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, color: "#6B7280", cursor: "pointer" }}>
+                <span>참석자 명단 ({tally.참석.length}명)</span>
+                <span>{openRoster === s.id ? "▴" : "▾"}</span>
+              </div>
+              {openRoster === s.id && (
+                <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {tally.참석.length === 0 ? (
+                    <span style={{ fontSize: 11, color: "#9CA3AF" }}>아직 참석자가 없어요</span>
+                  ) : tally.참석.map((nm, i) => (
+                    <span key={i} style={{ fontSize: 11, fontWeight: 600, borderRadius: 999, padding: "4px 10px", background: "#ECFDF5", color: "#16A34A" }}>{nm}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -27525,7 +27601,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "unionActivity")
     return <UnionActivityScreen onBack={() => setScreen("home")} />;
   if (screen === "unionSchedule")
-    return <UnionScheduleScreen onBack={() => setScreen("home")} />;
+  return <UnionScheduleScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "board")
     return (
       <BoardList
@@ -28820,13 +28896,15 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             marginBottom: 12,
           }}
         >
-          <div
+                    <div
+            onClick={activeVote ? () => setScreen("vote") : undefined}
             style={{
               background: "#fff",
               borderRadius: 16,
               padding: "12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
-                            minWidth: 0,
+              minWidth: 0,
+              cursor: activeVote ? "pointer" : "default",
             }}
           >
             {activeVote ? (
