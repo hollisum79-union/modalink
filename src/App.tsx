@@ -24609,7 +24609,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
   }, [sel]);
   const addComment = async () => {
         if (!newComment.trim() || !sel) return;
-    if (!myId) { alert("로그인 정보가 없어요."); return; }
+        if (!myId) { alert("user 정보: " + JSON.stringify(user)); return; }
     setSavingComment(true);
     await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim() });
     setNewComment("");
