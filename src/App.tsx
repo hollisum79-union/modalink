@@ -28168,7 +28168,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         style={{
           background:
             "linear-gradient(135deg, #3730A3 0%, #4F46E5 50%, #6D28D9 100%)",
-          padding: "14px 20px 14px",
+          padding: "20px 20px 16px",
           color: "#fff",
           borderRadius: 28,
           margin: "8px 8px 0",
@@ -28811,7 +28811,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             style={{
               background: "#fff",
               borderRadius: 16,
-              padding: "14px",
+              padding: "12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
               minWidth: 0,
             }}
@@ -28836,6 +28836,12 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   {currentMealKey ? `${currentMealKey} 메뉴` : "식당 메뉴"}
                 </span>
               </div>
+              <span
+                onClick={() => setScreen("canteen")}
+                style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+              >
+                전체 ›
+              </span>
             </div>
             {todayMenu ? (
               <>
@@ -28880,24 +28886,12 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 식당이 없습니다
               </div>
             )}
-            <div
-              onClick={() => setScreen("canteen")}
-              style={{
-                fontSize: 12,
-                color: "#4F46E5",
-                fontWeight: 600,
-                marginTop: 8,
-                cursor: "pointer",
-              }}
-            >
-              전체 메뉴 보기 ›
-            </div>
           </div>
           <div
             style={{
               background: "#fff",
               borderRadius: 16,
-              padding: "14px",
+              padding: "12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
             }}
           >
