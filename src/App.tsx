@@ -15674,7 +15674,7 @@ const getKyobunWork = (member: any, date: Date) => {
               const isSun = di === 0,
                 isSat = di === 6;
                             const key = dateKey(currentYear, currentMonth, day);
-              const dayMemos = memos[key] || [];
+const dayMemos = (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) ? [] : (memos[key] || []);
               const isEditing = editingDate === key;
               return (
                 <div
@@ -15701,8 +15701,8 @@ const getKyobunWork = (member: any, date: Date) => {
                     const dayColor = isSun || isHoli ? "#EF4444" : isSat ? "#3B82F6" : "#111827";
                     const subColor = isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#374151";
                     const isRest = work && work.type === "휴무";
-                    const isOff = work && work.type === "비번";
-                    return (
+                  const isOff = work && (work.type === "비번" || String(work.dia).endsWith("~"));  
+                  return (
                       <>
                         <div
                           style={{
