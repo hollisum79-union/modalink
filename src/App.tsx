@@ -23795,7 +23795,7 @@ function NoticeList({ notices, onBack, onSelect }) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {n.title}
+                {n.pinned && "📌 "}{n.title}
               </div>
               <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
                 {n.date}
@@ -26034,6 +26034,7 @@ function NoticeForm({ item, onClose }) {
  const [svg, setSvg] = useState(false);
   const [imgUrl, setImgUrl] = useState(item?.image_url || "");
   const [imgPath, setImgPath] = useState(item?.image_path || "");
+  const [pin, setPin] = useState(item?.pinned || false);
   const [imgUploading, setImgUploading] = useState(false);
 
   const pickImage = async (e) => {
@@ -26072,7 +26073,8 @@ function NoticeForm({ item, onClose }) {
         is_active: act,
         color: tg === "긴급" ? "red" : "indigo",
         image_url: imgUrl || null,
-        image_path: imgPath || null,
+                image_path: imgPath || null,
+        pinned: pin,
       };
       if (isEdit) {
         const { error } = await supabase
@@ -26338,9 +26340,24 @@ function NoticeForm({ item, onClose }) {
                   height: 20,
                   background: "#fff",
                   borderRadius: "50%",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                                    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
                 }}
               />
+            </div>
+          </div>
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={lbl}>상단 고정</label>
+          <div
+            onClick={() => setPin(!pin)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 14, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer" }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{pin ? "📌 고정함" : "고정 안 함"}</div>
+              <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{pin ? "목록 맨 위에 고정돼요" : "새 공지가 올라오면 내려가요"}</div>
+            </div>
+            <div style={{ width: 44, height: 24, background: pin ? "#DC2626" : "#D1D5DB", borderRadius: 12, position: "relative", flexShrink: 0 }}>
+              <div style={{ position: "absolute", top: 2, left: pin ? 22 : 2, width: 20, height: 20, background: "#fff", borderRadius: "50%", boxShadow: "0 2px 4px rgba(0,0,0,0.2)" }} />
             </div>
           </div>
         </div>
@@ -26983,7 +27000,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     const { data } = await supabase
       .from("notices")
       .select("*")
-      .eq("is_active", true)
+            .eq("is_active", true)
+      .order("pinned", { ascending: false })
       .order("created_at", { ascending: false });
     setNotices(data || []);
   };
