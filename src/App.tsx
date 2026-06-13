@@ -24686,12 +24686,12 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     loadAward();
   }, []);
     const [index, setIndex] = React.useState(1);
-    const [actSlide, setActSlide] = React.useState(0);
+   const [actSlide, setActSlide] = React.useState(0);
     React.useEffect(() => {
-      if (recentActs.length <= 1) return;
-      const t = setInterval(() => setActSlide((p) => (p + 1) % recentActs.length), 3500);
-      return () => clearInterval(t);
-    }, [recentActs.length]);
+      if (index === 2 && recentActs.length > 1) {
+        setActSlide((p) => (p + 1) % recentActs.length);
+      }
+    }, [index]);
   const realIndex = (index - 1 + 3) % 3;
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
