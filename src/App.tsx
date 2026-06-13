@@ -24610,7 +24610,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
   }, [sel]);
   const addComment = async () => {
         if (!newComment.trim() || !sel) return;
-        if (!myId) { alert("user 정보: " + JSON.stringify(user)); return; }
+            if (!myId) { alert("로그인 정보가 없어요."); return; }
     setSavingComment(true);
     await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim() });
     setNewComment("");
@@ -27722,7 +27722,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "canteen")
         return <CanteenScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "unionActivity")
-    return <UnionActivityScreen onBack={() => setScreen("home")} />;
+    return <UnionActivityScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "unionSchedule")
   return <UnionScheduleScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "board")
