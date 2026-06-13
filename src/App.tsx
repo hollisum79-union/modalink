@@ -24617,10 +24617,20 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
     setSavingComment(false);
     loadComments(sel.id);
   };
-  const delComment = async (id: any) => {
+    const delComment = async (id: any) => {
     if (!window.confirm("댓글을 삭제할까요?")) return;
     await supabase.from("activity_comments").delete().eq("id", id);
     loadComments(sel.id);
+  };
+  const toggleLike = async (act: any) => {
+    if (!myId) { alert("로그인 정보가 없어요."); return; }
+    if (act.liked) {
+      await supabase.from("activity_likes").delete().eq("activity_id", act.id).eq("employee_number", myId);
+    } else {
+      await supabase.from("activity_likes").insert({ activity_id: act.id, employee_number: myId });
+    }
+    setActs((prev: any[]) => prev.map((a: any) => (a.id === act.id ? { ...a, liked: !a.liked, likeCount: (a.likeCount || 0) + (a.liked ? -1 : 1) } : a)));
+    setSel((s: any) => (s && s.id === act.id ? { ...s, liked: !s.liked, likeCount: (s.likeCount || 0) + (s.liked ? -1 : 1) } : s));
   };
   React.useEffect(() => {
     (async () => {
@@ -24629,12 +24639,19 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
         .select("*")
         .order("activity_date", { ascending: false });
       const ids = (list || []).map((a: any) => a.id);
-      let cnt: Record<string, number> = {};
+            let cnt: Record<string, number> = {};
+      let likeCnt: Record<string, number> = {};
+      let myLikes: Record<string, boolean> = {};
       if (ids.length > 0) {
         const { data: parts } = await supabase.from("field_participants").select("activity_id").in("activity_id", ids);
         (parts || []).forEach((p: any) => { cnt[p.activity_id] = (cnt[p.activity_id] || 0) + 1; });
+        const { data: likes } = await supabase.from("activity_likes").select("activity_id, employee_number").in("activity_id", ids);
+        (likes || []).forEach((l: any) => {
+          likeCnt[l.activity_id] = (likeCnt[l.activity_id] || 0) + 1;
+          if (myId && String(l.employee_number) === myId) myLikes[l.activity_id] = true;
+        });
       }
-      setActs((list || []).map((a: any) => ({ ...a, count: cnt[a.id] || 0 })));
+      setActs((list || []).map((a: any) => ({ ...a, count: cnt[a.id] || 0, likeCount: likeCnt[a.id] || 0, liked: !!myLikes[a.id] })));
       setLoading(false);
     })();
   }, []);
@@ -24656,8 +24673,12 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
         {sel ? (
           <div style={{ background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", margin: 0 }}>{sel.title}</h2>
-            <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+                        <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
               {sel.activity_date || ""}{sel.count > 0 ? ` · 참여 ${sel.count}명` : ""}
+            </div>
+            <div onClick={() => toggleLike(sel)} style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12, padding: "8px 14px", borderRadius: 999, border: "1px solid", borderColor: sel.liked ? "#FCA5A5" : "#E5E7EB", background: sel.liked ? "#FEF2F2" : "#fff", cursor: "pointer" }}>
+              <span style={{ fontSize: 16 }}>{sel.liked ? "❤️" : "🤍"}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: sel.liked ? "#DC2626" : "#6B7280" }}>{sel.likeCount || 0}</span>
             </div>
             {(sel.photos || []).length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
@@ -24713,8 +24734,8 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
-                  <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
-                    {fmtDate(a.activity_date)}{a.count > 0 ? ` · 참여 ${a.count}명` : ""}
+                                    <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
+                    {fmtDate(a.activity_date)}{a.count > 0 ? ` · 참여 ${a.count}명` : ""}{a.likeCount > 0 ? ` · ❤️ ${a.likeCount}` : ""}
                   </div>
                 </div>
                 <span style={{ color: "#D1D5DB", fontSize: 16 }}>›</span>
