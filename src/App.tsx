@@ -10750,11 +10750,12 @@ function UnionScheduleAdmin() {
   const [timeEnd, setTimeEnd] = React.useState("");
   const [loc, setLoc] = React.useState("");
   const [surveyOn, setSurveyOn] = React.useState(false);
+  const [endDate, setEndDate] = React.useState("");
   const [list, setList] = React.useState<any[]>([]);
   const [saving, setSaving] = React.useState(false);
   const [editId, setEditId] = React.useState<any>(null);
   const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const, maxWidth: "100%" };
-  const resetForm = () => { setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc(""); setSurveyOn(false); setEditId(null); };
+  const resetForm = () => { setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc(""); setSurveyOn(false); setEndDate(""); setEditId(null); };
   const load = async () => {
     const { data, error } = await supabase.from("union_schedule").select("*").order("event_date", { ascending: false });
     if (error) { console.error("일정 로드 실패:", error); return; }
@@ -10767,7 +10768,7 @@ function UnionScheduleAdmin() {
     setSaving(true);
     if (!time.trim() && timeEnd.trim()) { alert("종료 시간만 입력할 수 없어요. 시작 시간을 먼저 입력하세요"); setSaving(false); return; }
     const tv = time.trim() ? (timeEnd.trim() ? `${time.trim()}~${timeEnd.trim()}` : time.trim()) : null;
-    const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null, survey_on: surveyOn };
+    const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null, survey_on: surveyOn, end_date: endDate || null };
     const { error } = editId
       ? await supabase.from("union_schedule").update(payload).eq("id", editId)
       : await supabase.from("union_schedule").insert(payload);
@@ -10791,7 +10792,10 @@ function UnionScheduleAdmin() {
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>일정 제목</div>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 2/4분기 분과협의회" style={{ ...inputStyle, marginBottom: 14 }} />
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>날짜</div>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, marginBottom: 14 }} />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, marginBottom: 14 }} />
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>종료일 (선택 · 여러 날 일정일 때)</div>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ ...inputStyle, marginBottom: 4 }} />
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>비우면 당일, 채우면 "6/14 ~ 6/15"처럼 기간으로 표시돼요</div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 4 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>시작 시간 (선택)</div>
@@ -10838,10 +10842,10 @@ function UnionScheduleAdmin() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
                   <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
-                    {s.event_date}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
+                                 {s.event_date}{s.end_date && s.end_date !== s.event_date ? ` ~ ${s.end_date}` : ""}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
                   </div>
                 </div>
-                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); setLoc(s.location || ""); setSurveyOn(!!s.survey_on); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); 
  style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
                 <button onClick={() => handleDelete(s)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>삭제</button>
               </div>
@@ -24516,7 +24520,7 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
             <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
-              {inf.label}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
+                     {inf.label}{s.end_date && s.end_date !== s.event_date ? ` ~ ${info(s.end_date).label}` : ""}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
             </div>
           </div>
         </div>
