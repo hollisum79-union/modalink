@@ -12,6 +12,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = []) {
   if (!member || rotationData.length === 0) return null;
 
+
   const calc = (mem: any) => {
     if (!mem) return null;
     const groupName = mem.work_group === "도봉" ? "도봉 41" : "대공원 114";
