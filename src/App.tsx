@@ -24599,7 +24599,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
   const [comments, setComments] = React.useState<any[]>([]);
   const [newComment, setNewComment] = React.useState("");
     const [savingComment, setSavingComment] = React.useState(false);
-  const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
+  const myId = String(user?.employee_number || user?.emp_id || user?.id || user?.name || "");
   const loadComments = async (actId: any) => {
   const { data } = await supabase.from("activity_comments").select("*").eq("activity_id", actId).order("created_at", { ascending: true });
     setComments(data || []);
