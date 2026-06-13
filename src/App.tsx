@@ -28161,6 +28161,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         background: "#F4F3FF",
         minHeight: "100vh",
         paddingBottom: 80,
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <div
@@ -28357,7 +28359,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         </div>
       </div>
 
-      <div style={{ padding: "7px 16px 0" }}>
+      <div style={{ padding: "7px 16px 0", flex: "1 1 auto", display: "flex", flexDirection: "column" }}>
         <div
           style={{
             display: "grid",
@@ -29030,6 +29032,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             )}
           </div>
         </div>
+        {/* 신축 간격: 남는 높이 자동 채움 → 빠른메뉴를 화면 아래로 */}
+        <div style={{ flex: "1 1 auto", minHeight: 12 }} />
         <div
           style={{
             background: "#fff",
