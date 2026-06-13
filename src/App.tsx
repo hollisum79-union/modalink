@@ -28826,9 +28826,24 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               borderRadius: 16,
               padding: "12px",
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
-              minWidth: 0,
+                            minWidth: 0,
             }}
           >
+            {activeVote ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span onClick={(e) => { e.stopPropagation(); setScreen("vote"); }} style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", cursor: "pointer" }}>진행 중인 투표</span>
+                  <span onClick={(e) => { e.stopPropagation(); setScreen("canteen"); }} style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>🍴 식당 ›</span>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#1F2937", lineHeight: 1.4, marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{activeVote.title}</div>
+                <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>참여기간 ~ {activeVote.deadline}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 4 }}>참여율 {voteStats.total > 0 ? Math.round((voteStats.voted / voteStats.total) * 100) : 0}%<span style={{ fontSize: 11, fontWeight: 700, marginLeft: 6, color: voteStats.mine ? "#16A34A" : "#DC2626" }}>{voteStats.mine ? " ✓참여" : " 미참여"}</span></div>
+                <div style={{ background: "#F3F4F6", borderRadius: 10, height: 6, overflow: "hidden" }}>
+                  <div style={{ height: "100%", background: "linear-gradient(90deg, #4F46E5, #6D28D9)", borderRadius: 10, width: `${voteStats.total > 0 ? Math.round((voteStats.voted / voteStats.total) * 100) : 0}%` }} />
+                </div>
+              </>
+            ) : (
+              <>
             <div
               style={{
                 display: "flex",
@@ -28896,8 +28911,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               >
                 현재 운영 중인
                 <br />
-                식당이 없습니다
+                                식당이 없습니다
               </div>
+            )}
+              </>
             )}
           </div>
           <div
@@ -28916,89 +28933,17 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 marginBottom: 10,
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>
-                {activeVote ? "진행 중인 투표" : "지회·조합 일정"}
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>
+                지회·조합 일정
               </span>
               <span
-                onClick={() => setScreen(activeVote ? "vote" : "unionSchedule")}
+                onClick={() => setScreen("unionSchedule")}
                 style={{ fontSize: 11, color: "#4F46E5", cursor: "pointer" }}
               >
                 더보기 ›
               </span>
             </div>
-            {activeVote ? (
-              <>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "#1F2937",
-                    lineHeight: 1.4,
-                    marginBottom: 8,
-                  }}
-                >
-                  {activeVote.title}
-                </div>
-                <div
-                  style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}
-                >
-                  참여기간 ~ {activeVote.deadline}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "#4F46E5",
-                    marginBottom: 4,
-                  }}
-                >
-                  참여율{" "}
-                  {voteStats.total > 0
-                    ? Math.round((voteStats.voted / voteStats.total) * 100)
-                    : 0}
-                  %
-                  <span
-                    style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 400 }}
-                  >
-                    {" "}
-                    ({voteStats.voted}/{voteStats.total}명)
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      marginLeft: 6,
-                      color: voteStats.mine ? "#16A34A" : "#DC2626",
-                    }}
-                  >
-                    {voteStats.mine ? "✓ 참여함" : "미참여"}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    background: "#F3F4F6",
-                    borderRadius: 10,
-                    height: 6,
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      height: "100%",
-                      background: "linear-gradient(90deg, #4F46E5, #6D28D9)",
-                      borderRadius: 10,
-                     width: `${
-                        voteStats.total > 0
-                          ? Math.round(
-                              (voteStats.voted / voteStats.total) * 100
-                            )
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </>
-            ) : upcomingEvents.length > 0 ? (
+            {upcomingEvents.length > 0 ? (
               <div>
                 {upcomingEvents.map((ev: any, i: number) => {
                   const t0 = new Date();
