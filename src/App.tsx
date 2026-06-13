@@ -28160,13 +28160,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
         background: "#F4F3FF",
         minHeight: "100vh",
+        paddingTop: "env(safe-area-inset-top, 0px)",
         paddingBottom: 80,
-        display: "flex",
-        flexDirection: "column",
       }}
     >
-      {/* ===== 1페이지: 화면 높이만큼 채움 (빠른메뉴는 스크롤 후 등장) ===== */}
-      <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
       <div
         style={{
           background:
@@ -28361,7 +28358,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         </div>
       </div>
 
-      <div style={{ padding: "7px 16px 0", flex: "1 1 auto", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "7px 16px 0" }}>
         <div
           style={{
             display: "grid",
@@ -29034,13 +29031,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             )}
           </div>
         </div>
-        {/* 신축 간격: 1페이지의 남는 높이 자동 채움 */}
-        <div style={{ flex: "1 1 auto", minHeight: 12 }} />
-      </div>{/* /바디 */}
-      </div>{/* ===== /1페이지 ===== */}
-
-      {/* ===== 2페이지: 빠른메뉴 (스크롤하면 등장) ===== */}
-      <div style={{ padding: "0 16px" }}>
         <div
           style={{
             background: "#fff",
