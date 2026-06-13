@@ -28165,6 +28165,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         flexDirection: "column",
       }}
     >
+      {/* ===== 1페이지: 화면 높이만큼 채움 (빠른메뉴는 스크롤 후 등장) ===== */}
+      <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
       <div
         style={{
           background:
@@ -29032,8 +29034,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             )}
           </div>
         </div>
-        {/* 신축 간격: 남는 높이 자동 채움 → 빠른메뉴를 화면 아래로 */}
+        {/* 신축 간격: 1페이지의 남는 높이 자동 채움 */}
         <div style={{ flex: "1 1 auto", minHeight: 12 }} />
+      </div>{/* /바디 */}
+      </div>{/* ===== /1페이지 ===== */}
+
+      {/* ===== 2페이지: 빠른메뉴 (스크롤하면 등장) ===== */}
+      <div style={{ padding: "0 16px" }}>
         <div
           style={{
             background: "#fff",
