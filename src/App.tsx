@@ -13568,7 +13568,22 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
- const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites" | "phones">(null);
+ const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites" | "phones" | "ride">(null);
+  const [rideQ, setRideQ] = React.useState("");
+  const [rideHits, setRideHits] = React.useState<any[]>([]);
+  const [rideSel, setRideSel] = React.useState<string | null>(null);
+  const doRideSearch = async () => {
+    const q = rideQ.trim();
+    setRideSel(null);
+    if (!q) { setRideHits([]); return; }
+    const { data } = await supabase.from("ride_dia").select("*").eq("train_no", q);
+    const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
+    const sorted = (data || []).sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (a.dia_no - b.dia_no));
+    setRideHits(sorted);
+    const cats = Array.from(new Set(sorted.map((r: any) => r.category)));
+    if (cats.length === 1) setRideSel(cats[0] as string);
+  };
+
   const [searchList, setSearchList] = React.useState<any[]>([]);
   const [searchQ, setSearchQ] = React.useState("");
   const searchPickRef = React.useRef<any>(null);
@@ -13605,7 +13620,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   React.useEffect(() => {
     (window as any).__backHandler = () => {
       if (timePopup) { setTimePopup(null); return true; }
-      if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites") { setSubScreen("menu"); return true; }
+     if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites" || subScreen === "ride") { setSubScreen("menu"); return true; }
       if (subScreen === "menu" || subScreen === "search") { setSubScreen(null); return true; }
       if (activeTab === "교번" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { setSelectedMember(null); return true; }
       if (activeTab === "통상" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { goMySchedule(); return true; }
@@ -15301,8 +15316,8 @@ const getKyobunWork = (member: any, date: Date) => {
           { label: "업무용 전화번호", action: () => setSubScreen("phones") },
           { label: "직원 연락처", action: () => setSubScreen("contacts") },
           { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
-          { label: "편승 도우미", action: () => alert("편승 도우미 (준비중)") },
-        ].map((c) => (
+    { label: "편승 도우미", action: () => setSubScreen("ride") },      
+    ].map((c) => (
           <button key={c.label} onClick={c.action} style={{ padding: "28px 12px", borderRadius: 16, border: "2px solid #E5E7EB", background: "#fff", fontSize: 15, fontWeight: 700, color: "#374151", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
             {c.label}
           </button>
@@ -15383,6 +15398,63 @@ const getKyobunWork = (member: any, date: Date) => {
             );
           })}
         </div>
+      </div>
+    );
+  };
+
+    const renderRide = () => {
+    const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
+    const cats = order.filter((c) => rideHits.some((h: any) => h.category === c));
+    const badgeStyle = (mk: string): any => {
+      if (mk === "입고") return { background: "#DBEAFE", color: "#1D4ED8" };
+      if (mk === "출고") return { background: "#FCE7F3", color: "#BE185D" };
+      if (mk === "입출고") return { background: "#FEF3C7", color: "#B45309" };
+      return null;
+    };
+    return (
+      <div style={{ padding: "16px 16px 24px" }}>
+        <button onClick={() => { setSubScreen("menu"); setRideQ(""); setRideHits([]); setRideSel(null); }} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 메뉴화면</button>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>편승 도우미</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>열번을 검색하고, 오늘 내 근무를 골라보세요</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+          <input
+            value={rideQ}
+            onChange={(e) => setRideQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") doRideSearch(); }}
+            inputMode="numeric"
+            placeholder="열번 입력 (예: 7012)"
+            style={{ flex: 1, padding: "13px 14px", border: "1.5px solid #E8E8F0", borderRadius: 13, background: "#FAFAFD", fontSize: 16, boxSizing: "border-box", outline: "none" }}
+          />
+          <button onClick={doRideSearch} style={{ padding: "0 20px", borderRadius: 13, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>검색</button>
+        </div>
+        {rideQ.trim() && rideHits.length === 0 && (
+          <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>{rideQ.trim()} 열번을 찾을 수 없어요</div>
+        )}
+        {rideHits.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#4F46E5", marginBottom: 10 }}>{rideHits[0].train_no} 은(는) {cats.length}개 근무에 있어요 — 내 근무 선택</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {cats.map((c) => (
+                <button key={c} onClick={() => setRideSel(c)} style={{ padding: "10px 17px", borderRadius: 12, border: rideSel === c ? "2px solid #4F46E5" : "2px solid #E5E7EB", background: rideSel === c ? "#4F46E5" : "#fff", color: rideSel === c ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>{c}</button>
+              ))}
+            </div>
+            {rideSel && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아</div>
+                {rideHits.filter((h: any) => h.category === rideSel).map((h: any, i: number) => {
+                  const bs = badgeStyle(h.mark);
+                  return (
+                    <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", textAlign: "center", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
+                      <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
+                      {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
       </div>
     );
   };
@@ -16296,7 +16368,8 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
         {subScreen === "contacts" && renderContacts()}
         {subScreen === "compare" && renderCompare()}
         {subScreen === "favorites" && renderFavorites()}
-        {subScreen === "phones" && renderWorkPhones()}
+            {subScreen === "phones" && renderWorkPhones()}
+        {subScreen === "ride" && renderRide()}
         {subScreen === null && activeTab === "교대" && (
           <>
             {!crewLoaded && (
