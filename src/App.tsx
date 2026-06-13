@@ -10845,8 +10845,7 @@ function UnionScheduleAdmin() {
                                  {s.event_date}{s.end_date && s.end_date !== s.event_date ? ` ~ ${s.end_date}` : ""}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
                   </div>
                 </div>
-                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); 
- style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
+                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); setLoc(s.location || ""); setSurveyOn(!!s.survey_on); setEndDate(s.end_date || ""); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
                 <button onClick={() => handleDelete(s)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>삭제</button>
               </div>
             );
