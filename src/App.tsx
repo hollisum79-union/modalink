@@ -24592,10 +24592,34 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
     </div>
   );
 }
-function UnionActivityScreen({ onBack }: { onBack: () => void }) {
+function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any }) {
   const [acts, setActs] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [sel, setSel] = React.useState<any>(null);
+  const [comments, setComments] = React.useState<any[]>([]);
+  const [newComment, setNewComment] = React.useState("");
+  const [savingComment, setSavingComment] = React.useState(false);
+  const loadComments = async (actId: any) => {
+    const { data } = await supabase.from("activity_comments").select("*").eq("activity_id", actId).order("created_at", { ascending: true });
+    setComments(data || []);
+  };
+  React.useEffect(() => {
+    if (sel) loadComments(sel.id); else setComments([]);
+  }, [sel]);
+  const addComment = async () => {
+    if (!newComment.trim() || !sel) return;
+    if (!user?.employee_number) { alert("로그인 정보가 없어요."); return; }
+    setSavingComment(true);
+    await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: String(user.employee_number), member_name: user.name, content: newComment.trim() });
+    setNewComment("");
+    setSavingComment(false);
+    loadComments(sel.id);
+  };
+  const delComment = async (id: any) => {
+    if (!window.confirm("댓글을 삭제할까요?")) return;
+    await supabase.from("activity_comments").delete().eq("id", id);
+    loadComments(sel.id);
+  };
   React.useEffect(() => {
     (async () => {
       const { data: list } = await supabase
@@ -24640,10 +24664,38 @@ function UnionActivityScreen({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
             )}
-            {sel.description && (
+                        {sel.description && (
               <p style={{ fontSize: 15, color: "#374151", lineHeight: 1.8, marginTop: 16, whiteSpace: "pre-wrap" }}>{sel.description}</p>
             )}
+            <div style={{ marginTop: 20, borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 12 }}>💬 응원 댓글 {comments.length > 0 ? `(${comments.length})` : ""}</div>
+              {comments.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 12 }}>첫 응원 댓글을 남겨보세요!</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+                  {comments.map((c: any) => (
+                    <div key={c.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{c.member_name || "조합원"}</span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 11, color: "#9CA3AF" }}>{(c.created_at || "").slice(5, 10)}</span>
+                          {user && String(c.employee_number) === String(user.employee_number) && (
+                            <span onClick={() => delComment(c.id)} style={{ fontSize: 11, color: "#EF4444", cursor: "pointer" }}>삭제</span>
+                          )}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 14, color: "#374151", whiteSpace: "pre-wrap" }}>{c.content}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="응원 한마디 남기기" style={{ flex: 1, padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
+                <button onClick={addComment} disabled={savingComment} style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>{savingComment ? "..." : "등록"}</button>
+              </div>
+            </div>
           </div>
+
         ) : loading ? (
           <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>불러오는 중…</div>
         ) : acts.length === 0 ? (
