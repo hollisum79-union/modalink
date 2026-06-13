@@ -24598,19 +24598,20 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
   const [sel, setSel] = React.useState<any>(null);
   const [comments, setComments] = React.useState<any[]>([]);
   const [newComment, setNewComment] = React.useState("");
-  const [savingComment, setSavingComment] = React.useState(false);
+    const [savingComment, setSavingComment] = React.useState(false);
+  const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
   const loadComments = async (actId: any) => {
-    const { data } = await supabase.from("activity_comments").select("*").eq("activity_id", actId).order("created_at", { ascending: true });
+  const { data } = await supabase.from("activity_comments").select("*").eq("activity_id", actId).order("created_at", { ascending: true });
     setComments(data || []);
   };
   React.useEffect(() => {
     if (sel) loadComments(sel.id); else setComments([]);
   }, [sel]);
   const addComment = async () => {
-    if (!newComment.trim() || !sel) return;
-    if (!user?.employee_number) { alert("로그인 정보가 없어요."); return; }
+        if (!newComment.trim() || !sel) return;
+    if (!myId) { alert("로그인 정보가 없어요."); return; }
     setSavingComment(true);
-    await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: String(user.employee_number), member_name: user.name, content: newComment.trim() });
+    await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim() });
     setNewComment("");
     setSavingComment(false);
     loadComments(sel.id);
@@ -24679,7 +24680,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
                         <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{c.member_name || "조합원"}</span>
                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 11, color: "#9CA3AF" }}>{(c.created_at || "").slice(5, 10)}</span>
-                          {user && String(c.employee_number) === String(user.employee_number) && (
+                                                    {myId && String(c.employee_number) === myId && (
                             <span onClick={() => delComment(c.id)} style={{ fontSize: 11, color: "#EF4444", cursor: "pointer" }}>삭제</span>
                           )}
                         </span>
