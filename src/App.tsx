@@ -24659,7 +24659,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         .from("field_activities")
         .select("id, title, activity_date, photos")
         .order("activity_date", { ascending: false })
-        .limit(2);
+        .limit(5);
       if (!acts || acts.length === 0) { setRecentActs([]); return; }
       const ids = acts.map((a: any) => a.id);
       const { data: parts } = await supabase
@@ -24686,6 +24686,12 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     loadAward();
   }, []);
     const [index, setIndex] = React.useState(1);
+    const [actSlide, setActSlide] = React.useState(0);
+    React.useEffect(() => {
+      if (recentActs.length <= 1) return;
+      const t = setInterval(() => setActSlide((p) => (p + 1) % recentActs.length), 3500);
+      return () => clearInterval(t);
+    }, [recentActs.length]);
   const realIndex = (index - 1 + 3) % 3;
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
@@ -24838,45 +24844,51 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     const pp = String(d).split("-").map(Number);
     return (Date.now() - new Date(pp[0], pp[1] - 1, pp[2]).getTime()) / 86400000 <= 7;
   })();
-  const condolenceCard = (
+    const fmtAct = (d: any) => (d ? `${parseInt(String(d).slice(5, 7))}월 ${parseInt(String(d).slice(8, 10))}일` : "");
+  const actCount = recentActs.length;
+  const actIdx = actCount > 0 ? actSlide % actCount : 0;
+  const condolenceCard = showActs ? (
+    (() => {
+      const a: any = recentActs[actIdx] || recentActs[0];
+      const hero = ((a && a.photos) || [])[0];
+      return (
+        <div
+          onClick={onActivityClick}
+          style={{ minWidth: "100%", boxSizing: "border-box", borderRadius: 12, height: 158, overflow: "hidden", position: "relative", cursor: "pointer", background: "#5B21B6" }}
+        >
+          {hero && hero.url ? (
+            <img src={hero.url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, background: "linear-gradient(135deg,#6D28D9,#4F46E5)" }}>🚩</div>
+          )}
+          <span style={{ position: "absolute", top: 10, left: 10, display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(0,0,0,0.32)", color: "#fff", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "4px 10px" }}>🚩 조합 활동</span>
+          {actIsNew && actIdx === 0 && (
+            <span style={{ position: "absolute", top: 10, right: 10, background: "#F97316", color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 5, padding: "2px 7px" }}>NEW</span>
+          )}
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "24px 14px 12px", background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.35) 55%, transparent 100%)" }}>
+            <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.title}</div>
+            <div style={{ color: "rgba(255,255,255,0.88)", fontSize: 11.5, fontWeight: 600, marginTop: 3 }}>{[fmtAct(a.activity_date), a.count > 0 ? `참여 ${a.count}명` : ""].filter(Boolean).join(" · ")}</div>
+          </div>
+          {actCount > 1 && (
+            <div style={{ position: "absolute", bottom: 9, right: 12, display: "flex", gap: 4 }}>
+              {recentActs.map((_: any, i: number) => (
+                <div key={i} style={{ width: i === actIdx ? 14 : 5, height: 5, borderRadius: 3, background: i === actIdx ? "#fff" : "rgba(255,255,255,0.5)", transition: "width 0.3s" }} />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    })()
+  ) : (
     <div
-      onClick={condolences.length > 0 ? onCondolenceClick : (showActs && onActivityClick ? onActivityClick : undefined)}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 || showActs ? "pointer" : "default", height: 158, overflow: "hidden", display: "flex", flexDirection: "column" }}
+      onClick={condolences.length > 0 ? onCondolenceClick : undefined}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 ? "pointer" : "default", height: 158, overflow: "hidden", display: "flex", flexDirection: "column" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexShrink: 0 }}>
-        <span style={{ fontSize: 16 }}>{showActs ? "🚩" : "💐"}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>{showActs ? "조합 활동" : "조합원 경조사"}</span>
-        {showActs && actIsNew && (
-          <span style={{ marginLeft: "auto", background: "#F97316", color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 5, padding: "2px 7px" }}>NEW</span>
-        )}
+        <span style={{ fontSize: 16 }}>💐</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>조합원 경조사</span>
       </div>
-      {showActs ? (
-        (() => {
-          const a0: any = recentActs[0];
-          const a1: any = recentActs[1];
-          const fmt = (d: any) => (d ? `${parseInt(String(d).slice(5, 7))}월 ${parseInt(String(d).slice(8, 10))}일` : "");
-          const hero = ((a0 && a0.photos) || [])[0];
-          return (
-            <>
-              {hero && hero.url ? (
-                <div style={{ flex: 1, minHeight: 30, borderRadius: 10, overflow: "hidden", marginBottom: 6 }}>
-                  <img src={hero.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                </div>
-              ) : (
-                <div style={{ flex: 1, minHeight: 30, borderRadius: 10, background: "rgba(91,33,182,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, marginBottom: 6 }}>🚩</div>
-              )}
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#4C1D95", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0 }}>{a0.title}</div>
-              <div style={{ fontSize: 11, color: "#6D28D9", opacity: 0.75, marginTop: 2, flexShrink: 0 }}>{[fmt(a0.activity_date), a0.count > 0 ? `참여 ${a0.count}명` : ""].filter(Boolean).join(" · ")}</div>
-              {a1 && (
-                <div style={{ borderTop: "1px solid rgba(91,33,182,0.18)", marginTop: 6, paddingTop: 5, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 12, color: "#4C1D95", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a1.title}</span>
-                  <span style={{ fontSize: 11, color: "#6D28D9", opacity: 0.7, flexShrink: 0 }}>{fmt(a1.activity_date)}</span>
-                </div>
-              )}
-            </>
-          );
-        })()
-      ) : condolences.length === 0 ? (
+      {condolences.length === 0 ? (
         <div style={{ fontSize: 12, color: "#6B7280", padding: "4px 0" }}>현재 경조사 안내가 없습니다</div>
       ) : (
         condolences.slice(0, 3).map((c, i) => (
@@ -24888,7 +24900,8 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         ))
       )}
     </div>
- );
+  );
+
 
   const top3Card = (
     <div
@@ -28449,7 +28462,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             const isWork = type === "주간" || type === "야간";
             const isStandby = info?.dia != null && String(info.dia).startsWith("대기");
             const bigText =
-              info?.dia != null
+  (info?.dia != null && !String(info.dia).endsWith("~"))
                 ? (isStandby ? String(info.dia) : `다이아 ${info.dia}`)
                 : type === "비번"
                 ? "비번"
