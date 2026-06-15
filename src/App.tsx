@@ -225,7 +225,9 @@ function computeNetPay(input: any) {
     "4조2교대(비심야)": 0.0675, "4조2교대(심야)": 0.0635,
     "4조2교대(야간집중)": 0.06, 교번: 0.087,
   };
-    const workTypePay = (basicSalary && workType) ? Math.round(basicSalary * (wtRates[workType] ?? 0)) : 0;
+   const wtSetting = worktypeSettings.find((w) => w.work_type === workType);
+  const bojeonRate = (wtSetting && wtSetting.bojeon_rate != null) ? Number(wtSetting.bojeon_rate) : (wtRates[workType] ?? 0);
+    const workTypePay = (basicSalary && workType) ? Math.round(basicSalary * bojeonRate) : 0;
   const g7s1 = (salaryTable.find((r: any) => r.hobong === 1)?.grade_7) ?? 0;
   const bojeonGasanPay = memberInfo?.bojeon_gasan ? Math.round(g7s1 * 0.04) : 0;
 
@@ -10245,6 +10247,8 @@ function SalaryTableScreen() {
   );
 }
 
+// 아래 WorkTimeAdmin 함수 전체를 GitHub의 기존 WorkTimeAdmin 함수와 통째로 교체하세요
+
 function WorkTimeAdmin() {
   const [rows, setRows] = React.useState<any[]>([]);
   const [saveMsg, setSaveMsg] = React.useState("");
@@ -10264,7 +10268,7 @@ function WorkTimeAdmin() {
     for (const r of rows) {
       await supabase.from("worktype_pay_settings").update({
         night_hours: Number(r.night_hours) || 0,
-        holiday_day_hours: Number(r.holiday_day_hours) || 0,
+        bojeon_rate: Number(r.bojeon_rate) || 0,
         updated_at: new Date().toISOString(),
       }).eq("work_type", r.work_type);
     }
@@ -10277,23 +10281,28 @@ function WorkTimeAdmin() {
 
   return (
     <div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>야간수당 시간</div>
-      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>근무형태별 인정 시간(1회 기준)을 입력하세요. 야간 = 22~06시.</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>수당 설정</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>근무유형별 야간 인정시간과 업무보전수당 요율을 입력하세요. 야간 = 22~06시.</div>
       {rows.map((r) => (
         <div key={r.work_type} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 10 }}>{r.work_type}</div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: "#6B7280" }}>🌙 야간시간</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {numInput(r.night_hours, (v: any) => updateField(r.work_type, "night_hours", v))}
-              <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 4 }}>{r.work_type}</div>
+          {r.work_type === "교번" && (
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>야간시간은 다이아에서 자동 계산돼요</div>
+          )}
+          {r.work_type !== "교번" && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, marginTop: 6 }}>
+              <span style={{ fontSize: 13, color: "#6B7280" }}>🌙 야간시간</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {numInput(r.night_hours, (v: any) => updateField(r.work_type, "night_hours", v))}
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+              </div>
             </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 13, color: "#6B7280" }}>☀️ 주간시간</span>
+          )}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F3F4F6", paddingTop: 10 }}>
+            <span style={{ fontSize: 13, color: "#4F46E5", fontWeight: 600 }}>% 업무보전수당 요율</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {numInput(r.holiday_day_hours, (v: any) => updateField(r.work_type, "holiday_day_hours", v))}
-              <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+              <input type="number" step="0.001" value={r.bojeon_rate != null ? Number((Number(r.bojeon_rate) * 100).toFixed(4)) : 0} onChange={(e) => updateField(r.work_type, "bojeon_rate", Number(e.target.value) / 100)} style={{ width: 70, padding: "8px 10px", borderRadius: 8, border: "1px solid #C7D2FE", fontSize: 14, textAlign: "right" }} />
+              <span style={{ fontSize: 13, color: "#9CA3AF" }}>%</span>
             </div>
           </div>
         </div>
@@ -10303,7 +10312,6 @@ function WorkTimeAdmin() {
     </div>
   );
 }
-
 function DeductionAdmin() {
   const [rates, setRates] = React.useState<any>(null);
   const [saveMsg, setSaveMsg] = React.useState("");
@@ -11723,7 +11731,7 @@ useEffect(() => {
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>급여 관리</div>
             {[
               { id: "salarytable", label: "호봉표 관리", desc: "등급·호봉별 기본급" },
-              { id: "worktime", label: "야간수당 시간", desc: "근무형태별 인정 시간" },
+             { id: "worktime", label: "수당 설정", desc: "야간시간·업무보전수당 요율" },
               { id: "deduction", label: "공제 요율 설정", desc: "4대보험·세금·조합비" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
