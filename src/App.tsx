@@ -10080,6 +10080,7 @@ function ScheduleUpdateAdmin() {
     </div>
   );
 }
+// function SalaryTableScreen 부터 끝 } 까지 전체를 이걸로 교체하세요
 
 function SalaryTableScreen() {
   const [rows, setRows] = React.useState<any[]>([]);
@@ -10163,22 +10164,44 @@ function SalaryTableScreen() {
     });
   };
 
+  const downloadTemplate = () => {
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = reject;
+      document.body.appendChild(s);
+    });
+    ensureXLSX().then((XLSX) => {
+      const header = ["호봉", ...GRADES.map((g) => g + "급")];
+      const aoa = [header, [1, "", "", "", "", "", "", ""]];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "호봉표");
+      XLSX.writeFile(wb, "호봉표_양식.xlsx");
+    });
+  };
+
   if (loading) return <div style={{ padding: 24, textAlign: "center", color: "#9CA3AF" }}>불러오는 중...</div>;
 
   return (
     <div style={{ padding: "16px 16px 28px" }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>호봉표 관리</div>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>금액을 고치고 저장하면 조합원 급여에 바로 반영돼요</div>
-      <label style={{ display: "block", textAlign: "center", padding: 12, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>
-        엑셀 파일 올리기
-        <input type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleExcel(f); e.currentTarget.value = ""; }} />
-      </label>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <label style={{ flex: 1, textAlign: "center", padding: 12, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>
+          엑셀 올리기
+          <input type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleExcel(f); e.currentTarget.value = ""; }} />
+        </label>
+        <button onClick={downloadTemplate} style={{ flex: 1, padding: 12, borderRadius: 12, border: "1.5px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>양식 내려받기</button>
+      </div>
       {uploaded && (
         <div style={{ background: "#FEF3C7", color: "#92400E", fontSize: 12.5, padding: "10px 12px", borderRadius: 10, marginBottom: 12, lineHeight: 1.5 }}>
           엑셀에서 {rows.length}개 호봉을 불러왔어요. 표를 확인한 뒤 아래 저장을 눌러야 반영돼요.
         </div>
       )}
-      <div style={{ overflowX: "auto", background: "#fff", borderRadius: 14, padding: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", WebkitOverflowScrolling: "touch" }}>
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 440, background: "#fff", borderRadius: 14, padding: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", WebkitOverflowScrolling: "touch" }}>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead>
             <tr>
@@ -10221,7 +10244,6 @@ function SalaryTableScreen() {
     </div>
   );
 }
-
 function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
