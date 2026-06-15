@@ -210,7 +210,7 @@ function computeNetPay(input: any) {
     nightCount = 0, salaryTable = [], worktypeSettings = [],
     hfRecords = [], diaTable = [], holidays = [], dedRates = null,
     memberInfo = null, rotationData = [], dutyRecords = [],
-    swapData = [], allMembers = [], allowSettings = [],
+    swapData = [], allMembers = [], allowSettings = [], hiddenItems = [],
   } = input;
 
     const row = salaryTable.find((r: any) => Number(r.hobong) === Number(hobong));
@@ -235,6 +235,7 @@ function computeNetPay(input: any) {
     if (!checkedItems[item]) return 0;
     const am = (allowSettings || []).find((x: any) => x.name === item);
     if (am && am.visible === false) return 0;
+    if ((hiddenItems || []).includes(item)) return 0;
     if (item === "업무보전수당") return workTypePay + bojeonGasanPay;
     if (item === "장기근속수당") return longService;
     if (item === "직급보조비") return gradeSupport;
@@ -19395,6 +19396,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     });
   }, []);
   const allowMeta = (name: string) => allowSettings.find((x) => x.name === name);
+  const [hiddenItems, setHiddenItems] = React.useState<string[]>([]);
+  const [showHidden, setShowHidden] = React.useState(false);
   const [shiftBase, setShiftBase] = React.useState<any>(null);
   const [lastMonthLeaves, setLastMonthLeaves] = React.useState<any[]>([]);
   const [hfDay, setHfDay] = React.useState<number>(0);
@@ -19491,6 +19494,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         if (s.work_type) setWorkType(s.work_type);
         if (s.checked_items) setCheckedItems(s.checked_items);
         if (s.manual_inputs) setManualInputs(s.manual_inputs);
+        if (s.hidden_items) setHiddenItems(s.hidden_items);
       }
 
       setLoading(false);
@@ -19509,6 +19513,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         work_type: workType,
         checked_items: checkedItems,
         manual_inputs: manualInputs,
+        hidden_items: hiddenItems,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "employee_number" }
@@ -19630,6 +19635,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     if (!checkedItems[item]) return 0;
     const m = allowMeta(item);
     if (m && m.visible === false) return 0;
+    if (hiddenItems.includes(item)) return 0;
     switch (item) {
             case "업무보전수당":
         return getWorkTypePay() + bojeonGasanPay;
@@ -20289,7 +20295,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
               <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
                 해당되는 항목에 체크하세요
               </div>
-              {allowanceItems.filter((item) => { const m = allowMeta(item.id); return !m || m.visible !== false; }).map((item) => (
+              {allowanceItems.filter((item) => { const m = allowMeta(item.id); if (m && m.visible === false) return false; if (hiddenItems.includes(item.id)) return false; return true; }).map((item) => (
                 <div
                   key={item.id}
                   style={{
@@ -20475,11 +20481,57 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                           </div>
                         )}
                     </div>
+                    <div
+                      onClick={() => {
+                        const nx = [...hiddenItems, item.id];
+                        setHiddenItems(nx);
+                        if (user?.employee_number) {
+                          supabase.from("salary_settings").update({ hidden_items: nx }).eq("employee_number", user.employee_number);
+                        }
+                      }}
+                      style={{ marginLeft: 8, padding: "2px 6px", cursor: "pointer", color: "#C4C4C4", fontSize: 15, lineHeight: 1, alignSelf: "flex-start" }}
+                      title="이 수당 숨기기"
+                    >
+                      ✕
+                    </div>
                   </div>
               ))}
             </div>
 
-            {/* 야간·연장 근로시간 */}
+            {hiddenItems.length > 0 && (
+              <div style={{ marginTop: 2, marginBottom: 14 }}>
+                <div
+                  onClick={() => setShowHidden((v) => !v)}
+                  style={{ textAlign: "center", padding: "10px", fontSize: 13, color: "#6366F1", cursor: "pointer", borderTop: "1px dashed #E5E7EB" }}
+                >
+                  숨긴 수당 {hiddenItems.length}개 {showHidden ? "접기 ▲" : "보기 ▼"}
+                </div>
+                {showHidden && (
+                  <div style={{ marginTop: 4 }}>
+                    {hiddenItems.map((hid) => {
+                      const it = allowanceItems.find((x) => x.id === hid);
+                      return (
+                        <div key={hid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "#FAFAFA", border: "1px solid #F3F4F6", borderRadius: 10, marginBottom: 8 }}>
+                          <span style={{ fontSize: 14, color: "#6B7280" }}>{it?.label || hid}</span>
+                          <div
+                            onClick={() => {
+                              const nx = hiddenItems.filter((x) => x !== hid);
+                              setHiddenItems(nx);
+                              if (user?.employee_number) {
+                                supabase.from("salary_settings").update({ hidden_items: nx }).eq("employee_number", user.employee_number);
+                              }
+                            }}
+                            style={{ fontSize: 13, color: "#4F46E5", cursor: "pointer", fontWeight: 600 }}
+                          >
+                            + 다시 표시
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
             <div
               style={{
                 background: "#fff",
@@ -27285,6 +27337,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       swapData: d.swapData || [],
       allMembers: d.allMembers || [],
       allowSettings: d.allowSettings || [],
+      hiddenItems: s.hidden_items || [],
     });
     if (!result) return;
     (async () => {
@@ -29158,6 +29211,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   swapData: d.swapData || [],
                   allMembers: d.allMembers || [],
                   allowSettings: d.allowSettings || [],
+                  hiddenItems: s.hidden_items || [],
                 });
                 if (!result) return "—";
                 return result.netPay.toLocaleString("ko-KR");
