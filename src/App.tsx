@@ -10080,7 +10080,99 @@ function ScheduleUpdateAdmin() {
     </div>
   );
 }
+function SalaryTableScreen() {
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const GRADES = [1, 2, 3, 4, 5, 6, 7];
 
+  const load = async () => {
+    const { data } = await supabase.from("salary_table").select("*").order("hobong", { ascending: true });
+    setRows(data || []);
+    setLoading(false);
+  };
+  React.useEffect(() => { load(); }, []);
+
+  const updateCell = (idx: number, key: string, val: string) => {
+    const n = Number(String(val).replace(/[^0-9]/g, "")) || 0;
+    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [key]: n } : r)));
+  };
+  const addRow = () => {
+    const nextH = rows.length ? Math.max(...rows.map((r) => Number(r.hobong))) + 1 : 1;
+    const nr: any = { hobong: nextH };
+    GRADES.forEach((g) => { nr["grade_" + g] = 0; });
+    setRows((prev) => [...prev, nr]);
+  };
+  const delRow = async (idx: number) => {
+    const r = rows[idx];
+    if (!window.confirm(r.hobong + "호봉 줄을 삭제할까요?")) return;
+    if (r.id) await supabase.from("salary_table").delete().eq("id", r.id);
+    setRows((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const save = async () => {
+    setSaving(true);
+    for (const r of rows) {
+      const payload: any = { hobong: Number(r.hobong) };
+      GRADES.forEach((g) => { payload["grade_" + g] = Number(r["grade_" + g]) || 0; });
+      if (r.id) await supabase.from("salary_table").update(payload).eq("id", r.id);
+      else await supabase.from("salary_table").insert(payload);
+    }
+    setSaving(false);
+    alert("저장되었습니다.");
+    load();
+  };
+
+  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "#9CA3AF" }}>불러오는 중...</div>;
+
+  return (
+    <div style={{ padding: "16px 16px 28px" }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>호봉표 관리</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>금액을 고치고 저장하면 조합원 급여에 바로 반영돼요</div>
+      <div style={{ overflowX: "auto", background: "#fff", borderRadius: 14, padding: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "7px 6px", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "2px solid #EEF0F4", whiteSpace: "nowrap" }}>호봉</th>
+              {GRADES.map((g) => (
+                <th key={g} style={{ padding: "7px 6px", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "2px solid #EEF0F4", whiteSpace: "nowrap" }}>{g}급</th>
+              ))}
+              <th style={{ borderBottom: "2px solid #EEF0F4" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, idx) => (
+              <tr key={r.id ?? "new" + idx}>
+                <td style={{ padding: "6px 6px", textAlign: "center" }}>
+                  <span style={{ display: "inline-block", fontSize: 13, fontWeight: 700, color: "#4338CA", background: "#F3F0FF", borderRadius: 8, padding: "6px 8px", whiteSpace: "nowrap" }}>{r.hobong}호봉</span>
+                </td>
+                {GRADES.map((g) => (
+                  <td key={g} style={{ padding: "6px 4px", textAlign: "center" }}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={Number(r["grade_" + g] || 0).toLocaleString()}
+                      onChange={(e) => updateCell(idx, "grade_" + g, e.target.value)}
+                      style={{ width: 78, padding: "7px 4px", border: "1.5px solid #E8E8F0", borderRadius: 8, fontSize: 13, textAlign: "right", outline: "none" }}
+                    />
+                  </td>
+                ))}
+                <td style={{ padding: "6px 4px", textAlign: "center" }}>
+                  <button onClick={() => delRow(idx)} style={{ background: "none", border: "none", color: "#D4537E", fontSize: 15, cursor: "pointer", padding: 4 }}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button onClick={addRow} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>+ 호봉 추가</button>
+        <button onClick={save} disabled={saving} style={{ flex: 1, padding: 13, borderRadius: 12, border: "none", background: saving ? "#A5B4FC" : "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>{saving ? "저장 중..." : "저장"}</button>
+      </div>
+    </div>
+  );
+}
+
+function PaySettingScreen() {
 function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
