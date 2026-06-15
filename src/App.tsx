@@ -19509,7 +19509,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       "4조2교대(야간집중)": 0.06,
       교번: 0.087,
     };
-    return Math.round(basicSalary * (rates[workType] ?? 0));
+    const wtSetting = worktypeSettings.find((w) => w.work_type === workType);
+    const rate = (wtSetting && wtSetting.bojeon_rate != null) ? Number(wtSetting.bojeon_rate) : (rates[workType] ?? 0);
+    return Math.round(basicSalary * rate);
   };
 
   const getAllowanceAmount = (item: string): number => {
