@@ -10247,6 +10247,8 @@ function SalaryTableScreen() {
   );
 }
 
+// 아래 WorkTimeAdmin 함수 전체를 GitHub의 기존 WorkTimeAdmin 함수와 통째로 교체하세요
+
 function WorkTimeAdmin() {
   const [rows, setRows] = React.useState<any[]>([]);
   const [allow, setAllow] = React.useState<any[]>([]);
@@ -10383,7 +10385,7 @@ function WorkTimeAdmin() {
         <button onClick={() => setAdding(true)} style={{ width: "100%", padding: 12, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>+ 수당 추가</button>
       )}
 
-      <div style={sectionTitle}>🌙 근무유형별 야간시간 · 업무보전수당 요율</div>
+      <div style={sectionTitle}>🌙 근무유형별 설정</div>
       {rows.map((r) => (
         <div key={r.work_type} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 9, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 4 }}>{r.work_type}</div>
@@ -19384,6 +19386,13 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [nightMin, setNightMin] = React.useState<number>(0);
   const [nightCount, setNightCount] = React.useState<number>(0);
   const [worktypeSettings, setWorktypeSettings] = React.useState<any[]>([]);
+  const [allowSettings, setAllowSettings] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    supabase.from("allowance_settings").select("name, visible, description").then(({ data }) => {
+      if (data) setAllowSettings(data);
+    });
+  }, []);
+  const allowMeta = (name: string) => allowSettings.find((x) => x.name === name);
   const [shiftBase, setShiftBase] = React.useState<any>(null);
   const [lastMonthLeaves, setLastMonthLeaves] = React.useState<any[]>([]);
   const [hfDay, setHfDay] = React.useState<number>(0);
@@ -20276,7 +20285,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
               <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>
                 해당되는 항목에 체크하세요
               </div>
-              {allowanceItems.map((item) => (
+              {allowanceItems.filter((item) => { const m = allowMeta(item.id); return !m || m.visible !== false; }).map((item) => (
                 <div
                   key={item.id}
                   style={{
@@ -20371,7 +20380,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                           paddingLeft: 26,
                         }}
                       >
-                        {item.desc}
+                        {allowMeta(item.id)?.description || item.desc}
                       </div>
                       {checkedItems[item.id] && item.extra && (
                         <div style={{ paddingLeft: 26 }}>{item.extra}</div>
