@@ -11279,8 +11279,8 @@ useEffect(() => {
       badge: 0,
     },
     {
-      id: "paysettings",
-      label: "급여시간 설정",
+      id: "salarygroup",
+      label: "급여 관리",
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
       color: "#7C3AED",
       bg: "#F3E8FF",
@@ -11506,6 +11506,21 @@ useEffect(() => {
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
+        {activeMenu === "salarytable" && <SalaryTableScreen />}
+        {activeMenu === "salarygroup" && (
+          <div style={{ padding: "16px 16px 28px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>급여 관리</div>
+            {[
+              { id: "salarytable", label: "호봉표 관리", desc: "등급·호봉별 기본급" },
+              { id: "paysettings", label: "급여시간 설정", desc: "야간수당 시간·공제 요율" },
+            ].map((m) => (
+              <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{m.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {activeMenu === "members" && (
           <div>
             <div
