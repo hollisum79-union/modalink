@@ -10173,7 +10173,6 @@ function SalaryTableScreen() {
 }
 
 function PaySettingScreen() {
-function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
   const [rates, setRates] = React.useState<any>(null);
