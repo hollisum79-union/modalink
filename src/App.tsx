@@ -10080,11 +10080,13 @@ function ScheduleUpdateAdmin() {
     </div>
   );
 }
+
 function SalaryTableScreen() {
   const [rows, setRows] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const GRADES = [1, 2, 3, 4, 5, 6, 7];
+  const [uploaded, setUploaded] = React.useState(false);
 
   const load = async () => {
     const { data } = await supabase.from("salary_table").select("*").order("hobong", { ascending: true });
@@ -10120,6 +10122,45 @@ function SalaryTableScreen() {
     setSaving(false);
     alert("저장되었습니다.");
     load();
+    setUploaded(false);
+  };
+
+  const handleExcel = (file: File) => {
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = reject;
+      document.body.appendChild(s);
+    });
+    ensureXLSX().then((XLSX) => {
+      const fr = new FileReader();
+      fr.onload = (ev: any) => {
+        try {
+          const data = new Uint8Array(ev.target.result);
+          const wb = XLSX.read(data, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+          const body = aoa.slice(1).filter((r) => r && r[0] != null && String(r[0]).trim() !== "");
+          const parsed = body.map((r) => {
+            const h = Number(String(r[0]).replace(/[^0-9]/g, "")) || 0;
+            const existing = rows.find((x) => Number(x.hobong) === h);
+            const obj: any = { hobong: h };
+            if (existing?.id) obj.id = existing.id;
+            GRADES.forEach((g, i) => { obj["grade_" + g] = Number(String(r[i + 1] ?? "").replace(/[^0-9]/g, "")) || 0; });
+            return obj;
+          });
+          if (parsed.length === 0) { alert("읽을 수 있는 데이터가 없어요. 양식을 확인해주세요."); return; }
+          parsed.sort((a, b) => a.hobong - b.hobong);
+          setRows(parsed);
+          setUploaded(true);
+        } catch (err) {
+          alert("파일을 읽는 중 문제가 생겼어요. 엑셀 양식을 확인해주세요.");
+        }
+      };
+      fr.readAsArrayBuffer(file);
+    });
   };
 
   if (loading) return <div style={{ padding: 24, textAlign: "center", color: "#9CA3AF" }}>불러오는 중...</div>;
@@ -10128,6 +10169,15 @@ function SalaryTableScreen() {
     <div style={{ padding: "16px 16px 28px" }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>호봉표 관리</div>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>금액을 고치고 저장하면 조합원 급여에 바로 반영돼요</div>
+      <label style={{ display: "block", textAlign: "center", padding: 12, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>
+        엑셀 파일 올리기
+        <input type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleExcel(f); e.currentTarget.value = ""; }} />
+      </label>
+      {uploaded && (
+        <div style={{ background: "#FEF3C7", color: "#92400E", fontSize: 12.5, padding: "10px 12px", borderRadius: 10, marginBottom: 12, lineHeight: 1.5 }}>
+          엑셀에서 {rows.length}개 호봉을 불러왔어요. 표를 확인한 뒤 아래 저장을 눌러야 반영돼요.
+        </div>
+      )}
       <div style={{ overflowX: "auto", background: "#fff", borderRadius: 14, padding: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", WebkitOverflowScrolling: "touch" }}>
         <table style={{ borderCollapse: "collapse", width: "100%" }}>
           <thead>
