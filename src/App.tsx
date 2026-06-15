@@ -10247,23 +10247,30 @@ function SalaryTableScreen() {
   );
 }
 
-// 아래 WorkTimeAdmin 함수 전체를 GitHub의 기존 WorkTimeAdmin 함수와 통째로 교체하세요
-
 function WorkTimeAdmin() {
   const [rows, setRows] = React.useState<any[]>([]);
+  const [allow, setAllow] = React.useState<any[]>([]);
   const [saveMsg, setSaveMsg] = React.useState("");
+  const [adding, setAdding] = React.useState(false);
+  const [newItem, setNewItem] = React.useState<any>({ name: "", calc_type: "manual", amount: "", rate: "", description: "" });
 
-  React.useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from("worktype_pay_settings").select("*").order("work_type");
-      if (data) setRows(data);
-    };
-    load();
-  }, []);
+  const loadAll = async () => {
+    const [w, a] = await Promise.all([
+      supabase.from("worktype_pay_settings").select("*").order("work_type"),
+      supabase.from("allowance_settings").select("*").order("sort_order", { ascending: true }),
+    ]);
+    if (w.data) setRows(w.data);
+    if (a.data) setAllow(a.data);
+  };
+  React.useEffect(() => { loadAll(); }, []);
 
   const updateField = (workType: string, field: string, value: any) => {
     setRows((prev) => prev.map((r) => (r.work_type === workType ? { ...r, [field]: value } : r)));
   };
+  const updateAllow = (id: any, field: string, val: any) => setAllow((prev) => prev.map((x) => (x.id === id ? { ...x, [field]: val } : x)));
+  const toggleVisible = (id: any) => setAllow((prev) => prev.map((x) => (x.id === id ? { ...x, visible: !x.visible } : x)));
+  const typeLabel = (t: string) => t === "auto" ? "자동계산" : t === "fixed" ? "정액" : t === "rate" ? "요율" : "직접입력";
+
   const handleSave = async () => {
     for (const r of rows) {
       await supabase.from("worktype_pay_settings").update({
@@ -10272,28 +10279,121 @@ function WorkTimeAdmin() {
         updated_at: new Date().toISOString(),
       }).eq("work_type", r.work_type);
     }
+    for (const a of allow) {
+      const upd: any = { visible: a.visible, description: a.description || "" };
+      if (a.calc_type === "fixed") upd.amount = Number(a.amount) || 0;
+      if (a.calc_type === "rate") upd.rate = Number(a.rate) || 0;
+      await supabase.from("allowance_settings").update(upd).eq("id", a.id);
+    }
     setSaveMsg("✅ 저장됐어요!");
     setTimeout(() => setSaveMsg(""), 2500);
   };
-  const numInput = (val: any, onChange: any) => (
-    <input type="number" value={val ?? 0} onChange={(e) => onChange(e.target.value)} style={{ width: 64, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }} />
-  );
+
+  const addItem = async () => {
+    if (!newItem.name.trim()) { alert("수당 이름을 입력하세요."); return; }
+    const maxOrder = allow.length ? Math.max(...allow.map((x) => x.sort_order || 0)) : 0;
+    const payload: any = { name: newItem.name.trim(), calc_type: newItem.calc_type, description: newItem.description || "", visible: true, sort_order: maxOrder + 1 };
+    if (newItem.calc_type === "fixed") payload.amount = Number(newItem.amount) || 0;
+    if (newItem.calc_type === "rate") payload.rate = (Number(newItem.rate) || 0) / 100;
+    const { error } = await supabase.from("allowance_settings").insert(payload);
+    if (error) { alert("추가 실패: " + error.message); return; }
+    setNewItem({ name: "", calc_type: "manual", amount: "", rate: "", description: "" });
+    setAdding(false);
+    loadAll();
+  };
+  const delItem = async (a: any) => {
+    if (a.calc_type === "auto") { alert("자동계산 수당은 계산식이 코드에 있어서 삭제할 수 없어요."); return; }
+    if (!window.confirm("'" + a.name + "' 수당을 삭제할까요?")) return;
+    await supabase.from("allowance_settings").delete().eq("id", a.id);
+    setAllow((prev) => prev.filter((x) => x.id !== a.id));
+  };
+
+  const inputStyle: any = { padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, boxSizing: "border-box" };
+  const sectionTitle: any = { fontSize: 13, fontWeight: 700, color: "#4338CA", margin: "18px 0 8px" };
 
   return (
     <div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>수당 설정</div>
-      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>근무유형별 야간 인정시간과 업무보전수당 요율을 입력하세요. 야간 = 22~06시.</div>
-      {rows.map((r) => (
-        <div key={r.work_type} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 4 }}>{r.work_type}</div>
-          {r.work_type === "교번" && (
-            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>야간시간은 다이아에서 자동 계산돼요</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>수당 관리 및 설정</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 4 }}>수당별로 요율·기준을 정하고, 표시·숨김을 관리하세요.</div>
+
+      <div style={sectionTitle}>💰 수당 항목</div>
+      {allow.map((a) => (
+        <div key={a.id} style={{ background: "#fff", borderRadius: 14, padding: "13px 15px", marginBottom: 9, boxShadow: "0 2px 8px rgba(0,0,0,0.04)", opacity: a.visible ? 1 : 0.55 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#374151" }}>{a.name}
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", background: "#F3F4F6", borderRadius: 6, padding: "2px 7px", marginLeft: 6 }}>{typeLabel(a.calc_type)}</span>
+            </span>
+            <button onClick={() => toggleVisible(a.id)} style={{ border: "none", background: a.visible ? "#4F46E5" : "#D1D5DB", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 11, padding: "5px 12px", cursor: "pointer" }}>{a.visible ? "표시" : "숨김"}</button>
+          </div>
+          {a.calc_type === "fixed" ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>고정 금액</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="number" value={a.amount ?? 0} onChange={(e) => updateAllow(a.id, "amount", e.target.value)} style={{ ...inputStyle, width: 100, textAlign: "right" }} />
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>원</span>
+              </span>
+            </div>
+          ) : a.calc_type === "rate" ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>기본급 × 요율</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="number" step="0.001" value={a.rate != null ? Number((Number(a.rate) * 100).toFixed(4)) : 0} onChange={(e) => updateAllow(a.id, "rate", Number(e.target.value) / 100)} style={{ ...inputStyle, width: 80, textAlign: "right" }} />
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>%</span>
+              </span>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 4 }}>지급 기준</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input type="text" value={a.description || ""} onChange={(e) => updateAllow(a.id, "description", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                {a.calc_type !== "auto" && (
+                  <button onClick={() => delItem(a)} style={{ border: "none", background: "none", color: "#D4537E", fontSize: 16, cursor: "pointer", padding: "0 6px" }}>✕</button>
+                )}
+              </div>
+            </>
           )}
-          {r.work_type !== "교번" && (
+          {a.name === "업무보전수당" && (
+            <div style={{ fontSize: 11, color: "#A5B4FC", marginTop: 6 }}>↓ 근무유형별 요율은 아래 구역에서 설정해요</div>
+          )}
+        </div>
+      ))}
+
+      {adding ? (
+        <div style={{ background: "#F5F3FF", borderRadius: 14, padding: "14px 16px", marginBottom: 10, border: "1px solid #C7D2FE" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#4338CA", marginBottom: 10 }}>새 수당 추가</div>
+          <input type="text" placeholder="수당 이름" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} style={{ ...inputStyle, width: "100%", fontSize: 14, marginBottom: 8 }} />
+          <select value={newItem.calc_type} onChange={(e) => setNewItem({ ...newItem, calc_type: e.target.value })} style={{ ...inputStyle, width: "100%", fontSize: 14, marginBottom: 8 }}>
+            <option value="manual">직접 입력형 (조합원이 금액 입력)</option>
+            <option value="fixed">정액형 (모두 같은 금액)</option>
+            <option value="rate">요율형 (기본급 × 요율)</option>
+          </select>
+          {newItem.calc_type === "fixed" && (
+            <input type="number" placeholder="금액 (원)" value={newItem.amount} onChange={(e) => setNewItem({ ...newItem, amount: e.target.value })} style={{ ...inputStyle, width: "100%", fontSize: 14, marginBottom: 8 }} />
+          )}
+          {newItem.calc_type === "rate" && (
+            <input type="number" step="0.001" placeholder="요율 (%)" value={newItem.rate} onChange={(e) => setNewItem({ ...newItem, rate: e.target.value })} style={{ ...inputStyle, width: "100%", fontSize: 14, marginBottom: 8 }} />
+          )}
+          <input type="text" placeholder="지급 기준 설명" value={newItem.description} onChange={(e) => setNewItem({ ...newItem, description: e.target.value })} style={{ ...inputStyle, width: "100%", fontSize: 14, marginBottom: 10 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setAdding(false)} style={{ flex: 1, padding: 11, borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>취소</button>
+            <button onClick={addItem} style={{ flex: 1, padding: 11, borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>추가</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{ width: "100%", padding: 12, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>+ 수당 추가</button>
+      )}
+
+      <div style={sectionTitle}>🌙 근무유형별 야간시간 · 업무보전수당 요율</div>
+      {rows.map((r) => (
+        <div key={r.work_type} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 9, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 4 }}>{r.work_type}</div>
+          {r.work_type === "교번" ? (
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>야간시간은 다이아에서 자동 계산돼요</div>
+          ) : (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, marginTop: 6 }}>
               <span style={{ fontSize: 13, color: "#6B7280" }}>🌙 야간시간</span>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                {numInput(r.night_hours, (v: any) => updateField(r.work_type, "night_hours", v))}
+                <input type="number" value={r.night_hours ?? 0} onChange={(e) => updateField(r.work_type, "night_hours", e.target.value)} style={{ width: 64, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }} />
                 <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
               </div>
             </div>
@@ -10307,6 +10407,7 @@ function WorkTimeAdmin() {
           </div>
         </div>
       ))}
+
       <button onClick={handleSave} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>저장</button>
       {saveMsg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 14, color: "#10B981" }}>{saveMsg}</div>}
     </div>
@@ -11731,7 +11832,7 @@ useEffect(() => {
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>급여 관리</div>
             {[
               { id: "salarytable", label: "호봉표 관리", desc: "등급·호봉별 기본급" },
-             { id: "worktime", label: "수당 설정", desc: "야간시간·업무보전수당 요율" },
+             { id: "worktime", label: "수당 관리 및 설정", desc: "수당 항목·요율·야간시간" },
               { id: "deduction", label: "공제 요율 설정", desc: "4대보험·세금·조합비" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
