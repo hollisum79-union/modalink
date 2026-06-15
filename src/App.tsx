@@ -10244,6 +10244,143 @@ function SalaryTableScreen() {
     </div>
   );
 }
+
+function WorkTimeAdmin() {
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [saveMsg, setSaveMsg] = React.useState("");
+
+  React.useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from("worktype_pay_settings").select("*").order("work_type");
+      if (data) setRows(data);
+    };
+    load();
+  }, []);
+
+  const updateField = (workType: string, field: string, value: any) => {
+    setRows((prev) => prev.map((r) => (r.work_type === workType ? { ...r, [field]: value } : r)));
+  };
+  const handleSave = async () => {
+    for (const r of rows) {
+      await supabase.from("worktype_pay_settings").update({
+        night_hours: Number(r.night_hours) || 0,
+        holiday_day_hours: Number(r.holiday_day_hours) || 0,
+        updated_at: new Date().toISOString(),
+      }).eq("work_type", r.work_type);
+    }
+    setSaveMsg("✅ 저장됐어요!");
+    setTimeout(() => setSaveMsg(""), 2500);
+  };
+  const numInput = (val: any, onChange: any) => (
+    <input type="number" value={val ?? 0} onChange={(e) => onChange(e.target.value)} style={{ width: 64, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }} />
+  );
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>야간수당 시간</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>근무형태별 인정 시간(1회 기준)을 입력하세요. 야간 = 22~06시.</div>
+      {rows.map((r) => (
+        <div key={r.work_type} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 10 }}>{r.work_type}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 13, color: "#6B7280" }}>🌙 야간시간</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {numInput(r.night_hours, (v: any) => updateField(r.work_type, "night_hours", v))}
+              <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 13, color: "#6B7280" }}>☀️ 주간시간</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {numInput(r.holiday_day_hours, (v: any) => updateField(r.work_type, "holiday_day_hours", v))}
+              <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button onClick={handleSave} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>저장</button>
+      {saveMsg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 14, color: "#10B981" }}>{saveMsg}</div>}
+    </div>
+  );
+}
+
+function DeductionAdmin() {
+  const [rates, setRates] = React.useState<any>(null);
+  const [saveMsg, setSaveMsg] = React.useState("");
+
+  React.useEffect(() => {
+    const loadRates = async () => {
+      const { data } = await supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle();
+      if (data) {
+        const pct = (v: any) => (Number(v) * 100).toFixed(3).replace(/\.?0+$/, "");
+        setRates({
+          ...data,
+          national_pension_pct: pct(data.national_pension),
+          health_insurance_pct: pct(data.health_insurance),
+          long_term_care_pct: pct(data.long_term_care),
+          employment_insurance_pct: pct(data.employment_insurance),
+          income_tax_pct: pct(data.income_tax),
+          local_tax_pct: pct(data.local_tax),
+          union_fee_pct: pct(data.union_fee),
+        });
+      }
+    };
+    loadRates();
+  }, []);
+
+  const rateField = (key: string, val: any, onChange: any) => (
+    <input type="number" step="0.001" value={val ?? 0} onChange={(e) => onChange(e.target.value)} style={{ width: 80, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }} />
+  );
+  const updateRate = (field: string, value: any) => setRates((prev: any) => ({ ...prev, [field]: value }));
+  const handleSaveRates = async () => {
+    if (!rates) return;
+    const toNum = (v: any) => Number(v) / 100;
+    const { error } = await supabase.from("deduction_rates").update({
+      national_pension: toNum(rates.national_pension_pct),
+      health_insurance: toNum(rates.health_insurance_pct),
+      long_term_care: toNum(rates.long_term_care_pct),
+      employment_insurance: toNum(rates.employment_insurance_pct),
+      income_tax: toNum(rates.income_tax_pct),
+      local_tax: toNum(rates.local_tax_pct),
+      union_fee: toNum(rates.union_fee_pct),
+    }).eq("id", rates.id);
+    if (error) { setSaveMsg("❌ 저장 실패: " + error.message); setTimeout(() => setSaveMsg(""), 4000); return; }
+    setSaveMsg("✅ 요율 저장됐어요!");
+    setTimeout(() => setSaveMsg(""), 2500);
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>공제 요율 설정</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>% 단위로 입력 (예: 4.75) · {rates?.year ?? ""}년 기준</div>
+      {rates ? (
+        <div style={{ background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+          {[
+            ["국민연금", "national_pension_pct"],
+            ["건강보험", "health_insurance_pct"],
+            ["장기요양 (건보료 대비)", "long_term_care_pct"],
+            ["고용보험", "employment_insurance_pct"],
+            ["소득세", "income_tax_pct"],
+            ["지방소득세 (소득세 대비)", "local_tax_pct"],
+            ["조합비 (기본급 대비)", "union_fee_pct"],
+          ].map(([label, key]) => (
+            <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, color: "#6B7280" }}>{label}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {rateField(key, rates[key], (v: any) => updateRate(key, v))}
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>%</span>
+              </div>
+            </div>
+          ))}
+          <button onClick={handleSaveRates} style={{ width: "100%", marginTop: 8, padding: "12px", background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>요율 저장</button>
+        </div>
+      ) : (
+        <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF" }}>요율 불러오는 중…</div>
+      )}
+      {saveMsg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 14, color: "#10B981" }}>{saveMsg}</div>}
+    </div>
+  );
+}
 function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
@@ -11577,6 +11714,8 @@ useEffect(() => {
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
+        {activeMenu === "worktime" && <WorkTimeAdmin />}
+        {activeMenu === "deduction" && <DeductionAdmin />}
         {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "salarytable" && <SalaryTableScreen />}
         {activeMenu === "salarygroup" && (
@@ -11584,7 +11723,8 @@ useEffect(() => {
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>급여 관리</div>
             {[
               { id: "salarytable", label: "호봉표 관리", desc: "등급·호봉별 기본급" },
-              { id: "paysettings", label: "급여시간 설정", desc: "야간수당 시간·공제 요율" },
+              { id: "worktime", label: "야간수당 시간", desc: "근무형태별 인정 시간" },
+              { id: "deduction", label: "공제 요율 설정", desc: "4대보험·세금·조합비" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
