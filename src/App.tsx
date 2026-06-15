@@ -225,7 +225,9 @@ function computeNetPay(input: any) {
     "4조2교대(비심야)": 0.0675, "4조2교대(심야)": 0.0635,
     "4조2교대(야간집중)": 0.06, 교번: 0.087,
   };
-    const workTypePay = (basicSalary && workType) ? Math.round(basicSalary * (wtRates[workType] ?? 0)) : 0;
+   const wtSetting = worktypeSettings.find((w) => w.work_type === workType);
+  const bojeonRate = (wtSetting && wtSetting.bojeon_rate != null) ? Number(wtSetting.bojeon_rate) : (wtRates[workType] ?? 0);
+    const workTypePay = (basicSalary && workType) ? Math.round(basicSalary * bojeonRate) : 0;
   const g7s1 = (salaryTable.find((r: any) => r.hobong === 1)?.grade_7) ?? 0;
   const bojeonGasanPay = memberInfo?.bojeon_gasan ? Math.round(g7s1 * 0.04) : 0;
 
@@ -10080,7 +10082,313 @@ function ScheduleUpdateAdmin() {
     </div>
   );
 }
+// function SalaryTableScreen 부터 끝 } 까지 전체를 이걸로 교체하세요
 
+function SalaryTableScreen() {
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const GRADES = [1, 2, 3, 4, 5, 6, 7];
+  const [uploaded, setUploaded] = React.useState(false);
+
+  const load = async () => {
+    const { data } = await supabase.from("salary_table").select("*").order("hobong", { ascending: true });
+    setRows(data || []);
+    setLoading(false);
+  };
+  React.useEffect(() => { load(); }, []);
+
+  const updateCell = (idx: number, key: string, val: string) => {
+    const n = Number(String(val).replace(/[^0-9]/g, "")) || 0;
+    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [key]: n } : r)));
+  };
+  const addRow = () => {
+    const nextH = rows.length ? Math.max(...rows.map((r) => Number(r.hobong))) + 1 : 1;
+    const nr: any = { hobong: nextH };
+    GRADES.forEach((g) => { nr["grade_" + g] = 0; });
+    setRows((prev) => [...prev, nr]);
+  };
+  const delRow = async (idx: number) => {
+    const r = rows[idx];
+    if (!window.confirm(r.hobong + "호봉 줄을 삭제할까요?")) return;
+    if (r.id) await supabase.from("salary_table").delete().eq("id", r.id);
+    setRows((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const save = async () => {
+    setSaving(true);
+    for (const r of rows) {
+      const payload: any = { hobong: Number(r.hobong) };
+      GRADES.forEach((g) => { payload["grade_" + g] = Number(r["grade_" + g]) || 0; });
+      if (r.id) await supabase.from("salary_table").update(payload).eq("id", r.id);
+      else await supabase.from("salary_table").insert(payload);
+    }
+    setSaving(false);
+    alert("저장되었습니다.");
+    load();
+    setUploaded(false);
+  };
+
+  const handleExcel = (file: File) => {
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = reject;
+      document.body.appendChild(s);
+    });
+    ensureXLSX().then((XLSX) => {
+      const fr = new FileReader();
+      fr.onload = (ev: any) => {
+        try {
+          const data = new Uint8Array(ev.target.result);
+          const wb = XLSX.read(data, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+          const body = aoa.slice(1).filter((r) => r && r[0] != null && String(r[0]).trim() !== "");
+          const parsed = body.map((r) => {
+            const h = Number(String(r[0]).replace(/[^0-9]/g, "")) || 0;
+            const existing = rows.find((x) => Number(x.hobong) === h);
+            const obj: any = { hobong: h };
+            if (existing?.id) obj.id = existing.id;
+            GRADES.forEach((g, i) => { obj["grade_" + g] = Number(String(r[i + 1] ?? "").replace(/[^0-9]/g, "")) || 0; });
+            return obj;
+          });
+          if (parsed.length === 0) { alert("읽을 수 있는 데이터가 없어요. 양식을 확인해주세요."); return; }
+          parsed.sort((a, b) => a.hobong - b.hobong);
+          setRows(parsed);
+          setUploaded(true);
+        } catch (err) {
+          alert("파일을 읽는 중 문제가 생겼어요. 엑셀 양식을 확인해주세요.");
+        }
+      };
+      fr.readAsArrayBuffer(file);
+    });
+  };
+
+  const downloadTemplate = () => {
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = reject;
+      document.body.appendChild(s);
+    });
+    ensureXLSX().then((XLSX) => {
+      const header = ["호봉", ...GRADES.map((g) => g + "급")];
+      const aoa = [header, [1, "", "", "", "", "", "", ""]];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "호봉표");
+      XLSX.writeFile(wb, "호봉표_양식.xlsx");
+    });
+  };
+
+  if (loading) return <div style={{ padding: 24, textAlign: "center", color: "#9CA3AF" }}>불러오는 중...</div>;
+
+  return (
+    <div style={{ padding: "16px 16px 28px" }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>호봉표 관리</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>금액을 고치고 저장하면 조합원 급여에 바로 반영돼요</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <label style={{ flex: 1, textAlign: "center", padding: 12, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>
+          엑셀 올리기
+          <input type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleExcel(f); e.currentTarget.value = ""; }} />
+        </label>
+        <button onClick={downloadTemplate} style={{ flex: 1, padding: 12, borderRadius: 12, border: "1.5px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>양식 내려받기</button>
+      </div>
+      {uploaded && (
+        <div style={{ background: "#FEF3C7", color: "#92400E", fontSize: 12.5, padding: "10px 12px", borderRadius: 10, marginBottom: 12, lineHeight: 1.5 }}>
+          엑셀에서 {rows.length}개 호봉을 불러왔어요. 표를 확인한 뒤 아래 저장을 눌러야 반영돼요.
+        </div>
+      )}
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 440, background: "#fff", borderRadius: 14, padding: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "7px 6px", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "2px solid #EEF0F4", whiteSpace: "nowrap" }}>호봉</th>
+              {GRADES.map((g) => (
+                <th key={g} style={{ padding: "7px 6px", fontSize: 12, fontWeight: 700, color: "#6B7280", borderBottom: "2px solid #EEF0F4", whiteSpace: "nowrap" }}>{g}급</th>
+              ))}
+              <th style={{ borderBottom: "2px solid #EEF0F4" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, idx) => (
+              <tr key={r.id ?? "new" + idx}>
+                <td style={{ padding: "6px 6px", textAlign: "center" }}>
+                  <span style={{ display: "inline-block", fontSize: 13, fontWeight: 700, color: "#4338CA", background: "#F3F0FF", borderRadius: 8, padding: "6px 8px", whiteSpace: "nowrap" }}>{r.hobong}호봉</span>
+                </td>
+                {GRADES.map((g) => (
+                  <td key={g} style={{ padding: "6px 4px", textAlign: "center" }}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={Number(r["grade_" + g] || 0).toLocaleString()}
+                      onChange={(e) => updateCell(idx, "grade_" + g, e.target.value)}
+                      style={{ width: 78, padding: "7px 4px", border: "1.5px solid #E8E8F0", borderRadius: 8, fontSize: 13, textAlign: "right", outline: "none" }}
+                    />
+                  </td>
+                ))}
+                <td style={{ padding: "6px 4px", textAlign: "center" }}>
+                  <button onClick={() => delRow(idx)} style={{ background: "none", border: "none", color: "#D4537E", fontSize: 15, cursor: "pointer", padding: 4 }}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button onClick={addRow} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px dashed #A5B4FC", background: "#fff", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>+ 호봉 추가</button>
+        <button onClick={save} disabled={saving} style={{ flex: 1, padding: 13, borderRadius: 12, border: "none", background: saving ? "#A5B4FC" : "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>{saving ? "저장 중..." : "저장"}</button>
+      </div>
+    </div>
+  );
+}
+
+// 아래 WorkTimeAdmin 함수 전체를 GitHub의 기존 WorkTimeAdmin 함수와 통째로 교체하세요
+
+function WorkTimeAdmin() {
+  const [rows, setRows] = React.useState<any[]>([]);
+  const [saveMsg, setSaveMsg] = React.useState("");
+
+  React.useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from("worktype_pay_settings").select("*").order("work_type");
+      if (data) setRows(data);
+    };
+    load();
+  }, []);
+
+  const updateField = (workType: string, field: string, value: any) => {
+    setRows((prev) => prev.map((r) => (r.work_type === workType ? { ...r, [field]: value } : r)));
+  };
+  const handleSave = async () => {
+    for (const r of rows) {
+      await supabase.from("worktype_pay_settings").update({
+        night_hours: Number(r.night_hours) || 0,
+        bojeon_rate: Number(r.bojeon_rate) || 0,
+        updated_at: new Date().toISOString(),
+      }).eq("work_type", r.work_type);
+    }
+    setSaveMsg("✅ 저장됐어요!");
+    setTimeout(() => setSaveMsg(""), 2500);
+  };
+  const numInput = (val: any, onChange: any) => (
+    <input type="number" value={val ?? 0} onChange={(e) => onChange(e.target.value)} style={{ width: 64, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }} />
+  );
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>수당 설정</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>근무유형별 야간 인정시간과 업무보전수당 요율을 입력하세요. 야간 = 22~06시.</div>
+      {rows.map((r) => (
+        <div key={r.work_type} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 4 }}>{r.work_type}</div>
+          {r.work_type === "교번" && (
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8 }}>야간시간은 다이아에서 자동 계산돼요</div>
+          )}
+          {r.work_type !== "교번" && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, marginTop: 6 }}>
+              <span style={{ fontSize: 13, color: "#6B7280" }}>🌙 야간시간</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {numInput(r.night_hours, (v: any) => updateField(r.work_type, "night_hours", v))}
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>시간</span>
+              </div>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F3F4F6", paddingTop: 10 }}>
+            <span style={{ fontSize: 13, color: "#4F46E5", fontWeight: 600 }}>% 업무보전수당 요율</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input type="number" step="0.001" value={r.bojeon_rate != null ? Number((Number(r.bojeon_rate) * 100).toFixed(4)) : 0} onChange={(e) => updateField(r.work_type, "bojeon_rate", Number(e.target.value) / 100)} style={{ width: 70, padding: "8px 10px", borderRadius: 8, border: "1px solid #C7D2FE", fontSize: 14, textAlign: "right" }} />
+              <span style={{ fontSize: 13, color: "#9CA3AF" }}>%</span>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button onClick={handleSave} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>저장</button>
+      {saveMsg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 14, color: "#10B981" }}>{saveMsg}</div>}
+    </div>
+  );
+}
+function DeductionAdmin() {
+  const [rates, setRates] = React.useState<any>(null);
+  const [saveMsg, setSaveMsg] = React.useState("");
+
+  React.useEffect(() => {
+    const loadRates = async () => {
+      const { data } = await supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle();
+      if (data) {
+        const pct = (v: any) => (Number(v) * 100).toFixed(3).replace(/\.?0+$/, "");
+        setRates({
+          ...data,
+          national_pension_pct: pct(data.national_pension),
+          health_insurance_pct: pct(data.health_insurance),
+          long_term_care_pct: pct(data.long_term_care),
+          employment_insurance_pct: pct(data.employment_insurance),
+          income_tax_pct: pct(data.income_tax),
+          local_tax_pct: pct(data.local_tax),
+          union_fee_pct: pct(data.union_fee),
+        });
+      }
+    };
+    loadRates();
+  }, []);
+
+  const rateField = (key: string, val: any, onChange: any) => (
+    <input type="number" step="0.001" value={val ?? 0} onChange={(e) => onChange(e.target.value)} style={{ width: 80, padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, textAlign: "right" }} />
+  );
+  const updateRate = (field: string, value: any) => setRates((prev: any) => ({ ...prev, [field]: value }));
+  const handleSaveRates = async () => {
+    if (!rates) return;
+    const toNum = (v: any) => Number(v) / 100;
+    const { error } = await supabase.from("deduction_rates").update({
+      national_pension: toNum(rates.national_pension_pct),
+      health_insurance: toNum(rates.health_insurance_pct),
+      long_term_care: toNum(rates.long_term_care_pct),
+      employment_insurance: toNum(rates.employment_insurance_pct),
+      income_tax: toNum(rates.income_tax_pct),
+      local_tax: toNum(rates.local_tax_pct),
+      union_fee: toNum(rates.union_fee_pct),
+    }).eq("id", rates.id);
+    if (error) { setSaveMsg("❌ 저장 실패: " + error.message); setTimeout(() => setSaveMsg(""), 4000); return; }
+    setSaveMsg("✅ 요율 저장됐어요!");
+    setTimeout(() => setSaveMsg(""), 2500);
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>공제 요율 설정</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>% 단위로 입력 (예: 4.75) · {rates?.year ?? ""}년 기준</div>
+      {rates ? (
+        <div style={{ background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+          {[
+            ["국민연금", "national_pension_pct"],
+            ["건강보험", "health_insurance_pct"],
+            ["장기요양 (건보료 대비)", "long_term_care_pct"],
+            ["고용보험", "employment_insurance_pct"],
+            ["소득세", "income_tax_pct"],
+            ["지방소득세 (소득세 대비)", "local_tax_pct"],
+            ["조합비 (기본급 대비)", "union_fee_pct"],
+          ].map(([label, key]) => (
+            <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, color: "#6B7280" }}>{label}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {rateField(key, rates[key], (v: any) => updateRate(key, v))}
+                <span style={{ fontSize: 13, color: "#9CA3AF" }}>%</span>
+              </div>
+            </div>
+          ))}
+          <button onClick={handleSaveRates} style={{ width: "100%", marginTop: 8, padding: "12px", background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>요율 저장</button>
+        </div>
+      ) : (
+        <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF" }}>요율 불러오는 중…</div>
+      )}
+      {saveMsg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 14, color: "#10B981" }}>{saveMsg}</div>}
+    </div>
+  );
+}
 function PaySettingScreen() {
   const [rows, setRows] = React.useState([]);
   const [saveMsg, setSaveMsg] = React.useState("");
@@ -11188,8 +11496,8 @@ useEffect(() => {
       badge: 0,
     },
     {
-      id: "paysettings",
-      label: "급여시간 설정",
+      id: "salarygroup",
+      label: "급여 관리",
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
       color: "#7C3AED",
       bg: "#F3E8FF",
@@ -11414,7 +11722,25 @@ useEffect(() => {
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
+        {activeMenu === "worktime" && <WorkTimeAdmin />}
+        {activeMenu === "deduction" && <DeductionAdmin />}
         {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
+        {activeMenu === "salarytable" && <SalaryTableScreen />}
+        {activeMenu === "salarygroup" && (
+          <div style={{ padding: "16px 16px 28px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>급여 관리</div>
+            {[
+              { id: "salarytable", label: "호봉표 관리", desc: "등급·호봉별 기본급" },
+             { id: "worktime", label: "수당 설정", desc: "야간시간·업무보전수당 요율" },
+              { id: "deduction", label: "공제 요율 설정", desc: "4대보험·세금·조합비" },
+            ].map((m) => (
+              <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{m.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {activeMenu === "members" && (
           <div>
             <div
@@ -19183,7 +19509,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       "4조2교대(야간집중)": 0.06,
       교번: 0.087,
     };
-    return Math.round(basicSalary * (rates[workType] ?? 0));
+    const wtSetting = worktypeSettings.find((w) => w.work_type === workType);
+    const rate = (wtSetting && wtSetting.bojeon_rate != null) ? Number(wtSetting.bojeon_rate) : (rates[workType] ?? 0);
+    return Math.round(basicSalary * rate);
   };
 
   const getAllowanceAmount = (item: string): number => {
