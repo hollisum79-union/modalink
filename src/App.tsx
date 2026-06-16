@@ -13051,20 +13051,29 @@ function PwChangeSection({ user }) {
       return;
     }
     setLoading(true);
-    const { data } = await supabase
-      .from("members")
-      .select("password")
-      .eq("employee_number", user?.emp_id)
-      .single();
-    if (!data || data.password !== curPw) {
+    let json;
+    try {
+      const res = await fetch("/.netlify/functions/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_number: user?.emp_id,
+          name: user?.name,
+          current_password: curPw,
+          new_password: newPw,
+        }),
+      });
+      json = await res.json();
+    } catch (e) {
+      setLoading(false);
+      setError("변경 중 오류가 발생했습니다.");
+      return;
+    }
+    if (json.result !== "ok") {
       setLoading(false);
       setError("현재 비밀번호가 올바르지 않습니다.");
       return;
     }
-    await supabase
-      .from("members")
-      .update({ password: newPw, is_temp_password: false })
-      .eq("employee_number", user?.emp_id);
     setLoading(false);
     setDone(true);
     setCurPw("");
