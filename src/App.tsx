@@ -11489,20 +11489,27 @@ function expandRouteRuns(runs: any[]): { flat: any[]; warnings: string[] } {
   const flat: any[] = [];
   const warnings: string[] = [];
   (runs || []).forEach((r, ri) => {
-    const tns = splitComma(r.train_no).filter((x) => x);
-    if (tns.length === 0) return;
-    const secs = splitComma(r.section);
+    const isRide = String(r.section || "").includes("편승") || String(r.train_no || "").includes("편승");
+    const idxs = parseRouteAbbr(r.section);
     const sts = splitComma(r.start_time);
     const ets = splitComma(r.end_time);
-    const n = tns.length;
-    const secN = secs.filter((x) => x).length;
-    const stN = sts.filter((x) => x).length;
-    const etN = ets.filter((x) => x).length;
-    if (secN !== n || (stN > 0 && stN !== n) || (etN > 0 && etN !== n)) {
-      warnings.push(`${ri + 1}행: 열번 ${n}·구간 ${secN}·출발 ${stN}·도착 ${etN} — 개수 확인`);
+    if (isRide) {
+      flat.push({ train_no: "편승", idxs, start_time: sts[0] || "", end_time: ets[0] || "", isRide: true });
+      return;
     }
-    for (let k = 0; k < n; k++) {
-      flat.push({ train_no: tns[k], section: secs[k] || "", start_time: sts[k] || "", end_time: ets[k] || "" });
+    const tns = splitComma(r.train_no).filter((x) => x);
+    if (tns.length === 0) return;
+    const N = tns.length;
+    const M = idxs.length;
+    if (N === 1) {
+      flat.push({ train_no: tns[0], idxs, start_time: sts[0] || "", end_time: ets[0] || "" });
+      if (M < 2) warnings.push(`${ri + 1}행: 구간(약자)이 비었거나 역이 1개예요`);
+    } else {
+      if (N !== M - 1) warnings.push(`${ri + 1}행: 열번 ${N}개면 역 ${N + 1}개 필요 (지금 ${M}개) — 확인`);
+      const segs = Math.min(N, Math.max(M - 1, 0));
+      for (let k = 0; k < segs; k++) {
+        flat.push({ train_no: tns[k], idxs: [idxs[k], idxs[k + 1]], start_time: sts[k] || "", end_time: ets[k] || "" });
+      }
     }
   });
   return { flat, warnings };
@@ -11513,10 +11520,9 @@ function RouteDiagram({ runs }: { runs: any[] }) {
   const W = padL + 17 * step + 40;
   const { flat, warnings } = expandRouteRuns(runs);
   const rows = flat.map((r) => {
-    const isRide = String(r.section || "").includes("편승") || String(r.train_no || "").includes("편승");
-    const idxs = parseRouteAbbr(r.section);
-    return { train_no: r.train_no, start_time: r.start_time, end_time: r.end_time, idxs, isRide, from: idxs[0], to: idxs[idxs.length - 1] };
-  }).filter((r) => r.isRide || r.idxs.length >= 1);
+    const idxs = r.idxs || [];
+    return { train_no: r.train_no, start_time: r.start_time, end_time: r.end_time, idxs, isRide: !!r.isRide, from: idxs[0], to: idxs[idxs.length - 1] };
+  }).filter((r) => r.idxs.length >= 2);
   const warnBox = warnings.length > 0 ? <div style={{ color: "#DC2626", fontSize: 11, padding: "0 2px 8px", lineHeight: 1.5 }}>⚠️ {warnings.join(" / ")}</div> : null;
   if (rows.length === 0) return <div>{warnBox}<div style={{ fontSize: 12, color: "#9CA3AF", padding: "14px 4px" }}>약자를 입력하면 여기에 행로가 그려져요.</div></div>;
   const H = top + rows.length * rowH + 24;
@@ -11551,13 +11557,15 @@ function RouteDiagram({ runs }: { runs: any[] }) {
           const toIn = r.to === 0 || r.to === 17;
           const mx = (xOf(r.idxs[0]) + xOf(r.idxs[r.idxs.length - 1])) / 2;
           const prev = rows[i - 1];
-          const vlink = prev && !prev.isRide && prev.idxs.length && prev.to === r.from;
+          const next = rows[i + 1];
+          const linkedFrom = prev && !prev.isRide && prev.idxs.length && prev.to === r.from;
+          const linkedTo = next && !next.isRide && next.idxs.length && next.from === r.to;
           return (
             <g key={i}>
-              {vlink && <line x1={xOf(r.from)} y1={top + (i - 1) * rowH + 16} x2={xOf(r.from)} y2={y} stroke="#111" strokeWidth="2" />}
+              {linkedFrom && <line x1={xOf(r.from)} y1={top + (i - 1) * rowH + 16} x2={xOf(r.from)} y2={y} stroke="#111" strokeWidth="2.5" />}
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
-              {fromOut ? <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" /> : <circle cx={xOf(r.from)} cy={y} r="3.5" fill="#111" />}
-              {toIn ? <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" /> : <circle cx={xOf(r.to)} cy={y} r="3.5" fill="#111" />}
+              {fromOut ? <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" /> : (!linkedFrom && <circle cx={xOf(r.from)} cy={y} r="3.5" fill="#111" />)}
+              {toIn ? <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" /> : (!linkedTo && <circle cx={xOf(r.to)} cy={y} r="3.5" fill="#111" />)}
               <text x={xOf(r.idxs[0]) - 7} y={y - 6} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
               <text x={xOf(r.idxs[r.idxs.length - 1]) + 7} y={y - 6} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
@@ -11594,7 +11602,7 @@ function RouteInputScreen() {
   const save = async () => {
     if (!diaNo.trim()) { setMsg("다이아 번호를 입력하세요."); return; }
     const { flat } = expandRouteRuns(runs);
-    const rows = flat.filter((r) => r.train_no).map((r, i) => ({ dia_no: diaNo.trim(), category: cat, train_no: r.train_no, section: r.section, start_time: r.start_time, end_time: r.end_time, seq: i }));
+    const rows = flat.filter((r) => r.train_no && r.idxs && r.idxs.length >= 1).map((r, i) => ({ dia_no: diaNo.trim(), category: cat, train_no: r.train_no, section: r.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: r.start_time, end_time: r.end_time, seq: i }));
     if (rows.length === 0) { setMsg("열번을 1개 이상 입력하세요."); return; }
     setLoading(true);
     await supabase.from("dia_route").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
@@ -11652,9 +11660,9 @@ function RouteInputScreen() {
             const ex = expandRouteRuns([{ train_no: g(r, "열번"), section: g(r, "구간"), start_time: g(r, "출발"), end_time: g(r, "도착") }]).flat;
             const key = dia + "|" + c;
             ex.forEach((x) => {
-              if (!x.train_no) return;
+              if (!x.train_no || !x.idxs || !x.idxs.length) return;
               seqMap[key] = (seqMap[key] ?? -1) + 1;
-              rows.push({ dia_no: dia, category: c, train_no: x.train_no, section: x.section, start_time: x.start_time, end_time: x.end_time, seq: seqMap[key] });
+              rows.push({ dia_no: dia, category: c, train_no: x.train_no, section: x.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: x.start_time, end_time: x.end_time, seq: seqMap[key] });
             });
           });
           if (rows.length === 0) { setMsg("읽을 행이 없어요 (열번 칸 확인)"); return; }
