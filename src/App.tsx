@@ -11510,6 +11510,13 @@ function expandRouteRuns(runs: any[]): { flat: any[]; warnings: string[] } {
   });
   return { flat, warnings };
 }
+function fmtHours(n: any): string {
+  const total = Math.round((Number(n) || 0) * 3600);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 function RouteDiagram({ runs }: { runs: any[] }) {
   const padL = 44, step = 48, top = 50, rowH = 36;
   const xOf = (idx: number) => padL + idx * step;
@@ -11578,6 +11585,7 @@ function RouteInputScreen() {
   const [diaNo, setDiaNo] = useState("");
   const [cat, setCat] = useState("평일");
   const [workForm, setWorkForm] = useState("");
+  const [diaInfo, setDiaInfo] = useState<any>(null);
   const [runs, setRuns] = useState<any[]>([{ train_no: "", section: "", start_time: "", end_time: "" }]);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -11595,6 +11603,14 @@ function RouteInputScreen() {
   };
 
   const addRun = () => setRuns((p) => [...p, { train_no: "", section: "", start_time: "", end_time: "" }]);
+  React.useEffect(() => {
+    const d = diaNo.trim();
+    if (!d) { setDiaInfo(null); return; }
+    supabase.from("kyobun_dia").select("*").eq("dia_no", Number(d) || d).then(({ data }: any) => {
+      const list = data || [];
+      setDiaInfo(list.find((r: any) => r.day_type === cat) || list[0] || null);
+    });
+  }, [diaNo, cat]);
   const delRun = (i: number) => setRuns((p) => p.filter((_, idx) => idx !== i));
   const upd = (i: number, k: string, v: string) => setRuns((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
 
@@ -11738,6 +11754,25 @@ function RouteInputScreen() {
       {msg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: "#4F46E5" }}>{msg}</div>}
       <div style={{ marginTop: 18, marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>미리보기 (약자로 자동 생성)</div>
       <RouteDiagram runs={runs} />
+      {diaInfo && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>다이아 시간 (다이아 입력 자료)</div>
+          <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: 660 }}>
+              <thead>
+                <tr>{["주행키로", "출근", "인정근무", "운전", "대기", "편승", "감시", "교육", "준비", "정리", "심야"].map((h) => (
+                  <th key={h} style={{ border: "1px solid #E5E7EB", padding: "6px 8px", background: "#F3F4F6", color: "#374151", whiteSpace: "nowrap", fontWeight: 700 }}>{h}</th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                <tr>{[diaInfo.distance_km ?? "-", diaInfo.start_time ?? "-", fmtHours(diaInfo.work_hours), fmtHours(diaInfo.drive_hours), fmtHours(diaInfo.wait_hours), fmtHours(diaInfo.ride_hours), fmtHours(diaInfo.watch_hours), fmtHours(diaInfo.edu_hours), fmtHours(diaInfo.prep_hours), fmtHours(diaInfo.clean_hours), fmtHours(diaInfo.night_hours)].map((v, i) => (
+                  <td key={i} style={{ border: "1px solid #E5E7EB", padding: "6px 8px", textAlign: "center", whiteSpace: "nowrap", color: "#374151" }}>{v}</td>
+                ))}</tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
