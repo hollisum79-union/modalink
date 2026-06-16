@@ -11577,6 +11577,7 @@ function RouteDiagram({ runs }: { runs: any[] }) {
 function RouteInputScreen() {
   const [diaNo, setDiaNo] = useState("");
   const [cat, setCat] = useState("평일");
+  const [workForm, setWorkForm] = useState("");
   const [runs, setRuns] = useState<any[]>([{ train_no: "", section: "", start_time: "", end_time: "" }]);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -11584,6 +11585,8 @@ function RouteInputScreen() {
   const loadExisting = async () => {
     if (!diaNo.trim()) return;
     const { data } = await supabase.from("dia_route").select("*").eq("dia_no", diaNo.trim()).eq("category", cat).order("seq", { ascending: true });
+    const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", diaNo.trim()).eq("category", cat).maybeSingle();
+    setWorkForm(wf && wf.work_form ? wf.work_form : "");
     if (data && data.length > 0) {
       setRuns(data.map((r: any) => ({ train_no: r.train_no || "", section: r.section || "", start_time: r.start_time || "", end_time: r.end_time || "" })));
       setMsg("📂 기존 입력을 불러왔어요");
@@ -11603,8 +11606,14 @@ function RouteInputScreen() {
     setLoading(true);
     await supabase.from("dia_route").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
     const { error } = await supabase.from("dia_route").insert(rows);
+    await supabase.from("dia_work_form").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
+    if (workForm.trim()) await supabase.from("dia_work_form").insert({ dia_no: diaNo.trim(), category: cat, work_form: workForm.trim() });
     setLoading(false);
-    setMsg(error ? "❌ 저장 실패: " + error.message : "✅ 저장됐어요!");
+    if (error) { setMsg("❌ 저장 실패: " + error.message); setTimeout(() => setMsg(""), 3000); return; }
+    setMsg("✅ 저장됐어요! (새로 입력하세요)");
+    setDiaNo("");
+    setWorkForm("");
+    setRuns([{ train_no: "", section: "", start_time: "", end_time: "" }]);
     setTimeout(() => setMsg(""), 3000);
   };
 
@@ -11705,6 +11714,11 @@ function RouteInputScreen() {
             {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
+      </div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>근무형태 (약어, 통으로)</div>
+        <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>편승도우미 등에서 열번 검색 시 보여줄 근무형태예요. (그림은 아래 열번별 행로로 그려져요)</div>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>열번별 행로</div>
       <div style={{ ...grid, fontSize: 10, color: "#9CA3AF", marginBottom: 4, padding: "0 2px" }}>
@@ -14299,6 +14313,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [rideQ, setRideQ] = React.useState("");
   const [rideHits, setRideHits] = React.useState<any[]>([]);
   const [rideSel, setRideSel] = React.useState<string | null>(null);
+  const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
   const doRideSearch = async () => {
     const q = rideQ.trim();
     setRideSel(null);
@@ -14307,6 +14322,13 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
     const sorted = (data || []).sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (a.dia_no - b.dia_no));
     setRideHits(sorted);
+    const wfMap: any = {};
+    if (sorted.length > 0) {
+      const dias = Array.from(new Set(sorted.map((r: any) => String(r.dia_no))));
+      const { data: wfs } = await supabase.from("dia_work_form").select("*").in("dia_no", dias);
+      (wfs || []).forEach((w: any) => { wfMap[String(w.dia_no) + "|" + w.category] = w.work_form; });
+    }
+    setRideWorkForms(wfMap);
     const cats = Array.from(new Set(sorted.map((r: any) => r.category)));
     if (cats.length === 1) setRideSel(cats[0] as string);
   };
@@ -16174,6 +16196,7 @@ const getKyobunWork = (member: any, date: Date) => {
                     <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", textAlign: "center", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
                       <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
+                      {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
                       {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
                     </div>
                   );
