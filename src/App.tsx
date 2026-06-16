@@ -11510,6 +11510,32 @@ function expandRouteRuns(runs: any[]): { flat: any[]; warnings: string[] } {
   });
   return { flat, warnings };
 }
+function mergeGroupRows(grpRows: any[]) {
+  const sorted = [...grpRows].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  const trains = sorted.map((r) => r.train_no).join(",");
+  const starts = sorted.map((r) => r.start_time).join(",");
+  const ends = sorted.map((r) => r.end_time).join(",");
+  let merged: number[] = [];
+  sorted.forEach((r, i) => {
+    const ix = parseRouteAbbr(r.section);
+    if (i === 0) merged = merged.concat(ix);
+    else if (merged.length && ix.length && merged[merged.length - 1] === ix[0]) merged = merged.concat(ix.slice(1));
+    else merged = merged.concat(ix);
+  });
+  const section = merged.map((id) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join("");
+  return { train_no: trains, section, start_time: starts, end_time: ends };
+}
+function rebuildRuns(data: any[]) {
+  const key = (r: any) => (r.grp && r.grp > 0 ? "g" + r.grp : "s" + r.seq);
+  const groups: any = {};
+  const order: string[] = [];
+  [...data].sort((a, b) => (a.seq || 0) - (b.seq || 0)).forEach((r) => {
+    const k = key(r);
+    if (!groups[k]) { groups[k] = []; order.push(k); }
+    groups[k].push(r);
+  });
+  return order.map((k) => mergeGroupRows(groups[k]));
+}
 function fmtHours(n: any): string {
   const total = Math.round((Number(n) || 0) * 3600);
   const h = Math.floor(total / 3600);
@@ -11596,7 +11622,7 @@ function RouteInputScreen() {
     const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", diaNo.trim()).eq("category", cat).maybeSingle();
     setWorkForm(wf && wf.work_form ? wf.work_form : "");
     if (data && data.length > 0) {
-      setRuns(data.map((r: any) => ({ train_no: r.train_no || "", section: r.section || "", start_time: r.start_time || "", end_time: r.end_time || "" })));
+      setRuns(rebuildRuns(data));
       setMsg("📂 기존 입력을 불러왔어요");
       setTimeout(() => setMsg(""), 2000);
     }
@@ -11616,7 +11642,7 @@ function RouteInputScreen() {
     const { data } = await supabase.from("dia_route").select("*").eq("dia_no", d).eq("category", c).order("seq", { ascending: true });
     const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", d).eq("category", c).maybeSingle();
     setWorkForm(wf && wf.work_form ? wf.work_form : "");
-    if (data && data.length > 0) setRuns(data.map((r: any) => ({ train_no: r.train_no || "", section: r.section || "", start_time: r.start_time || "", end_time: r.end_time || "" })));
+    if (data && data.length > 0) setRuns(rebuildRuns(data));
     setMsg("📂 불러왔어요 — 수정 후 저장");
     setTimeout(() => setMsg(""), 2500);
   };
@@ -11634,7 +11660,7 @@ function RouteInputScreen() {
   const save = async () => {
     if (!diaNo.trim()) { setMsg("다이아 번호를 입력하세요."); return; }
     const { flat } = expandRouteRuns(runs);
-    const rows = flat.filter((r) => r.train_no && r.idxs && r.idxs.length >= 1).map((r, i) => ({ dia_no: diaNo.trim(), category: cat, train_no: r.train_no, section: r.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: r.start_time, end_time: r.end_time, seq: i }));
+    const rows = flat.filter((r) => r.train_no && r.idxs && r.idxs.length >= 1).map((r, i) => ({ dia_no: diaNo.trim(), category: cat, train_no: r.train_no, section: r.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: r.start_time, end_time: r.end_time, seq: i, grp: (r.group ?? 0) + 1 }));
     if (rows.length === 0) { setMsg("열번을 1개 이상 입력하세요."); return; }
     setLoading(true);
     await supabase.from("dia_route").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
@@ -11693,15 +11719,18 @@ function RouteInputScreen() {
           const g = (r: any[], name: string) => String(r[col[name]] ?? "").trim();
           const dataRows = aoa.slice(1).filter((r) => r && g(r, "열번"));
           const seqMap: any = {};
+          const grpMap: any = {};
           const rows: any[] = [];
           dataRows.forEach((r) => {
             const dia = g(r, "다이아"); const c = g(r, "구분");
             const ex = expandRouteRuns([{ train_no: g(r, "열번"), section: g(r, "구간"), start_time: g(r, "출발"), end_time: g(r, "도착") }]).flat;
             const key = dia + "|" + c;
+            grpMap[key] = (grpMap[key] ?? 0) + 1;
+            const thisGrp = grpMap[key];
             ex.forEach((x) => {
               if (!x.train_no || !x.idxs || !x.idxs.length) return;
               seqMap[key] = (seqMap[key] ?? -1) + 1;
-              rows.push({ dia_no: dia, category: c, train_no: x.train_no, section: x.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: x.start_time, end_time: x.end_time, seq: seqMap[key] });
+              rows.push({ dia_no: dia, category: c, train_no: x.train_no, section: x.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: x.start_time, end_time: x.end_time, seq: seqMap[key], grp: thisGrp });
             });
           });
           if (rows.length === 0) { setMsg("읽을 행이 없어요 (열번 칸 확인)"); return; }
