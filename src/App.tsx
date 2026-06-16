@@ -11447,6 +11447,99 @@ function FieldActivityAdmin() {
     </div>
   );
 }
+const ROUTE_STATIONS = [
+  { name: "도봉기", abbr: "도기" },
+  { name: "장암역", abbr: "장" },
+  { name: "도봉산", abbr: "도" },
+  { name: "수락산", abbr: "수" },
+  { name: "태릉입", abbr: "태" },
+  { name: "어린이", abbr: "대" },
+  { name: "건대입", abbr: "건" },
+  { name: "청담역", abbr: "청" },
+  { name: "내방역", abbr: "내" },
+  { name: "보라매", abbr: "보" },
+  { name: "신풍역", abbr: "신" },
+  { name: "가산디", abbr: "가" },
+  { name: "광명사", abbr: "광" },
+  { name: "천왕역", abbr: "천" },
+  { name: "온수", abbr: "온" },
+  { name: "부평구", abbr: "부" },
+  { name: "석남", abbr: "석" },
+  { name: "천왕기", abbr: "천기" },
+];
+function parseRouteAbbr(s: string): number[] {
+  const str = String(s || "").replace(/\s/g, "");
+  const idxs: number[] = [];
+  let i = 0;
+  while (i < str.length) {
+    const two = str.substr(i, 2);
+    if (two === "도기") { idxs.push(0); i += 2; continue; }
+    if (two === "천기") { idxs.push(17); i += 2; continue; }
+    const one = str[i];
+    const f = ROUTE_STATIONS.findIndex((st) => st.abbr === one);
+    if (f >= 0) { idxs.push(f); i += 1; continue; }
+    i += 1;
+  }
+  return idxs;
+}
+function RouteDiagram({ runs }: { runs: any[] }) {
+  const padL = 44, step = 48, top = 50, rowH = 36;
+  const xOf = (idx: number) => padL + idx * step;
+  const W = padL + 17 * step + 40;
+  const rows = (runs || []).map((r) => {
+    const isRide = String(r.section || "").includes("편승") || String(r.train_no || "").includes("편승");
+    const idxs = parseRouteAbbr(r.section);
+    return { train_no: r.train_no, start_time: r.start_time, end_time: r.end_time, idxs, isRide, from: idxs[0], to: idxs[idxs.length - 1] };
+  }).filter((r) => r.isRide || r.idxs.length >= 1);
+  if (rows.length === 0) return <div style={{ fontSize: 12, color: "#9CA3AF", padding: "14px 4px" }}>약자를 입력하면 여기에 행로가 그려져요.</div>;
+  const H = top + rows.length * rowH + 24;
+  return (
+    <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} style={{ maxWidth: "none", display: "block" }}>
+        <line x1={padL} y1={top - 10} x2={xOf(17)} y2={top - 10} stroke="#E5E7EB" />
+        {ROUTE_STATIONS.map((st, i) => (
+          <g key={i}>
+            <text x={xOf(i)} y={top - 18} fontSize="9.5" fill="#374151" textAnchor="middle">{st.name}</text>
+            <line x1={xOf(i)} y1={top - 6} x2={xOf(i)} y2={H - 16} stroke="#F3F4F6" />
+          </g>
+        ))}
+        {rows.map((r, i) => {
+          const y = top + i * rowH + 16;
+          if (r.isRide) {
+            const a = r.idxs.length ? xOf(r.idxs[0]) : padL;
+            const b = r.idxs.length ? xOf(r.idxs[r.idxs.length - 1]) : xOf(5);
+            const mx = (a + b) / 2;
+            return (
+              <g key={i}>
+                <line x1={a} y1={y} x2={b} y2={y} stroke="#111" strokeWidth="1.5" strokeDasharray="4 3" />
+                <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
+                <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
+              </g>
+            );
+          }
+          const pts = r.idxs.map((id) => `${xOf(id)},${y}`).join(" ");
+          const fromOut = r.from === 0 || r.from === 17;
+          const toIn = r.to === 0 || r.to === 17;
+          const mx = (xOf(r.idxs[0]) + xOf(r.idxs[r.idxs.length - 1])) / 2;
+          const prev = rows[i - 1];
+          const vlink = prev && !prev.isRide && prev.idxs.length && prev.to === r.from;
+          return (
+            <g key={i}>
+              {vlink && <line x1={xOf(r.from)} y1={top + (i - 1) * rowH + 16} x2={xOf(r.from)} y2={y} stroke="#111" strokeWidth="2" />}
+              <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
+              {fromOut ? <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" /> : <circle cx={xOf(r.from)} cy={y} r="3.5" fill="#111" />}
+              {toIn ? <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" /> : <circle cx={xOf(r.to)} cy={y} r="3.5" fill="#111" />}
+              <text x={xOf(r.idxs[0]) - 7} y={y - 6} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
+              <text x={xOf(r.idxs[r.idxs.length - 1]) + 7} y={y - 6} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
+              <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
+              <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
 function RouteInputScreen() {
   const [diaNo, setDiaNo] = useState("");
   const [cat, setCat] = useState("평일");
@@ -11589,6 +11682,8 @@ function RouteInputScreen() {
       <button onClick={addRun} style={{ width: "100%", background: "#EEF2FF", color: "#4F46E5", border: "1px dashed #A5B4FC", borderRadius: 8, padding: 9, fontSize: 12, fontWeight: 700, marginTop: 4, cursor: "pointer" }}>+ 열번 추가</button>
       <button onClick={save} disabled={loading} style={{ width: "100%", background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, marginTop: 12, cursor: "pointer" }}>{loading ? "저장 중…" : "저장"}</button>
       {msg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: "#4F46E5" }}>{msg}</div>}
+      <div style={{ marginTop: 18, marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>미리보기 (약자로 자동 생성)</div>
+      <RouteDiagram runs={runs} />
     </div>
   );
 }
