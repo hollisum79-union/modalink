@@ -11449,10 +11449,15 @@ function FieldActivityAdmin() {
 }
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
-  // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 관리자 홈 ──
+  const adminBackTarget = () => {
+    if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
+    if (["workmanage", "kyobundia", "scheduleupdate"].includes(activeMenu)) return "workgroup";
+    return "home";
+  };
+  // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 한 단계 위 ──
   useEffect(() => {
     (window as any).__backHandler = () => {
-      if (activeMenu !== "home") { setActiveMenu("home"); return true; }
+      if (activeMenu !== "home") { setActiveMenu(adminBackTarget()); return true; }
       return false;
     };
     return () => { (window as any).__backHandler = null; };
@@ -11669,7 +11674,7 @@ useEffect(() => {
         >
           <button
             onClick={
-              activeMenu !== "home" ? () => setActiveMenu("home") : onBack
+              activeMenu !== "home" ? () => setActiveMenu(adminBackTarget()) : onBack
             }
             style={{
               background: "rgba(255,255,255,0.15)",
