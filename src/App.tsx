@@ -11585,6 +11585,7 @@ function RouteInputScreen() {
   const [workForm, setWorkForm] = useState("");
   const [diaInfo, setDiaInfo] = useState<any>(null);
   const [savedList, setSavedList] = useState<any[]>([]);
+  const [savedCat, setSavedCat] = useState("평일");
   const [runs, setRuns] = useState<any[]>([{ train_no: "", section: "", start_time: "", end_time: "" }]);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -11738,11 +11739,22 @@ function RouteInputScreen() {
 
       {savedList.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>저장된 근무행로 (탭해서 수정)</div>
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>저장된 근무행로 (구분 선택 → 다이아 탭)</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => {
+              const cnt = savedList.filter((s) => s.category === c).length;
+              const on = savedCat === c;
+              return (
+                <button key={c} onClick={() => setSavedCat(c)} style={{ border: on ? "none" : "1px solid #E5E7EB", borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: on ? "#4F46E5" : "#fff", color: on ? "#fff" : "#6B7280" }}>{c}{cnt > 0 ? ` (${cnt})` : ""}</button>
+              );
+            })}
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {savedList.map((s, i) => (
-              <button key={i} onClick={() => pick(s.dia_no, s.category)} style={{ background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{s.dia_no} · {s.category}</button>
-            ))}
+            {savedList.filter((s) => s.category === savedCat).length === 0
+              ? <div style={{ fontSize: 12, color: "#9CA3AF", padding: "4px 2px" }}>저장된 다이아가 없어요.</div>
+              : savedList.filter((s) => s.category === savedCat).map((s, i) => (
+                <button key={i} onClick={() => pick(s.dia_no, s.category)} style={{ background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{s.dia_no}</button>
+              ))}
           </div>
         </div>
       )}
