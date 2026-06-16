@@ -11494,7 +11494,7 @@ function expandRouteRuns(runs: any[]): { flat: any[]; warnings: string[] } {
     const sts = splitComma(r.start_time);
     const ets = splitComma(r.end_time);
     if (isRide) {
-      flat.push({ train_no: "편승", idxs, start_time: sts[0] || "", end_time: ets[0] || "", isRide: true });
+      flat.push({ train_no: "편승", idxs, start_time: sts[0] || "", end_time: ets[0] || "", isRide: true, group: ri });
       return;
     }
     const tns = splitComma(r.train_no).filter((x) => x);
@@ -11505,7 +11505,7 @@ function expandRouteRuns(runs: any[]): { flat: any[]; warnings: string[] } {
     if (N !== M - 1) warnings.push(`${ri + 1}행: 역 ${M}개 → 열번 ${M - 1}개 필요 (지금 ${N}개) — 열번 확인`);
     const segs = Math.min(N, M - 1);
     for (let k = 0; k < segs; k++) {
-      flat.push({ train_no: tns[k], idxs: [idxs[k], idxs[k + 1]], start_time: sts[k] || "", end_time: ets[k] || "" });
+      flat.push({ train_no: tns[k], idxs: [idxs[k], idxs[k + 1]], start_time: sts[k] || "", end_time: ets[k] || "", group: ri });
     }
   });
   return { flat, warnings };
@@ -11518,13 +11518,13 @@ function fmtHours(n: any): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 function RouteDiagram({ runs }: { runs: any[] }) {
-  const padL = 44, step = 48, top = 50, rowH = 36;
+  const padL = 44, step = 48, top = 50, rowH = 42;
   const xOf = (idx: number) => padL + idx * step;
   const W = padL + 17 * step + 40;
   const { flat, warnings } = expandRouteRuns(runs);
   const rows = flat.map((r) => {
     const idxs = r.idxs || [];
-    return { train_no: r.train_no, start_time: r.start_time, end_time: r.end_time, idxs, isRide: !!r.isRide, from: idxs[0], to: idxs[idxs.length - 1] };
+    return { train_no: r.train_no, start_time: r.start_time, end_time: r.end_time, idxs, isRide: !!r.isRide, from: idxs[0], to: idxs[idxs.length - 1], group: r.group };
   }).filter((r) => r.idxs.length >= 2);
   const warnBox = warnings.length > 0 ? <div style={{ color: "#DC2626", fontSize: 11, padding: "0 2px 8px", lineHeight: 1.5 }}>⚠️ {warnings.join(" / ")}</div> : null;
   if (rows.length === 0) return <div>{warnBox}<div style={{ fontSize: 12, color: "#9CA3AF", padding: "14px 4px" }}>약자를 입력하면 여기에 행로가 그려져요.</div></div>;
@@ -11560,17 +11560,15 @@ function RouteDiagram({ runs }: { runs: any[] }) {
           const toIn = r.to === 0 || r.to === 17;
           const mx = (xOf(r.idxs[0]) + xOf(r.idxs[r.idxs.length - 1])) / 2;
           const prev = rows[i - 1];
-          const next = rows[i + 1];
-          const linkedFrom = prev && !prev.isRide && prev.idxs.length && prev.to === r.from;
-          const linkedTo = next && !next.isRide && next.idxs.length && next.from === r.to;
+          const linkedFrom = prev && !prev.isRide && !r.isRide && prev.group === r.group && prev.to === r.from;
           return (
             <g key={i}>
               {linkedFrom && <line x1={xOf(r.from)} y1={top + (i - 1) * rowH + 16} x2={xOf(r.from)} y2={y} stroke="#111" strokeWidth="2.5" />}
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
               {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={xOf(r.idxs[0]) - 8} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
-              <text x={xOf(r.idxs[r.idxs.length - 1]) + 8} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
+              <text x={xOf(r.idxs[0]) - 8} y={y - 7} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
+              <text x={xOf(r.idxs[r.idxs.length - 1]) + 8} y={y - 7} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
@@ -11586,6 +11584,7 @@ function RouteInputScreen() {
   const [cat, setCat] = useState("평일");
   const [workForm, setWorkForm] = useState("");
   const [diaInfo, setDiaInfo] = useState<any>(null);
+  const [savedList, setSavedList] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([{ train_no: "", section: "", start_time: "", end_time: "" }]);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -11603,6 +11602,23 @@ function RouteInputScreen() {
   };
 
   const addRun = () => setRuns((p) => [...p, { train_no: "", section: "", start_time: "", end_time: "" }]);
+  const loadList = async () => {
+    const { data } = await supabase.from("dia_route").select("dia_no, category");
+    const keys = Array.from(new Set((data || []).map((r: any) => r.dia_no + "|" + r.category)));
+    const list = keys.map((k: string) => { const p = k.split("|"); return { dia_no: p[0], category: p[1] }; });
+    list.sort((a, b) => (Number(a.dia_no) - Number(b.dia_no)) || a.category.localeCompare(b.category));
+    setSavedList(list);
+  };
+  React.useEffect(() => { loadList(); }, []);
+  const pick = async (d: string, c: string) => {
+    setDiaNo(d); setCat(c);
+    const { data } = await supabase.from("dia_route").select("*").eq("dia_no", d).eq("category", c).order("seq", { ascending: true });
+    const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", d).eq("category", c).maybeSingle();
+    setWorkForm(wf && wf.work_form ? wf.work_form : "");
+    if (data && data.length > 0) setRuns(data.map((r: any) => ({ train_no: r.train_no || "", section: r.section || "", start_time: r.start_time || "", end_time: r.end_time || "" })));
+    setMsg("📂 불러왔어요 — 수정 후 저장");
+    setTimeout(() => setMsg(""), 2500);
+  };
   React.useEffect(() => {
     const d = diaNo.trim();
     if (!d) { setDiaInfo(null); return; }
@@ -11630,6 +11646,7 @@ function RouteInputScreen() {
     setDiaNo("");
     setWorkForm("");
     setRuns([{ train_no: "", section: "", start_time: "", end_time: "" }]);
+    loadList();
     setTimeout(() => setMsg(""), 3000);
   };
 
@@ -11718,6 +11735,17 @@ function RouteInputScreen() {
         </label>
       </div>
       <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.5 }}>양식을 받아 채운 뒤 올리면 한 번에 저장돼요. 같은 다이아·구분은 덮어쓰기 돼요. 아래 폼으로 한 건씩 입력·수정도 가능해요.</div>
+
+      {savedList.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>저장된 근무행로 (탭해서 수정)</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {savedList.map((s, i) => (
+              <button key={i} onClick={() => pick(s.dia_no, s.category)} style={{ background: "#EEF2FF", color: "#4338CA", border: "1px solid #C7D2FE", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{s.dia_no} · {s.category}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <div style={{ flex: 1 }}>
