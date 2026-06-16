@@ -11480,12 +11480,87 @@ function RouteInputScreen() {
     setTimeout(() => setMsg(""), 3000);
   };
 
+  const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+    if ((window as any).XLSX) return resolve((window as any).XLSX);
+    const s = document.createElement("script");
+    s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+    s.onload = () => resolve((window as any).XLSX);
+    s.onerror = () => reject(new Error("XLSX 로드 실패"));
+    document.head.appendChild(s);
+  });
+
+  const downloadTemplate = () => {
+    ensureXLSX().then((XLSX: any) => {
+      const aoa = [
+        ["다이아", "구분", "열번", "구간", "출발", "도착"],
+        ["61", "평일", "7254", "대온", "18:01:00", "17:30:50"],
+        ["61", "평일", "7323", "온천", "19:10:00", "19:34:30"],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "근무행로");
+      XLSX.writeFile(wb, "근무행로_양식.xlsx");
+    });
+  };
+
+  const onUpload = (e: any) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    e.target.value = "";
+    setMsg("📤 읽는 중…");
+    ensureXLSX().then((XLSX: any) => {
+      const fr = new FileReader();
+      fr.onload = async (ev: any) => {
+        try {
+          const data = new Uint8Array(ev.target.result);
+          const wb = XLSX.read(data, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+          const header = (aoa[0] || []).map((h: any) => String(h).trim());
+          const col: any = {};
+          header.forEach((h: string, i: number) => { col[h] = i; });
+          const g = (r: any[], name: string) => String(r[col[name]] ?? "").trim();
+          const dataRows = aoa.slice(1).filter((r) => r && g(r, "열번"));
+          const seqMap: any = {};
+          const rows = dataRows.map((r) => {
+            const dia = g(r, "다이아"); const c = g(r, "구분");
+            const key = dia + "|" + c;
+            seqMap[key] = (seqMap[key] ?? -1) + 1;
+            return { dia_no: dia, category: c, train_no: g(r, "열번"), section: g(r, "구간"), start_time: g(r, "출발"), end_time: g(r, "도착"), seq: seqMap[key] };
+          });
+          if (rows.length === 0) { setMsg("읽을 행이 없어요 (열번 칸 확인)"); return; }
+          const combos = Array.from(new Set(rows.map((x) => x.dia_no + "|" + x.category)));
+          for (const cmb of combos) {
+            const parts = cmb.split("|");
+            await supabase.from("dia_route").delete().eq("dia_no", parts[0]).eq("category", parts[1]);
+          }
+          const { error } = await supabase.from("dia_route").insert(rows);
+          setMsg(error ? "❌ 업로드 실패: " + error.message : `✅ ${rows.length}개 행 업로드 완료!`);
+          setTimeout(() => setMsg(""), 4000);
+        } catch (err) {
+          setMsg("❌ 파일을 읽지 못했어요");
+        }
+      };
+      fr.readAsArrayBuffer(f);
+    });
+  };
+
   const ipt = { border: "1px solid #D1D5DB", borderRadius: 7, padding: "7px 6px", fontSize: 12, width: "100%", boxSizing: "border-box" as const };
   const grid = { display: "grid", gridTemplateColumns: "1fr 1.4fr 0.9fr 0.9fr 26px", gap: 5 };
 
   return (
     <div style={{ padding: "16px 16px 28px" }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>🚆 근무행로 입력</div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <button onClick={downloadTemplate} style={{ flex: 1, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: "#4338CA", cursor: "pointer" }}>📄 엑셀 양식 받기</button>
+        <label style={{ flex: 1, background: "#EEF2FF", border: "1px solid #A5B4FC", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: "#4F46E5", cursor: "pointer", textAlign: "center" }}>
+          📤 엑셀 올리기
+          <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={onUpload} />
+        </label>
+      </div>
+      <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.5 }}>양식을 받아 채운 뒤 올리면 한 번에 저장돼요. 같은 다이아·구분은 덮어쓰기 돼요. 아래 폼으로 한 건씩 입력·수정도 가능해요.</div>
+
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>다이아</div>
@@ -11505,9 +11580,9 @@ function RouteInputScreen() {
       {runs.map((r, i) => (
         <div key={i} style={{ ...grid, marginBottom: 6, alignItems: "center" }}>
           <input value={r.train_no} onChange={(e) => upd(i, "train_no", e.target.value)} placeholder="7254" style={ipt} />
-          <input value={r.section} onChange={(e) => upd(i, "section", e.target.value)} placeholder="도봉기→천왕" style={ipt} />
-          <input value={r.start_time} onChange={(e) => upd(i, "start_time", e.target.value)} placeholder="18:01" style={ipt} />
-          <input value={r.end_time} onChange={(e) => upd(i, "end_time", e.target.value)} placeholder="17:30" style={ipt} />
+          <input value={r.section} onChange={(e) => upd(i, "section", e.target.value)} placeholder="대온" style={ipt} />
+          <input value={r.start_time} onChange={(e) => upd(i, "start_time", e.target.value)} placeholder="18:01:00" style={ipt} />
+          <input value={r.end_time} onChange={(e) => upd(i, "end_time", e.target.value)} placeholder="17:30:50" style={ipt} />
           <span onClick={() => delRun(i)} style={{ color: "#EF4444", textAlign: "center", fontSize: 14, cursor: "pointer" }}>✕</span>
         </div>
       ))}
