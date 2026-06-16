@@ -11564,10 +11564,10 @@ function RouteDiagram({ runs }: { runs: any[] }) {
             <g key={i}>
               {linkedFrom && <line x1={xOf(r.from)} y1={top + (i - 1) * rowH + 16} x2={xOf(r.from)} y2={y} stroke="#111" strokeWidth="2.5" />}
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
-              {fromOut ? <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" /> : (!linkedFrom && <circle cx={xOf(r.from)} cy={y} r="3.5" fill="#111" />)}
-              {toIn ? <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" /> : (!linkedTo && <circle cx={xOf(r.to)} cy={y} r="3.5" fill="#111" />)}
-              <text x={xOf(r.idxs[0]) - 7} y={y - 6} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
-              <text x={xOf(r.idxs[r.idxs.length - 1]) + 7} y={y - 6} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
+              {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
+              {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
+              <text x={xOf(r.idxs[0]) - 8} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
+              <text x={xOf(r.idxs[r.idxs.length - 1]) + 8} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
