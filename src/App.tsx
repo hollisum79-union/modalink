@@ -25405,6 +25405,8 @@ function HomeCarousel({
   carouselNotices = [],
   onCondolenceClick,
   onActivityClick,
+  onScheduleClick,
+  upcomingEvents = [],
   user,
 }: {
   urgentNotice?: any;
@@ -25412,6 +25414,8 @@ function HomeCarousel({
   onUrgentClick: () => void;
   onCondolenceClick: () => void;
   onActivityClick?: () => void;
+  onScheduleClick?: () => void;
+  upcomingEvents?: any[];
   user?: any;
 }) {
   // 경조사 데이터 (Supabase events에서)
@@ -25507,7 +25511,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const [actSlide, setActSlide] = React.useState(0);
     const [showPointGuide, setShowPointGuide] = React.useState(false); 
   React.useEffect(() => {
-      if (index === 2 && recentActs.length > 1) {
+      if (index === 3 && recentActs.length > 1) {
         setActSlide((p) => (p + 1) % recentActs.length);
       }
     }, [index]);
@@ -25666,7 +25670,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     const fmtAct = (d: any) => (d ? `${parseInt(String(d).slice(5, 7))}월 ${parseInt(String(d).slice(8, 10))}일` : "");
   const actCount = recentActs.length;
   const actIdx = actCount > 0 ? actSlide % actCount : 0;
-  const condolenceCard = showActs ? (
+  const condolenceCard = recentActs.length > 0 ? (
     (() => {
       const a: any = recentActs[actIdx] || recentActs[0];
       const hero = ((a && a.photos) || [])[0];
@@ -25700,24 +25704,11 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     })()
   ) : (
     <div
-      onClick={condolences.length > 0 ? onCondolenceClick : undefined}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%)", border: "1px solid #C4B5FD", borderRadius: 12, padding: "10px 14px", cursor: condolences.length > 0 ? "pointer" : "default", height: 158, overflow: "hidden", display: "flex", flexDirection: "column" }}
+      onClick={onActivityClick}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #6D28D9, #4F46E5)", borderRadius: 12, height: 158, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexShrink: 0 }}>
-        <span style={{ fontSize: 16 }}>💐</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>조합원 경조사</span>
-      </div>
-      {condolences.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#6B7280", padding: "4px 0" }}>현재 경조사 안내가 없습니다</div>
-      ) : (
-        condolences.slice(0, 3).map((c, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0", fontSize: 12, color: "#4C1D95" }}>
-            <span style={{ background: c.type === "결혼" ? "#EC4899" : "#6B7280", color: "#fff", fontSize: 10, fontWeight: 600, borderRadius: 4, padding: "1px 6px" }}>{c.type}</span>
-            <span style={{ flex: 1, fontWeight: 500 }}>{c.name} 조합원</span>
-            <span style={{ fontSize: 11, opacity: 0.7 }}>{c.date}</span>
-          </div>
-        ))
-      )}
+      <div style={{ fontSize: 32 }}>🚩</div>
+      <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 13, marginTop: 8 }}>조합 활동 기록을 확인하세요</div>
     </div>
   );
 
@@ -25823,6 +25814,38 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           </div>
   );
 
+  const scheduleCard = (
+    <div
+      onClick={onScheduleClick}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #4F46E5, #6D28D9)", borderRadius: 12, padding: "12px 14px", height: 158, overflow: "hidden", cursor: "pointer", color: "#fff" }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 700 }}>📅 지회·조합 일정</span>
+        <span style={{ fontSize: 11, opacity: 0.85 }}>더보기 ›</span>
+      </div>
+      {upcomingEvents.length === 0 ? (
+        <div style={{ fontSize: 12, opacity: 0.85, padding: "4px 0" }}>예정된 일정이 없어요</div>
+      ) : (
+        upcomingEvents.slice(0, 3).map((ev: any, i: number) => {
+          const t0 = new Date();
+          const base = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate());
+          const pp = String(ev.event_date).split("-").map(Number);
+          const dt = new Date(pp[0], pp[1] - 1, pp[2]);
+          const d = Math.round((dt.getTime() - base.getTime()) / 86400000);
+          const dow = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
+          const today = d === 0;
+          return (
+            <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, background: today ? "#fff" : "rgba(255,255,255,0.18)", color: today ? "#4F46E5" : "#fff", borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>{today ? "오늘" : `D-${d}`}</span>
+              <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</span>
+              <span style={{ fontSize: 11, opacity: 0.8, flexShrink: 0 }}>{pp[1]}/{pp[2]} {dow}</span>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
   // 승급일 당일 축하 (본인, 한국시간 09~18시, 40호봉 미만)
   const promoToday = (() => {
     const jd = user?.join_date;
@@ -25877,20 +25900,20 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
             transition: transitionOn ? "transform 0.5s ease" : "none",
           }}
         >
-                    {/* ===== 0번: TOP3 복제 (이전 방향 무한용) ===== */}
-          {top3Card}
-
-          {/* ===== 1번 카드: 경조사·조합활동 ===== */}
+                    {/* ===== 0번: 활동 복제 (이전 방향 무한용) ===== */}
           {condolenceCard}
 
-          {/* ===== 2번 카드: 공지 (긴급+일반, 최대 4개) ===== */}
+          {/* ===== 1번 카드: 공지 (긴급+일반, 최대 4개) ===== */}
           {noticeCard}
 
-          {/* ====== 3번 카드: 접속포인트 TOP3 ====== */}
-          {top3Card}
+          {/* ===== 2번 카드: 지회·조합 일정 ===== */}
+          {scheduleCard}
 
-          {/* ====== 4번 카드: 경조사 복제본 (무한 루프용) ====== */}
+          {/* ====== 3번 카드: 조합활동 사진 ====== */}
           {condolenceCard}
+
+          {/* ====== 4번 카드: 공지 복제본 (무한 루프용) ====== */}
+          {noticeCard}
         </div>
       </div>
         {/* 점 인디케이터 */}
@@ -29682,6 +29705,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           onUrgentClick={() => setScreen("noticeList")}
           onActivityClick={() => setScreen("unionActivity")}
           onCondolenceClick={() => { setBoardTab("경조사"); setScreen("board"); }}
+          onScheduleClick={() => setScreen("unionSchedule")}
+          upcomingEvents={upcomingEvents}
           user={user}
         />
         <div
