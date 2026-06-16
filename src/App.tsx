@@ -11447,11 +11447,81 @@ function FieldActivityAdmin() {
     </div>
   );
 }
+function RouteInputScreen() {
+  const [diaNo, setDiaNo] = useState("");
+  const [cat, setCat] = useState("평일");
+  const [runs, setRuns] = useState<any[]>([{ train_no: "", section: "", start_time: "", end_time: "" }]);
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const loadExisting = async () => {
+    if (!diaNo.trim()) return;
+    const { data } = await supabase.from("dia_route").select("*").eq("dia_no", diaNo.trim()).eq("category", cat).order("seq", { ascending: true });
+    if (data && data.length > 0) {
+      setRuns(data.map((r: any) => ({ train_no: r.train_no || "", section: r.section || "", start_time: r.start_time || "", end_time: r.end_time || "" })));
+      setMsg("📂 기존 입력을 불러왔어요");
+      setTimeout(() => setMsg(""), 2000);
+    }
+  };
+
+  const addRun = () => setRuns((p) => [...p, { train_no: "", section: "", start_time: "", end_time: "" }]);
+  const delRun = (i: number) => setRuns((p) => p.filter((_, idx) => idx !== i));
+  const upd = (i: number, k: string, v: string) => setRuns((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
+
+  const save = async () => {
+    if (!diaNo.trim()) { setMsg("다이아 번호를 입력하세요."); return; }
+    const rows = runs.filter((r) => r.train_no.trim()).map((r, i) => ({ dia_no: diaNo.trim(), category: cat, train_no: r.train_no.trim(), section: r.section.trim(), start_time: r.start_time.trim(), end_time: r.end_time.trim(), seq: i }));
+    if (rows.length === 0) { setMsg("열번을 1개 이상 입력하세요."); return; }
+    setLoading(true);
+    await supabase.from("dia_route").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
+    const { error } = await supabase.from("dia_route").insert(rows);
+    setLoading(false);
+    setMsg(error ? "❌ 저장 실패: " + error.message : "✅ 저장됐어요!");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  const ipt = { border: "1px solid #D1D5DB", borderRadius: 7, padding: "7px 6px", fontSize: 12, width: "100%", boxSizing: "border-box" as const };
+  const grid = { display: "grid", gridTemplateColumns: "1fr 1.4fr 0.9fr 0.9fr 26px", gap: 5 };
+
+  return (
+    <div style={{ padding: "16px 16px 28px" }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>🚆 근무행로 입력</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>다이아</div>
+          <input value={diaNo} onChange={(e) => setDiaNo(e.target.value)} onBlur={loadExisting} placeholder="예: 61" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>구분</div>
+          <select value={cat} onChange={(e) => setCat(e.target.value)} style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }}>
+            {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>열번별 행로</div>
+      <div style={{ ...grid, fontSize: 10, color: "#9CA3AF", marginBottom: 4, padding: "0 2px" }}>
+        <span>열번</span><span>구간</span><span>출발</span><span>도착</span><span></span>
+      </div>
+      {runs.map((r, i) => (
+        <div key={i} style={{ ...grid, marginBottom: 6, alignItems: "center" }}>
+          <input value={r.train_no} onChange={(e) => upd(i, "train_no", e.target.value)} placeholder="7254" style={ipt} />
+          <input value={r.section} onChange={(e) => upd(i, "section", e.target.value)} placeholder="도봉기→천왕" style={ipt} />
+          <input value={r.start_time} onChange={(e) => upd(i, "start_time", e.target.value)} placeholder="18:01" style={ipt} />
+          <input value={r.end_time} onChange={(e) => upd(i, "end_time", e.target.value)} placeholder="17:30" style={ipt} />
+          <span onClick={() => delRun(i)} style={{ color: "#EF4444", textAlign: "center", fontSize: 14, cursor: "pointer" }}>✕</span>
+        </div>
+      ))}
+      <button onClick={addRun} style={{ width: "100%", background: "#EEF2FF", color: "#4F46E5", border: "1px dashed #A5B4FC", borderRadius: 8, padding: 9, fontSize: 12, fontWeight: 700, marginTop: 4, cursor: "pointer" }}>+ 열번 추가</button>
+      <button onClick={save} disabled={loading} style={{ width: "100%", background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, marginTop: 12, cursor: "pointer" }}>{loading ? "저장 중…" : "저장"}</button>
+      {msg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: "#4F46E5" }}>{msg}</div>}
+    </div>
+  );
+}
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
-    if (["workmanage", "kyobundia", "scheduleupdate"].includes(activeMenu)) return "workgroup";
+    if (["workmanage", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
     return "home";
   };
   // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 한 단계 위 ──
@@ -11821,6 +11891,7 @@ useEffect(() => {
         {activeMenu === "deduction" && <DeductionAdmin />}
         {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "salarytable" && <SalaryTableScreen />}
+        {activeMenu === "routeinput" && <RouteInputScreen />}
         {activeMenu === "workgroup" && (
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
@@ -11828,6 +11899,7 @@ useEffect(() => {
               { id: "workmanage", label: "교번관리", desc: "교번 교체·충당 관리" },
               { id: "kyobundia", label: "다이아 입력", desc: "운전 다이아 등록·수정" },
               { id: "scheduleupdate", label: "근무표 업데이트", desc: "월 근무표 반영" },
+              { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
