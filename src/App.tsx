@@ -11501,15 +11501,11 @@ function expandRouteRuns(runs: any[]): { flat: any[]; warnings: string[] } {
     if (tns.length === 0) return;
     const N = tns.length;
     const M = idxs.length;
-    if (N === 1) {
-      flat.push({ train_no: tns[0], idxs, start_time: sts[0] || "", end_time: ets[0] || "" });
-      if (M < 2) warnings.push(`${ri + 1}행: 구간(약자)이 비었거나 역이 1개예요`);
-    } else {
-      if (N !== M - 1) warnings.push(`${ri + 1}행: 열번 ${N}개면 역 ${N + 1}개 필요 (지금 ${M}개) — 확인`);
-      const segs = Math.min(N, Math.max(M - 1, 0));
-      for (let k = 0; k < segs; k++) {
-        flat.push({ train_no: tns[k], idxs: [idxs[k], idxs[k + 1]], start_time: sts[k] || "", end_time: ets[k] || "" });
-      }
+    if (M < 2) { warnings.push(`${ri + 1}행: 구간 약자가 비었거나 역이 1개예요`); return; }
+    if (N !== M - 1) warnings.push(`${ri + 1}행: 역 ${M}개 → 열번 ${M - 1}개 필요 (지금 ${N}개) — 열번 확인`);
+    const segs = Math.min(N, M - 1);
+    for (let k = 0; k < segs; k++) {
+      flat.push({ train_no: tns[k], idxs: [idxs[k], idxs[k + 1]], start_time: sts[k] || "", end_time: ets[k] || "" });
     }
   });
   return { flat, warnings };
