@@ -25362,13 +25362,13 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
 
   if (condolences.length > 0) {
     return (
-      <div onClick={onCondolenceClick} style={{ background: "linear-gradient(135deg,#EDE9FE,#DDD6FE)", border: "1px solid #C4B5FD", borderRadius: 16, padding: 12, cursor: "pointer", minWidth: 0 }}>
+      <div onClick={onCondolenceClick} style={{ background: "#fff", border: "1px solid #ECECF3", borderLeft: "4px solid #7C3AED", borderRadius: 16, padding: 12, cursor: "pointer", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
           <span style={{ fontSize: 14 }}>💐</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>경조사</span>
         </div>
         {condolences.slice(0, 3).map((c, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 0", fontSize: 12, color: "#4C1D95" }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 0", fontSize: 12, color: "#1F2937" }}>
             <span style={{ background: c.type === "결혼" ? "#EC4899" : "#6B7280", color: "#fff", fontSize: 9, fontWeight: 600, borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>{c.type}</span>
             <span style={{ flex: 1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
           </div>
@@ -25378,21 +25378,21 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
   }
 
   return (
-    <div style={{ background: "linear-gradient(135deg,#FEF3C7,#FDE68A)", border: "1px solid #FCD34D", borderRadius: 16, padding: 12, minWidth: 0 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E", marginBottom: 8 }}>🏆 활동 TOP3</div>
+    <div style={{ background: "#fff", border: "1px solid #ECECF3", borderRadius: 16, padding: 12, minWidth: 0 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#B45309", marginBottom: 8 }}>🏆 활동 TOP3</div>
       {topUsers.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#92400E", opacity: 0.7 }}>집계된 활동이 없어요</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF" }}>집계된 활동이 없어요</div>
       ) : (
         topUsers.map((u) => (
-          <div key={u.rank} style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 0", fontSize: 12, color: "#78350F" }}>
+          <div key={u.rank} style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 0", fontSize: 12, color: "#1F2937" }}>
             <span>{u.rank === 1 ? "🥇" : u.rank === 2 ? "🥈" : "🥉"}</span>
             <span style={{ flex: 1, fontWeight: u.isMe ? 800 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.isMe ? "나" : `조합원 ${["A","B","C"][u.rank-1]}`}</span>
-            <span style={{ fontWeight: 700 }}>{u.total}P</span>
+            <span style={{ fontWeight: 700, color: "#B45309" }}>{u.total}P</span>
           </div>
         ))
       )}
       {myRank && myRank.rank > 3 && (
-        <div style={{ borderTop: "1px solid rgba(146,64,14,0.15)", marginTop: 4, paddingTop: 4, fontSize: 11, color: "#78350F", fontWeight: 700 }}>내 순위 {myRank.rank}위 ({myRank.total}P)</div>
+        <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 4, paddingTop: 4, fontSize: 11, color: "#6B7280", fontWeight: 700 }}>내 순위 {myRank.rank}위 ({myRank.total}P)</div>
       )}
     </div>
   );
@@ -25817,14 +25817,14 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const scheduleCard = (
     <div
       onClick={onScheduleClick}
-      style={{ minWidth: "100%", boxSizing: "border-box", background: "linear-gradient(135deg, #4F46E5, #6D28D9)", borderRadius: 12, padding: "12px 14px", height: 158, overflow: "hidden", cursor: "pointer", color: "#fff" }}
+      style={{ minWidth: "100%", boxSizing: "border-box", background: "#fff", border: "1px solid #ECECF3", borderLeft: "4px solid #4F46E5", borderRadius: 12, padding: "12px 14px", height: 158, overflow: "hidden", cursor: "pointer" }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <span style={{ fontSize: 14, fontWeight: 700 }}>📅 지회·조합 일정</span>
-        <span style={{ fontSize: 11, opacity: 0.85 }}>더보기 ›</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#312E81" }}>📅 지회·조합 일정</span>
+        <span style={{ fontSize: 11, color: "#4F46E5" }}>더보기 ›</span>
       </div>
       {upcomingEvents.length === 0 ? (
-        <div style={{ fontSize: 12, opacity: 0.85, padding: "4px 0" }}>예정된 일정이 없어요</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", padding: "4px 0" }}>예정된 일정이 없어요</div>
       ) : (
         upcomingEvents.slice(0, 3).map((ev: any, i: number) => {
           const t0 = new Date();
@@ -25836,9 +25836,9 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           const today = d === 0;
           return (
             <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, background: today ? "#fff" : "rgba(255,255,255,0.18)", color: today ? "#4F46E5" : "#fff", borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>{today ? "오늘" : `D-${d}`}</span>
-              <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</span>
-              <span style={{ fontSize: 11, opacity: 0.8, flexShrink: 0 }}>{pp[1]}/{pp[2]} {dow}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, background: today ? "#4F46E5" : "#EEF0FF", color: today ? "#fff" : "#4F46E5", borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>{today ? "오늘" : `D-${d}`}</span>
+              <span style={{ flex: 1, fontSize: 13, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</span>
+              <span style={{ fontSize: 11, color: "#9CA3AF", flexShrink: 0 }}>{pp[1]}/{pp[2]} {dow}</span>
             </div>
           );
         })
