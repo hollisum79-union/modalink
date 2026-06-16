@@ -25328,6 +25328,76 @@ const dummyCondolences = [
   { name: "이승무", type: "부친상", date: "2026-05-19", relation: "본인" },
 ];
 
+// 포인트/경조사 조건부 고정 카드 (홈 본문) - 경조사 있으면 경조사, 없으면 포인트
+function PointCondolenceCard({ user, onCondolenceClick }: any) {
+  const [condolences, setCondolences] = React.useState<any[]>([]);
+  const [topUsers, setTopUsers] = React.useState<any[]>([]);
+  const [myRank, setMyRank] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("events").select("*").eq("is_active", true).order("event_date", { ascending: false });
+      setCondolences((data || []).map((e: any) => ({ name: e.member_name, type: e.event_type, date: e.event_date })));
+    })();
+  }, []);
+
+  React.useEffect(() => {
+    (async () => {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { data } = await supabase.from("user_points").select("employee_number, point, created_at").gte("created_at", monthStart);
+      if (!data) return;
+      const { data: memU } = await supabase.from("members").select("employee_number, is_union");
+      const unionSet = new Set<string>();
+      (memU || []).forEach((m: any) => { if (m.is_union === true) unionSet.add(String(m.employee_number)); });
+      const sums: any = {};
+      data.forEach((r: any) => { sums[r.employee_number] = (sums[r.employee_number] || 0) + (r.point || 0); });
+      const ranked = Object.entries(sums).filter(([emp]) => unionSet.has(String(emp))).map(([emp, total]) => ({ emp, total: total as number })).sort((a, b) => b.total - a.total);
+      const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
+      const myIdx = ranked.findIndex((r) => r.emp === myId);
+      setMyRank(myIdx >= 0 ? { rank: myIdx + 1, total: ranked[myIdx].total } : null);
+      setTopUsers(ranked.slice(0, 3).map((r, i) => ({ rank: i + 1, emp: r.emp, total: r.total, isMe: r.emp === myId })));
+    })();
+  }, [user]);
+
+  if (condolences.length > 0) {
+    return (
+      <div onClick={onCondolenceClick} style={{ background: "linear-gradient(135deg,#EDE9FE,#DDD6FE)", border: "1px solid #C4B5FD", borderRadius: 16, padding: 12, cursor: "pointer", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
+          <span style={{ fontSize: 14 }}>💐</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>경조사</span>
+        </div>
+        {condolences.slice(0, 3).map((c, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 0", fontSize: 12, color: "#4C1D95" }}>
+            <span style={{ background: c.type === "결혼" ? "#EC4899" : "#6B7280", color: "#fff", fontSize: 9, fontWeight: 600, borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>{c.type}</span>
+            <span style={{ flex: 1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "linear-gradient(135deg,#FEF3C7,#FDE68A)", border: "1px solid #FCD34D", borderRadius: 16, padding: 12, minWidth: 0 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E", marginBottom: 8 }}>🏆 활동 TOP3</div>
+      {topUsers.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#92400E", opacity: 0.7 }}>집계된 활동이 없어요</div>
+      ) : (
+        topUsers.map((u) => (
+          <div key={u.rank} style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 0", fontSize: 12, color: "#78350F" }}>
+            <span>{u.rank === 1 ? "🥇" : u.rank === 2 ? "🥈" : "🥉"}</span>
+            <span style={{ flex: 1, fontWeight: u.isMe ? 800 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.isMe ? "나" : `조합원 ${["A","B","C"][u.rank-1]}`}</span>
+            <span style={{ fontWeight: 700 }}>{u.total}P</span>
+          </div>
+        ))
+      )}
+      {myRank && myRank.rank > 3 && (
+        <div style={{ borderTop: "1px solid rgba(146,64,14,0.15)", marginTop: 4, paddingTop: 4, fontSize: 11, color: "#78350F", fontWeight: 700 }}>내 순위 {myRank.rank}위 ({myRank.total}P)</div>
+      )}
+    </div>
+  );
+}
+
 // 2) HomeCarousel 컴포넌트
 function HomeCarousel({
   urgentNotice,
@@ -29721,71 +29791,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               </>
             )}
           </div>
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 16,
-              padding: "12px",
-              boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 10,
-              }}
-            >
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>
-                지회·조합 일정
-              </span>
-              <span
-                onClick={() => setScreen("unionSchedule")}
-                style={{ fontSize: 11, color: "#4F46E5", cursor: "pointer" }}
-              >
-                더보기 ›
-              </span>
-            </div>
-            {upcomingEvents.length > 0 ? (
-              <div>
-                {upcomingEvents.map((ev: any, i: number) => {
-                  const t0 = new Date();
-                  const base = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate());
-                  const pp = String(ev.event_date).split("-").map(Number);
-                  const dt = new Date(pp[0], pp[1] - 1, pp[2]);
-                  const d = Math.round((dt.getTime() - base.getTime()) / 86400000);
-                  const dow = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
-                  const urgent = i === 0 && d >= 1;
-                  const today = d === 0;
-                  return (
-                    <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: i < upcomingEvents.length - 1 ? 8 : 0, background: urgent ? "#FFF7ED" : "transparent", borderRadius: urgent ? 8 : 0, padding: urgent ? "6px 8px" : "0" }}>
-                      <span style={{ background: today ? "#4F46E5" : urgent ? "#F59E0B" : "#EEF0FF", color: today || urgent ? "#fff" : "#4F46E5", fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
-                        {today ? "오늘" : `D-${d}`}
-                      </span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: urgent ? "#7C2D12" : "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
-                        <div style={{ fontSize: 11, color: urgent ? "#B45309" : "#9CA3AF" }}>
-                          {pp[1]}월 {pp[2]}일 ({dow}){ev.event_time ? ` ${ev.event_time}` : ""}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#9CA3AF",
-                  textAlign: "center",
-                  marginTop: 16,
-                }}
-              >
-                예정된 일정이 없습니다
-              </div>
-            )}
-          </div>
+          <PointCondolenceCard
+            user={user}
+            onCondolenceClick={() => { setBoardTab("경조사"); setScreen("board"); }}
+          />
         </div>
         <div
           style={{
