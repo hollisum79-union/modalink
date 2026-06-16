@@ -11578,27 +11578,11 @@ useEffect(() => {
       badge: 0,
     },
     {
-      id: "workmanage",
-      label: "교번근무 관리",
+      id: "workgroup",
+      label: "근무 관리",
       icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
       color: "#4F46E5",
       bg: "#EEF2FF",
-      badge: 0,
-    },
-    {
-      id: "kyobundia",
-      label: "다이아 입력",
-      icon: "M9 17v-6h13M9 5h13M3 5h.01M3 11h.01M3 17h.01",
-      color: "#0891B2",
-      bg: "#CFFAFE",
-      badge: 0,
-    },
-    {
-      id: "scheduleupdate",
-      label: "근무표 업데이트",
-      icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-      color: "#0EA5E9",
-      bg: "#E0F2FE",
       badge: 0,
     },
     {
@@ -11832,6 +11816,21 @@ useEffect(() => {
         {activeMenu === "deduction" && <DeductionAdmin />}
         {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "salarytable" && <SalaryTableScreen />}
+        {activeMenu === "workgroup" && (
+          <div style={{ padding: "16px 16px 28px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
+            {[
+              { id: "workmanage", label: "교번관리", desc: "교번 교체·충당 관리" },
+              { id: "kyobundia", label: "다이아 입력", desc: "운전 다이아 등록·수정" },
+              { id: "scheduleupdate", label: "근무표 업데이트", desc: "월 근무표 반영" },
+            ].map((m) => (
+              <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{m.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {activeMenu === "salarygroup" && (
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>급여 관리</div>
