@@ -25834,11 +25834,13 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           const d = Math.round((dt.getTime() - base.getTime()) / 86400000);
           const dow = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
           const today = d === 0;
+          const first = i === 0;
+          const hi = today || first;
           return (
-            <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, background: today ? "#4F46E5" : "#EEF0FF", color: today ? "#fff" : "#4F46E5", borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>{today ? "오늘" : `D-${d}`}</span>
-              <span style={{ flex: 1, fontSize: 13, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</span>
-              <span style={{ fontSize: 11, color: "#9CA3AF", flexShrink: 0 }}>{pp[1]}/{pp[2]} {dow}</span>
+            <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: first ? "6px 8px" : "5px 8px", background: first ? "#F5F3FF" : "transparent", borderRadius: first ? 8 : 0, marginBottom: 2 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, background: hi ? "#4F46E5" : "#EEF0FF", color: hi ? "#fff" : "#4F46E5", borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>{today ? "오늘" : `D-${d}`}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: first ? 700 : 500, color: first ? "#312E81" : "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</span>
+              <span style={{ fontSize: 11, color: first ? "#6366F1" : "#9CA3AF", flexShrink: 0 }}>{pp[1]}/{pp[2]} {dow}</span>
             </div>
           );
         })
