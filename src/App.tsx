@@ -11576,6 +11576,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
             return (
               <g key={i}>
                 <line x1={a} y1={y} x2={b} y2={y} stroke="#111" strokeWidth="1.5" strokeDasharray="4 3" />
+                {r.idxs.length > 0 && <text x={a - 8} y={y - 7} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>}
+                {r.idxs.length > 0 && <text x={b + 8} y={y - 7} fontSize="8.5" fill="#6B7280">{r.end_time}</text>}
                 <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
@@ -11666,9 +11668,13 @@ function RouteInputScreen() {
     await supabase.from("dia_route").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
     const { error } = await supabase.from("dia_route").insert(rows);
     await supabase.from("dia_work_form").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
-    if (workForm.trim()) await supabase.from("dia_work_form").insert({ dia_no: diaNo.trim(), category: cat, work_form: workForm.trim() });
+    let wfErr: any = null;
+    if (workForm.trim()) {
+      const res = await supabase.from("dia_work_form").insert({ dia_no: diaNo.trim(), category: cat, work_form: workForm.trim() });
+      wfErr = res.error;
+    }
     setLoading(false);
-    if (error) { setMsg("❌ 저장 실패: " + error.message); setTimeout(() => setMsg(""), 3000); return; }
+    if (error || wfErr) { setMsg("❌ 저장 실패: " + ((error || wfErr).message || "")); setTimeout(() => setMsg(""), 5000); return; }
     setMsg("✅ 저장됐어요! (새로 입력하세요)");
     setDiaNo("");
     setWorkForm("");
