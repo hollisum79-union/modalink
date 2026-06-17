@@ -15879,6 +15879,7 @@ const getKyobunWork = (member: any, date: Date) => {
     );
   };
 
+  const [allWorkOpen, setAllWorkOpen] = React.useState(false);
   // ── 메모 패널 ──
   const renderMemoPanel = (dateStr: string) => {
     const dayMemos = memos[dateStr] || [];
@@ -16024,6 +16025,16 @@ const getKyobunWork = (member: any, date: Date) => {
             </div>
             )}
 
+                      {!isOtherKyobun && (
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              <button onClick={() => setAllWorkOpen(true)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                📋 전체근무
+              </button>
+              <button onClick={() => alert("운행시각표는 준비 중입니다.")} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                🕐 운행시각표
+              </button>
+            </div>
+            )}
             {!isOtherKyobun && (<>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "2px 2px 12px" }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "#1a1a1a" }}>📝 메모</span>
@@ -16085,6 +16096,71 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
           </div>
         </div>
+      </>
+    );
+  };
+
+        {allWorkOpen && (() => {
+        const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
+        const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
+        kyobuns.forEach((m: any) => {
+          const w = getKyobunWork(m, dateObj);
+          if (!w || !groups[w.type]) return;
+          let s = "", e = "";
+          if (w.type === "주간" || w.type === "야간") {
+            const info = getDiaInfo(w.dia, getDiaDayType(w.type, dateObj));
+            s = (info && info.start_time) || ""; e = (info && info.end_time) || "";
+          }
+          groups[w.type].push({ name: m.name, emp: String(m.employee_number), dia: w.dia, s, e });
+        });
+        const order = [
+          { key: "주간", icon: "☀️", bg: "#EEF0FF", color: "#2563EB", dia: true },
+          { key: "야간", icon: "🌙", bg: "#F3EBFF", color: "#7C3AED", dia: true },
+          { key: "비번", icon: "💤", bg: "#F3F4F6", color: "#6B7280", dia: false },
+          { key: "휴무", icon: "🏠", bg: "#ECFDF5", color: "#059669", dia: false },
+        ];
+        const meEmp = String(user?.employee_number || "");
+        return (
+          <div onClick={() => setAllWorkOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1200 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 380, maxHeight: "82vh", overflowY: "auto", padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <span style={{ fontSize: 17, fontWeight: 800, color: "#1a1a1a" }}>📋 전체근무</span>
+                <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700 }}>{dateLabel}</span>
+              </div>
+              {order.map((o) => {
+                const list = groups[o.key];
+                return (
+                  <div key={o.key} style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: o.color }}>{o.icon} {o.key}</span>
+                      <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700 }}>{list.length}명</span>
+                    </div>
+                    {list.length === 0 ? (
+                      <div style={{ fontSize: 12, color: "#C1C5CC", padding: "2px 4px" }}>없음</div>
+                    ) : list.map((pp: any, i: number) => {
+                      const isMe = pp.emp === meEmp;
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 11px", borderRadius: 11, background: isMe ? "#FFF7E6" : "#FAFAFD", marginBottom: 6, boxShadow: isMe ? "inset 3px 0 0 #FBBF24" : "none" }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: isMe ? "#B45309" : "#1F2937" }}>{pp.name}{isMe ? " (나)" : ""}</span>
+                          {o.dia ? (
+                            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 9px", borderRadius: 8, background: o.bg, color: o.color }}>다이아 {pp.dia}</span>
+                              {(pp.s || pp.e) && <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>{pp.s}~{pp.e}</span>}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 12, color: "#9CA3AF" }}>—</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              <button onClick={() => setAllWorkOpen(false)} style={{ width: "100%", marginTop: 4, padding: 13, background: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+            </div>
+          </div>
+        );
+      })()}
       </>
     );
   };
@@ -22252,6 +22328,22 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
     await saveRemaining(h.leave_type, cur + Number(h.days));
     loadHistory();
   };
+    // 사용내역 팝업에서 삭제 (잔여일수 복구)
+  const deleteHistoryRow = async (h: any) => {
+    if (!window.confirm("이 내역을 삭제할까요? 잔여일수가 복구됩니다.")) return;
+    const { error } = await supabase
+      .from("leave_history")
+      .update({ status: "취소" })
+      .eq("id", h.id);
+    if (error) {
+      alert("삭제 실패: " + error.message);
+      return;
+    }
+    const cur = (remaining as any)[h.leave_type] || 0;
+    await saveRemaining(h.leave_type, cur + Number(h.days));
+    loadHistory();
+    setHistoryRows((rows) => rows.filter((r) => r.id !== h.id));
+  };
   // 휴가 사용 처리
   const useLeave = async (item) => {
     const days = parseFloat(useDays);
@@ -22769,7 +22861,10 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
                     <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{h.used_date}</span>
                     {h.memo && <span style={{ fontSize: 12, color: "#9CA3AF" }}>{h.memo}</span>}
                   </div>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: historyModal.color }}>{h.days}일</span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: historyModal.color }}>{h.days}일</span>
+                    <button onClick={() => deleteHistoryRow(h)} style={{ fontSize: 12, color: "#EF4444", padding: "5px 10px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff", cursor: "pointer", fontFamily: "inherit" }}>삭제</button>
+                  </div>
                 </div>
               ))
             )}
