@@ -12058,14 +12058,17 @@ function RouteDiagram({ runs }: { runs: any[] }) {
             const prevR = rows[i - 1];
             const linked = prevR && prevR.group === r.group && prevR.to === r.from;
             const py = top + (i - 1) * rowH + 16;
+            const sr = a >= b;
+            const sx = sr ? a + 14 : a - 14, sAnc = sr ? "start" : "end";
+            const ex = sr ? b - 14 : b + 14, eAnc = sr ? "end" : "start";
             return (
               <g key={i}>
                 {linked && <line x1={a - 2} y1={py} x2={a - 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
                 {linked && <line x1={a + 2} y1={py} x2={a + 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
                 <line x1={a} y1={y - 2} x2={b} y2={y - 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
                 <line x1={a} y1={y + 2} x2={b} y2={y + 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
-                {r.idxs.length > 0 && <text x={a - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
-                {r.idxs.length > 0 && <text x={b + 14} y={y + 3} fontSize="8.5" fill="#6B7280" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
+                {r.idxs.length > 0 && <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
+                {r.idxs.length > 0 && <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
                 <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
@@ -12075,6 +12078,10 @@ function RouteDiagram({ runs }: { runs: any[] }) {
           const fromOut = r.from === 0 || r.from === 17;
           const toIn = r.to === 0 || r.to === 17;
           const mx = (xOf(r.idxs[0]) + xOf(r.idxs[r.idxs.length - 1])) / 2;
+          const xf = xOf(r.idxs[0]), xt = xOf(r.idxs[r.idxs.length - 1]);
+          const sr = xf >= xt;
+          const sx = sr ? xf + 14 : xf - 14, sAnc = sr ? "start" : "end";
+          const ex = sr ? xt - 14 : xt + 14, eAnc = sr ? "end" : "start";
           const prev = rows[i - 1];
           const linkedFrom = prev && !prev.isRide && !r.isRide && prev.group === r.group && prev.to === r.from;
           return (
@@ -12083,8 +12090,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
               {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={xOf(r.idxs[0]) - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
-              <text x={xOf(r.idxs[r.idxs.length - 1]) + 14} y={y + 3} fontSize="8.5" fill="#6B7280" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
+              <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
+              <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
