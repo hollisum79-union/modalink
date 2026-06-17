@@ -14942,12 +14942,17 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
- const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites" | "phones" | "ride">(null);
+ const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites" | "phones" | "ride" | "diasearch">(null);
   const [rideQ, setRideQ] = React.useState("");
   const [rideHits, setRideHits] = React.useState<any[]>([]);
   const [rideSel, setRideSel] = React.useState<string | null>(null);
   const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
   const [rideRoutes, setRideRoutes] = React.useState<any>({});
+  const [diaQ, setDiaQ] = React.useState("");
+  const [diaNo, setDiaNo] = React.useState<string | null>(null);
+  const [diaCats, setDiaCats] = React.useState<string[]>([]);
+  const [diaSel, setDiaSel] = React.useState<string | null>(null);
+  const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
   const doRideSearch = async () => {
     const q = rideQ.trim();
     setRideSel(null);
@@ -14983,6 +14988,26 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     setRideRoutes(rtMap);
     const cats = Array.from(new Set(sorted.map((r: any) => r.category)));
     if (cats.length === 1) setRideSel(cats[0] as string);
+  };
+
+  const doDiaSearch = async () => {
+    const q = diaQ.trim();
+    setDiaSel(null); setDiaCats([]); setDiaRouteMap({});
+    if (!q) { setDiaNo(null); return; }
+    setDiaNo(q);
+    const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
+    const cats = order.filter((c) => diaTable.some((r: any) => Number(r.dia_no) === Number(q) && r.day_type === c));
+    setDiaCats(cats);
+    if (cats.length === 1) setDiaSel(cats[0]);
+    const { data } = await supabase.from("dia_route").select("*").eq("dia_no", q);
+    const grouped: any = {};
+    (data || []).forEach((r: any) => {
+      if (!grouped[r.category]) grouped[r.category] = [];
+      grouped[r.category].push(r);
+    });
+    const map: any = {};
+    Object.keys(grouped).forEach((k) => { map[k] = rebuildRuns(grouped[k]); });
+    setDiaRouteMap(map);
   };
 
   const [searchList, setSearchList] = React.useState<any[]>([]);
@@ -15021,7 +15046,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   React.useEffect(() => {
     (window as any).__backHandler = () => {
       if (timePopup) { setTimePopup(null); return true; }
-     if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites" || subScreen === "ride") { setSubScreen("menu"); return true; }
+     if (subScreen === "phones" || subScreen === "contacts" || subScreen === "compare" || subScreen === "favorites" || subScreen === "ride" || subScreen === "diasearch") { setSubScreen("menu"); return true; }
       if (subScreen === "menu" || subScreen === "search") { setSubScreen(null); return true; }
       if (activeTab === "교번" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { setSelectedMember(null); return true; }
       if (activeTab === "통상" && selectedMember && String(selectedMember.employee_number) !== String(user?.employee_number)) { goMySchedule(); return true; }
@@ -16945,6 +16970,84 @@ const getKyobunWork = (member: any, date: Date) => {
     );
   };
 
+  const renderDiaSearch = () => {
+    const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
+    const info = (diaNo && diaSel) ? getDiaInfo(diaNo, diaSel) : null;
+    const runs = diaSel ? diaRouteMap[diaSel] : null;
+    const hasVal = (v: any) => v !== null && v !== undefined && v !== "" && Number(v) !== 0;
+    const fields: any[] = info ? [
+      { label: "주행키로", show: hasVal(info.distance_km), val: `${info.distance_km} km` },
+      { label: "인정근무", show: hasVal(info.work_hours), val: fmtHours(info.work_hours) },
+      { label: "출근", show: !!info.start_time, val: info.start_time, color: "#1D4ED8" },
+      { label: "퇴근", show: !!info.end_time, val: info.end_time, color: "#BE185D" },
+      { label: "운전", show: hasVal(info.drive_hours), val: fmtHours(info.drive_hours) },
+      { label: "대기", show: hasVal(info.wait_hours), val: fmtHours(info.wait_hours) },
+      { label: "편승", show: hasVal(info.ride_hours), val: fmtHours(info.ride_hours) },
+      { label: "감시", show: hasVal(info.watch_hours), val: fmtHours(info.watch_hours) },
+      { label: "교육", show: hasVal(info.edu_hours), val: fmtHours(info.edu_hours) },
+      { label: "준비", show: hasVal(info.prep_hours), val: fmtHours(info.prep_hours) },
+      { label: "정리", show: hasVal(info.clean_hours), val: fmtHours(info.clean_hours) },
+      { label: "심야", show: hasVal(info.night_hours), val: fmtHours(info.night_hours) },
+    ].filter((f) => f.show) : [];
+    return (
+      <div style={{ padding: "16px 16px 24px" }}>
+        <button onClick={() => { setSubScreen("menu"); setDiaQ(""); setDiaNo(null); setDiaCats([]); setDiaSel(null); setDiaRouteMap({}); }} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 메뉴화면</button>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>다이아 검색</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>다이아 번호를 입력하면 행로와 시간 정보가 나와요</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+          <input
+            value={diaQ}
+            onChange={(e) => setDiaQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") doDiaSearch(); }}
+            inputMode="numeric"
+            placeholder="다이아 번호 입력 (예: 2)"
+            style={{ flex: 1, padding: "13px 14px", border: "1.5px solid #E8E8F0", borderRadius: 13, background: "#FAFAFD", fontSize: 16, boxSizing: "border-box", outline: "none" }}
+          />
+          <button onClick={doDiaSearch} style={{ padding: "0 20px", borderRadius: 13, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>검색</button>
+        </div>
+        {diaNo && diaCats.length === 0 && (
+          <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>{diaNo} 다이아를 찾을 수 없어요</div>
+        )}
+        {diaCats.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>근무유형 선택</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {diaCats.map((c) => (
+                <button key={c} onClick={() => setDiaSel(c)} style={{ padding: "10px 17px", borderRadius: 12, border: diaSel === c ? "2px solid #4F46E5" : "2px solid #E5E7EB", background: diaSel === c ? "#4F46E5" : "#fff", color: diaSel === c ? "#fff" : "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>{c}</button>
+              ))}
+            </div>
+            {diaSel && (
+              <div>
+                <div style={{ textAlign: "center", marginBottom: 12 }}>
+                  <span style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {diaNo}</span>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>근무행로</div>
+                {runs && runs.length > 0 ? (
+                  <RouteDiagram runs={runs} />
+                ) : (
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 미입력</div>
+                )}
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", margin: "18px 0 8px" }}>시간 · 거리 정보</div>
+                {fields.length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {fields.map((f, i) => (
+                      <div key={i} style={{ background: "#F7F7FB", borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: "#9CA3AF" }}>{f.label}</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: f.color || "#111827" }}>{f.val}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>시간 정보 없음</div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderKyobunTab = () => {
     if (subScreen === "contacts") return renderContacts();
     if (subScreen === "compare") return renderCompare();
@@ -17790,6 +17893,23 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
           >
             🔍 직원검색
           </button>
+          <button
+            onClick={() => { setDiaQ(""); setDiaNo(null); setDiaCats([]); setDiaSel(null); setDiaRouteMap({}); setSubScreen("diasearch"); }}
+            style={{
+              background: "#EEF6F2",
+              border: "none",
+              color: "#0F6E56",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              padding: "9px 0",
+              borderRadius: 11,
+              fontFamily: "inherit",
+              flex: 1,
+            }}
+          >
+            🚉 다이아
+          </button>
         </div>
 
         <div
@@ -17856,6 +17976,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
         {subScreen === "favorites" && renderFavorites()}
             {subScreen === "phones" && renderWorkPhones()}
         {subScreen === "ride" && renderRide()}
+        {subScreen === "diasearch" && renderDiaSearch()}
         {subScreen === null && activeTab === "교대" && (
           <>
             {!crewLoaded && (
