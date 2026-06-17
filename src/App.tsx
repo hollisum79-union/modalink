@@ -1118,6 +1118,9 @@ function HaebangRaceGame({ onBack, user }: any) {
   const [mode, setMode] = useState<string>("manual");
   const [memberNames, setMemberNames] = useState<string[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [fixedWinners, setFixedWinners] = useState<number[] | null>(null);
+  const [lobbyUsers, setLobbyUsers] = useState<any[]>([]);
+  const [liveMsg, setLiveMsg] = useState("");
 
   useEffect(() => {
     supabase.from("game_settings").select("value").eq("key", "haebang_phrase").maybeSingle()
@@ -1144,6 +1147,52 @@ function HaebangRaceGame({ onBack, user }: any) {
     setLoadingMembers(false);
   };
 
+  const startedRef = React.useRef(false);
+  const handleSessionStart = (s: any) => {
+    if (!s || s.status !== "running" || !s.participants) return;
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const parts = s.participants;
+    setMemberNames(parts.map((p: any) => p.name || "?"));
+    setCount(parts.length);
+    setWinCount(s.win_count || 1);
+    setFixedWinners(s.winners || []);
+    setMode("all");
+    setPlaying(true);
+  };
+
+  useEffect(() => {
+    if (!user?.employee_number) return;
+    const ch = supabase.channel("haebang-lobby", { config: { presence: { key: String(user.employee_number) } } });
+    ch.on("presence", { event: "sync" }, () => {
+      const st: any = ch.presenceState();
+      const list = Object.values(st).map((a: any) => a[0]).filter(Boolean);
+      setLobbyUsers(list);
+    }).subscribe((status: any) => {
+      if (status === "SUBSCRIBED") ch.track({ name: user.name, emp: user.employee_number, at: Date.now() });
+    });
+    const sess = supabase.channel("game-sessions-watch")
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_sessions" }, (payload: any) => {
+        if (payload.new && payload.new.status === "running") handleSessionStart(payload.new);
+      }).subscribe();
+    return () => { supabase.removeChannel(ch); supabase.removeChannel(sess); };
+  }, [user?.employee_number]);
+
+  const startLiveDraw = async () => {
+    const us = lobbyUsers.slice();
+    if (us.length < 2) { setLiveMsg("참가자가 2명 이상이어야 해요"); return; }
+    for (let i = us.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [us[i], us[j]] = [us[j], us[i]]; }
+    const participants = us.map((u: any, i: number) => ({ n: i + 1, name: u.name || "?", emp: u.emp }));
+    const wc = Math.max(1, Math.min(winCount, participants.length - 1));
+    const pool = participants.map((p: any) => p.n);
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const winners = pool.slice(0, wc).sort((a: number, b: number) => a - b);
+    setLiveMsg("");
+    const { error } = await supabase.from("game_sessions").insert({ status: "running", win_count: wc, participants, winners, started_at: new Date().toISOString() });
+    if (error) setLiveMsg("시작 실패: " + (error.message || ""));
+  };
+
+
   useEffect(() => {
     if (!playing) return;
     const cv = refs.cv;
@@ -1164,8 +1213,10 @@ function HaebangRaceGame({ onBack, user }: any) {
     let last7=false, flashA=0, shake=0, finished=false;
     let gx=HOLEX, gy=FLOOR_Y-52, gtx=HOLEX, gty=FLOOR_Y-52;
     let windC=0,windL=0,windR=0,fC=0,fL=0,fR=0,nextC=WIND_PERIOD,nextL=70,nextR=130;
-    const winCountLocal = Math.max(1, Math.min(winCount, count-1));
-    const names: string[] | null = (mode === "all" && memberNames.length >= 2) ? memberNames : null;
+    const fixedWin: Set<number> | null = (fixedWinners && fixedWinners.length) ? new Set(fixedWinners) : null;
+    const winCountLocal = fixedWin ? fixedWin.size : Math.max(1, Math.min(winCount, count-1));
+    const isWinner = (b:any) => !!(fixedWin && fixedWin.has(b.n));
+    const names: string[] | null = ((mode === "all" || mode === "live") && memberNames.length >= 2) ? memberNames : null;
     let killed=false; const timers:any[]=[];
     const T=(fn:any,ms:number)=>{const id=setTimeout(()=>{if(!killed)fn();},ms);timers.push(id);return id;};
 
@@ -1267,8 +1318,8 @@ function HaebangRaceGame({ onBack, user }: any) {
           if(windR>0&&b.x>WRX){b.vy-=fR*0.85;b.vx-=fR*0.4;}}
         for(const s of stations){if(s.windLife>0&&Math.abs(b.y-s.y)<55&&b.x<LANE+160){b.vy-=s.windF*0.55;b.vx+=s.windF*0.7;}}
         if(last7){b.trail.push({x:b.x,y:b.y});if(b.trail.length>7)b.trail.shift();}
-        if(b.x<LANE+b.r){if(mouthL.gap>14&&Math.abs(b.y-mouthL.y)<mouthL.gap/2){eliminate(b,LANE,b.y);continue;}b.x=LANE+b.r;b.vx=Math.abs(b.vx)*0.8;}
-        if(b.x>W-b.r){if(mouthR.gap>14&&Math.abs(b.y-mouthR.y)<mouthR.gap/2){eliminate(b,W,b.y);continue;}b.x=W-b.r;b.vx=-Math.abs(b.vx)*0.8;}
+        if(b.x<LANE+b.r){if(mouthL.gap>14&&Math.abs(b.y-mouthL.y)<mouthL.gap/2){if(isWinner(b)){b.x=LANE+b.r+2;b.vx=Math.abs(b.vx)*0.8+0.6;b.vy+=(Math.random()-0.5)*1.5;}else{eliminate(b,LANE,b.y);continue;}}b.x=LANE+b.r;b.vx=Math.abs(b.vx)*0.8;}
+        if(b.x>W-b.r){if(mouthR.gap>14&&Math.abs(b.y-mouthR.y)<mouthR.gap/2){if(isWinner(b)){b.x=W-b.r-2;b.vx=-Math.abs(b.vx)*0.8-0.6;b.vy+=(Math.random()-0.5)*1.5;}else{eliminate(b,W,b.y);continue;}}b.x=W-b.r;b.vx=-Math.abs(b.vx)*0.8;}
         if(b.y<TOP+b.r){b.y=TOP+b.r;b.vy=Math.abs(b.vy);}
         for(const p of pegs){const dx=b.x-p.x,dy=b.y-p.y,d=Math.hypot(dx,dy);
           if(d<b.r+p.r&&d>0){const nx=dx/d,ny=dy/d;b.x=p.x+nx*(b.r+p.r);b.y=p.y+ny*(b.r+p.r);
@@ -1291,7 +1342,7 @@ function HaebangRaceGame({ onBack, user }: any) {
       for(const b of balls){if(b.done)continue;
         if(b.y>=FLOOR_Y-b.r){
           const h=holes[0];
-          if(h.open&&Math.abs(b.x-h.x)<h.hw){eliminate(b,h.x,FLOOR_Y);}
+          if(h.open&&Math.abs(b.x-h.x)<h.hw){if(isWinner(b)){b.y=FLOOR_Y-b.r;b.vy=-Math.abs(b.vy)*0.8-1.2;b.vx+=(b.x<h.x?-1:1)*(1+Math.random()*1.5);}else{eliminate(b,h.x,FLOOR_Y);}}
           else{b.y=FLOOR_Y-b.r;b.vy=-Math.abs(b.vy)*0.78;b.vx*=1.05;}
         }}
       if(lead){for(let i=0;i<stations.length;i++){if(leadY>=stations[i].y&&i>lastStation){lastStation=i;stations[i].glow=34;}}}
@@ -1464,16 +1515,24 @@ function HaebangRaceGame({ onBack, user }: any) {
           {user?.is_admin && (
             <div style={{marginBottom:14}}>
               <div style={{fontSize:13,color:"#b9b6d8",marginBottom:8}}>참가 대상 (관리자)</div>
-              <div style={{display:"flex",gap:8}}>
+              <div style={{display:"flex",gap:6}}>
                 <button onClick={()=>setMode("manual")}
-                  style={{flex:1,padding:10,borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer",border:mode==="manual"?"none":"1px solid #4a4570",background:mode==="manual"?"#4F46E5":"transparent",color:mode==="manual"?"#fff":"#b9b6d8"}}>직접 인원</button>
+                  style={{flex:1,padding:10,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",border:mode==="manual"?"none":"1px solid #4a4570",background:mode==="manual"?"#4F46E5":"transparent",color:mode==="manual"?"#fff":"#b9b6d8"}}>직접 인원</button>
                 <button onClick={()=>{setMode("all");loadAllMembers();}}
-                  style={{flex:1,padding:10,borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer",border:mode==="all"?"none":"1px solid #4a4570",background:mode==="all"?"#4F46E5":"transparent",color:mode==="all"?"#fff":"#b9b6d8"}}>전체 조합원</button>
+                  style={{flex:1,padding:10,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",border:mode==="all"?"none":"1px solid #4a4570",background:mode==="all"?"#4F46E5":"transparent",color:mode==="all"?"#fff":"#b9b6d8"}}>전체 조합원</button>
+                <button onClick={()=>setMode("live")}
+                  style={{flex:1,padding:10,borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",border:mode==="live"?"none":"1px solid #4a4570",background:mode==="live"?"#4F46E5":"transparent",color:mode==="live"?"#fff":"#b9b6d8"}}>접속자</button>
               </div>
             </div>
           )}
 
-          {mode==="all" ? (
+          {mode==="live" ? (
+            <div style={{marginBottom:14,background:"rgba(93,202,165,0.08)",border:"0.5px solid rgba(93,202,165,0.3)",borderRadius:12,padding:14}}>
+              <div style={{fontSize:14,color:"#5DCAA5",fontWeight:600,textAlign:"center",marginBottom:6}}>대기실</div>
+              <div style={{fontSize:13,color:"#fff",textAlign:"center",marginBottom:10}}>지금 접속 <b style={{color:"#FAC775",fontSize:16}}>{lobbyUsers.length}</b>명</div>
+              <div style={{fontSize:11,color:"#9FE1CB",textAlign:"center",lineHeight:1.6}}>조합원들이 게임 화면에 들어오면 자동 참가됩니다.<br/>다 모이면 아래 "추첨 시작"을 누르세요.</div>
+            </div>
+          ) : mode==="all" ? (
             <div style={{...rowBox,justifyContent:"space-between"}}>
               <label style={{fontSize:14,color:"#b9b6d8"}}>참가 인원</label>
               <span style={{fontSize:16,fontWeight:600,color:"#fff"}}>{loadingMembers?"불러오는 중…":(memberNames.length+"명 (조합원 전체)")}</span>
@@ -1491,9 +1550,14 @@ function HaebangRaceGame({ onBack, user }: any) {
             <input type="range" min={1} max={20} value={winCount} step={1} style={{flex:1}} onChange={(e)=>setWinCount(parseInt(e.target.value,10))}/>
             <span style={{fontSize:16,fontWeight:600,color:"#fff",minWidth:30,textAlign:"right"}}>{winCount}</span>
           </div>
-          <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#4F46E5",color:"#fff",cursor:(mode==="all"&&memberNames.length<2)?"default":"pointer",opacity:(mode==="all"&&memberNames.length<2)?0.5:1}} disabled={mode==="all"&&memberNames.length<2} onClick={()=>setPlaying(true)}>출발</button>
+          {mode==="live" ? (
+            <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#5DCAA5",color:"#0F0B2E",cursor:lobbyUsers.length<2?"default":"pointer",opacity:lobbyUsers.length<2?0.5:1}} disabled={lobbyUsers.length<2} onClick={startLiveDraw}>🎯 추첨 시작 ({lobbyUsers.length}명)</button>
+          ) : (
+            <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#4F46E5",color:"#fff",cursor:(mode==="all"&&memberNames.length<2)?"default":"pointer",opacity:(mode==="all"&&memberNames.length<2)?0.5:1}} disabled={mode==="all"&&memberNames.length<2} onClick={()=>setPlaying(true)}>출발</button>
+          )}
+          {liveMsg && (<div style={{fontSize:12,color:"#F09595",textAlign:"center",marginTop:8}}>{liveMsg}</div>)}
           <button style={ghostBtn} onClick={()=>setView("list")}>← 게임 목록</button>
-          <div style={{fontSize:11,color:"#6b6890",textAlign:"center",marginTop:8}}>{mode==="all"?"조합원 명단에 무작위 번호가 부여됩니다":"직접 인원을 정해 진행합니다"}</div>
+          <div style={{fontSize:11,color:"#6b6890",textAlign:"center",marginTop:8}}>{mode==="live"?"접속자 전원이 동시에 추첨을 봅니다":mode==="all"?"조합원 명단에 무작위 번호가 부여됩니다":"직접 인원을 정해 진행합니다"}</div>
         </div>
       )}
 
@@ -1504,7 +1568,7 @@ function HaebangRaceGame({ onBack, user }: any) {
           <div ref={(el:any)=>refs.bigmsg=el} style={{position:"absolute",top:66,left:0,right:0,textAlign:"center",pointerEvents:"none"}}/>
           <div ref={(el:any)=>refs.status=el} style={{textAlign:"center",fontSize:14,color:"#b9b6d8",marginTop:10,minHeight:20}}/>
           <div ref={(el:any)=>refs.roster=el} style={{display:"none",position:"absolute",top:"7%",left:"1.5%",width:"21%",maxHeight:"86%",overflow:"hidden",pointerEvents:"none"}}/>
-          <button style={ghostBtn} onClick={()=>{setPlaying(false);setView("setup");}}>다시 하기</button>
+          <button style={ghostBtn} onClick={()=>{setPlaying(false);startedRef.current=false;setFixedWinners(null);setView("setup");}}>다시 하기</button>
         </div>
       )}
     </div>
