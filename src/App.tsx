@@ -1104,13 +1104,29 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
 
 // ── 해방역 레이스 게임 ──
 
-function HaebangRaceGame({ onBack }: any) {
+function HaebangRaceGame({ onBack, user }: any) {
   const refs = React.useRef<any>({}).current;
   const [view, setView] = useState<string>("title");
   const [count, setCount] = useState(24);
   const [winCount, setWinCount] = useState(1);
   const [playing, setPlaying] = useState(false);
   const lastTapRef = React.useRef<number>(0);
+  const [phrase, setPhrase] = useState("7호선을 움직이는 우리,\n오늘은 행운도 함께 달려요!");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  useEffect(() => {
+    supabase.from("game_settings").select("value").eq("key", "haebang_phrase").maybeSingle()
+      .then(({ data }: any) => { if (data && data.value) setPhrase(data.value); });
+  }, []);
+
+  const savePhrase = async () => {
+    const v = draft.trim();
+    if (!v) return;
+    await supabase.from("game_settings").upsert({ key: "haebang_phrase", value: v, updated_at: new Date().toISOString() });
+    setPhrase(v);
+    setEditing(false);
+  };
 
   useEffect(() => {
     if (!playing) return;
@@ -1340,12 +1356,39 @@ function HaebangRaceGame({ onBack }: any) {
       <button onClick={onBack} style={{background:"transparent",border:"none",color:"#b9b6d8",fontSize:15,cursor:"pointer",marginBottom:8}}>← 나가기</button>
 
       {!playing && view==="title" && (
-        <div onClick={()=>{const n=Date.now();if(n-lastTapRef.current<450)setView("list");lastTapRef.current=n;}}
-          style={{cursor:"pointer",textAlign:"center",padding:"48px 0"}}>
+        <div style={{textAlign:"center",padding:"40px 0"}}>
           <div style={{fontSize:12,color:"#8a86b8",letterSpacing:1}}>서울교통공사노동조합</div>
-          <div style={{fontSize:22,fontWeight:600,color:"#fff"}}>대공원승무지회</div>
-          <div style={{fontSize:12,color:"#5DCAA5",marginTop:3}}>해방역에 닿을 때까지</div>
-          <div style={{fontSize:11,color:"#6b6890",marginTop:24}}>제목을 두 번 누르면 들어갑니다</div>
+          <div style={{fontSize:23,fontWeight:600,color:"#fff"}}>대공원승무지회</div>
+          <div style={{fontSize:12,color:"#5DCAA5",marginTop:4}}>해방역에 닿을 때까지</div>
+
+          {!editing && (
+            <div style={{margin:"24px auto 0",maxWidth:300,background:"rgba(93,202,165,0.1)",border:"0.5px solid rgba(93,202,165,0.35)",borderRadius:12,padding:"14px 16px"}}>
+              <div style={{fontSize:13,color:"#C0DD97",lineHeight:1.7,whiteSpace:"pre-line"}}>{phrase}</div>
+            </div>
+          )}
+
+          {editing && (
+            <div style={{margin:"24px auto 0",maxWidth:320}}>
+              <textarea value={draft} onChange={(e)=>setDraft(e.target.value)} rows={3}
+                style={{width:"100%",boxSizing:"border-box",padding:10,borderRadius:10,border:"1px solid #4a4570",background:"#16123A",color:"#fff",fontSize:14,resize:"vertical"}}/>
+              <div style={{fontSize:11,color:"#6b6890",marginTop:4,textAlign:"left"}}>줄바꿈하려면 엔터를 누르세요</div>
+              <div style={{display:"flex",gap:8,marginTop:8}}>
+                <button onClick={savePhrase} style={{flex:1,padding:10,borderRadius:10,border:"none",background:"#4F46E5",color:"#fff",fontWeight:600,cursor:"pointer"}}>저장</button>
+                <button onClick={()=>setEditing(false)} style={{flex:1,padding:10,borderRadius:10,border:"1px solid #4a4570",background:"transparent",color:"#b9b6d8",cursor:"pointer"}}>취소</button>
+              </div>
+            </div>
+          )}
+
+          {!editing && (
+            <button onClick={()=>setView("list")} style={{margin:"22px auto 0",display:"block",background:"#4F46E5",color:"#fff",border:"none",borderRadius:14,padding:"13px 44px",fontSize:16,fontWeight:600,cursor:"pointer"}}>입장하기</button>
+          )}
+          {!editing && (
+            <div style={{fontSize:11,color:"#6b6890",marginTop:12}}>동료들과 함께 즐기는 행운의 레이스</div>
+          )}
+
+          {user?.is_admin && !editing && (
+            <button onClick={()=>{setDraft(phrase);setEditing(true);}} style={{marginTop:18,background:"transparent",border:"none",color:"#6b6890",fontSize:12,textDecoration:"underline",cursor:"pointer"}}>✏️ 문구 수정 (관리자)</button>
+          )}
         </div>
       )}
 
@@ -29129,7 +29172,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       </>
     );
   if (screen === "haebangGame")
-    return <HaebangRaceGame onBack={() => setScreen("home")} />;
+    return <HaebangRaceGame onBack={() => setScreen("home")} user={user} />;
   if (screen === "canteen")
         return <CanteenScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "unionActivity")
