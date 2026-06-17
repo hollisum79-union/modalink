@@ -12069,7 +12069,7 @@ function RouteDiagram({ runs }: { runs: any[] }) {
                 <line x1={a} y1={y + 2} x2={b} y2={y + 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
                 {r.idxs.length > 0 && <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
                 {r.idxs.length > 0 && <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
-                <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
+                <rect x={mx - 20} y={y - 10} width="40" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
             );
@@ -12092,7 +12092,7 @@ function RouteDiagram({ runs }: { runs: any[] }) {
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
               <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
               <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
-              <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
+              <rect x={mx - 21} y={y - 10} width="42" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
           );
