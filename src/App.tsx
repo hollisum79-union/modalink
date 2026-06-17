@@ -12055,11 +12055,20 @@ function RouteDiagram({ runs }: { runs: any[] }) {
             const a = r.idxs.length ? xOf(r.idxs[0]) : padL;
             const b = r.idxs.length ? xOf(r.idxs[r.idxs.length - 1]) : xOf(5);
             const mx = (a + b) / 2;
+            const prevR = rows[i - 1];
+            const linked = prevR && prevR.group === r.group && prevR.to === r.from;
+            const py = top + (i - 1) * rowH + 16;
+            const sr = a >= b;
+            const sx = sr ? a + 14 : a - 14, sAnc = sr ? "start" : "end";
+            const ex = sr ? b - 14 : b + 14, eAnc = sr ? "end" : "start";
             return (
               <g key={i}>
-                <line x1={a} y1={y} x2={b} y2={y} stroke="#111" strokeWidth="1.5" strokeDasharray="4 3" />
-                {r.idxs.length > 0 && <text x={a - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>}
-                {r.idxs.length > 0 && <text x={b + 14} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>}
+                {linked && <line x1={a - 2} y1={py} x2={a - 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
+                {linked && <line x1={a + 2} y1={py} x2={a + 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
+                <line x1={a} y1={y - 2} x2={b} y2={y - 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
+                <line x1={a} y1={y + 2} x2={b} y2={y + 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
+                {r.idxs.length > 0 && <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
+                {r.idxs.length > 0 && <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
                 <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
@@ -12069,6 +12078,10 @@ function RouteDiagram({ runs }: { runs: any[] }) {
           const fromOut = r.from === 0 || r.from === 17;
           const toIn = r.to === 0 || r.to === 17;
           const mx = (xOf(r.idxs[0]) + xOf(r.idxs[r.idxs.length - 1])) / 2;
+          const xf = xOf(r.idxs[0]), xt = xOf(r.idxs[r.idxs.length - 1]);
+          const sr = xf >= xt;
+          const sx = sr ? xf + 14 : xf - 14, sAnc = sr ? "start" : "end";
+          const ex = sr ? xt - 14 : xt + 14, eAnc = sr ? "end" : "start";
           const prev = rows[i - 1];
           const linkedFrom = prev && !prev.isRide && !r.isRide && prev.group === r.group && prev.to === r.from;
           return (
@@ -12077,8 +12090,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
               {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={xOf(r.idxs[0]) - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
-              <text x={xOf(r.idxs[r.idxs.length - 1]) + 14} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
+              <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
+              <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
@@ -14932,21 +14945,40 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [rideHits, setRideHits] = React.useState<any[]>([]);
   const [rideSel, setRideSel] = React.useState<string | null>(null);
   const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
+  const [rideRoutes, setRideRoutes] = React.useState<any>({});
   const doRideSearch = async () => {
     const q = rideQ.trim();
     setRideSel(null);
     if (!q) { setRideHits([]); return; }
+    if (members.length === 0) {
+      const { data: mem } = await supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total")
+        .in("work_group", ["대공원", "도봉"])
+        .order("name");
+      if (mem) setMembers(mem);
+    }
     const { data } = await supabase.from("ride_dia").select("*").eq("train_no", q);
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
     const sorted = (data || []).sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (a.dia_no - b.dia_no));
     setRideHits(sorted);
     const wfMap: any = {};
+    const rtMap: any = {};
     if (sorted.length > 0) {
       const dias = Array.from(new Set(sorted.map((r: any) => String(r.dia_no))));
       const { data: wfs } = await supabase.from("dia_work_form").select("*").in("dia_no", dias);
       (wfs || []).forEach((w: any) => { wfMap[String(w.dia_no) + "|" + w.category] = w.work_form; });
+      const { data: rts } = await supabase.from("dia_route").select("*").in("dia_no", dias);
+      const grouped: any = {};
+      (rts || []).forEach((r: any) => {
+        const k = String(r.dia_no) + "|" + r.category;
+        if (!grouped[k]) grouped[k] = [];
+        grouped[k].push(r);
+      });
+      Object.keys(grouped).forEach((k) => { rtMap[k] = rebuildRuns(grouped[k]); });
     }
     setRideWorkForms(wfMap);
+    setRideRoutes(rtMap);
     const cats = Array.from(new Set(sorted.map((r: any) => r.category)));
     if (cats.length === 1) setRideSel(cats[0] as string);
   };
@@ -16810,12 +16842,46 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아</div>
                 {rideHits.filter((h: any) => h.category === rideSel).map((h: any, i: number) => {
                   const bs = badgeStyle(h.mark);
+                  const todayDrivers = members
+                    .filter((m: any) => {
+                      const w = getKyobunWork(m, today);
+                      return w && String(w.dia) === String(h.dia_no);
+                    })
+                    .map((m: any) => m.name);
+                  const info = getDiaInfo(h.dia_no, h.category);
+                  const runs = rideRoutes[String(h.dia_no) + "|" + h.category];
                   return (
-                    <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", textAlign: "center", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
-                      <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
-                      <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
-                      {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
-                      {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
+                    <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
+                        <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
+                        {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
+                        {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
+                      </div>
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #F3F4F6", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>오늘 이 다이아 기관사</div>
+                        {todayDrivers.length > 0
+                          ? <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>{todayDrivers.join(", ")}</div>
+                          : <div style={{ fontSize: 13, color: "#9CA3AF" }}>오늘은 해당 없음</div>}
+                      </div>
+                      {info && (info.start_time || info.end_time) && (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6", display: "flex", justifyContent: "center", gap: 28 }}>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>출근</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "#1D4ED8" }}>{info.start_time || "-"}</div>
+                          </div>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>퇴근</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "#BE185D" }}>{info.end_time || "-"}</div>
+                          </div>
+                        </div>
+                      )}
+                      {runs && runs.length > 0 && (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+                          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8, textAlign: "center" }}>근무행로</div>
+                          <RouteDiagram runs={runs} />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
