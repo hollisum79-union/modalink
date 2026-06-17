@@ -12157,10 +12157,13 @@ function RouteInputScreen() {
   const delRun = (i: number) => setRuns((p) => p.filter((_, idx) => idx !== i));
   const upd = (i: number, k: string, v: string) => setRuns((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
   const fmtTime = (i: number, k: string, v: string) => {
-    const d = (v || "").replace(/\D/g, "");
-    let out = v;
-    if (d.length === 6) out = d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4, 6);
-    else if (d.length === 5) out = "0" + d.slice(0, 1) + ":" + d.slice(1, 3) + ":" + d.slice(3, 5);
+    const fmtOne = (s: string) => {
+      const d = s.replace(/\D/g, "");
+      if (d.length === 6) return d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4, 6);
+      if (d.length === 5) return "0" + d.slice(0, 1) + ":" + d.slice(1, 3) + ":" + d.slice(3, 5);
+      return s.trim();
+    };
+    const out = (v || "").split(",").map(fmtOne).join(",");
     if (out !== v) upd(i, k, out);
   };
 
