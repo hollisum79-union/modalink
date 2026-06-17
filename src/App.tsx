@@ -14950,6 +14950,14 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     const q = rideQ.trim();
     setRideSel(null);
     if (!q) { setRideHits([]); return; }
+    if (members.length === 0) {
+      const { data: mem } = await supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total")
+        .in("work_group", ["대공원", "도봉"])
+        .order("name");
+      if (mem) setMembers(mem);
+    }
     const { data } = await supabase.from("ride_dia").select("*").eq("train_no", q);
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
     const sorted = (data || []).sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (a.dia_no - b.dia_no));
