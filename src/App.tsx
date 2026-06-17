@@ -29532,10 +29532,17 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     );
   if (screen === "register")
     return <RegisterScreen onBack={() => setScreen("login")} />;
+    if (screen === "noticeEdit" && selectedNotice)
+    return (
+      <NoticeForm
+        item={selectedNotice}
+        onClose={(r: boolean) => { if (r) loadNotices(); setScreen("noticeList"); }}
+      />
+    );
   if (screen === "noticeDetail" && selectedNotice)
     return (
       <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 80 }}>
-        <div
+  <div
           style={{
             background: "linear-gradient(135deg, #3730A3, #4F46E5, #6D28D9)",
             borderRadius: 28,
@@ -29644,8 +29651,14 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     </div>
                   );
                 })}
-            </div>
+                        </div>
           </div>
+          {(user as any)?.is_admin && (
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button onClick={() => setScreen("noticeEdit")} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>✏️ 수정</button>
+              <button onClick={async () => { if (!window.confirm("이 공지를 삭제할까요? 되돌릴 수 없습니다.")) return; const { error } = await supabase.from("notices").delete().eq("id", (selectedNotice as any).id); if (error) { alert("삭제 실패: " + error.message); return; } loadNotices(); setScreen("noticeList"); }} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>🗑 삭제</button>
+            </div>
+          )}
         </div>
       </div>
     );
