@@ -1119,6 +1119,7 @@ function HaebangRaceGame({ onBack, user }: any) {
   const [memberNames, setMemberNames] = useState<string[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [fixedWinners, setFixedWinners] = useState<number[] | null>(null);
+  const [gameSeed, setGameSeed] = useState(1);
   const [lobbyUsers, setLobbyUsers] = useState<any[]>([]);
   const [liveMsg, setLiveMsg] = useState("");
 
@@ -1156,7 +1157,8 @@ function HaebangRaceGame({ onBack, user }: any) {
     setMemberNames(parts.map((p: any) => p.name || "?"));
     setCount(parts.length);
     setWinCount(s.win_count || 1);
-    setFixedWinners(s.winners || []);
+    setFixedWinners(null);
+    setGameSeed((s.seed >>> 0) || 1);
     setMode("all");
     setPlaying(true);
   };
@@ -1184,17 +1186,17 @@ function HaebangRaceGame({ onBack, user }: any) {
     for (let i = us.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [us[i], us[j]] = [us[j], us[i]]; }
     const participants = us.map((u: any, i: number) => ({ n: i + 1, name: u.name || "?", emp: u.emp }));
     const wc = Math.max(1, Math.min(winCount, participants.length - 1));
-    const pool = participants.map((p: any) => p.n);
-    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-    const winners = pool.slice(0, wc).sort((a: number, b: number) => a - b);
+    const seed = ((Math.random() * 2147483647) >>> 0) || 1;
     setLiveMsg("");
-    const { error } = await supabase.from("game_sessions").insert({ status: "running", win_count: wc, participants, winners, started_at: new Date().toISOString() });
+    const { error } = await supabase.from("game_sessions").insert({ status: "running", win_count: wc, participants, winners: null, seed, started_at: new Date().toISOString() });
     if (error) setLiveMsg("시작 실패: " + (error.message || ""));
   };
 
 
   useEffect(() => {
     if (!playing) return;
+    let rngState = (gameSeed >>> 0) || 1;
+    const rng = () => { rngState |= 0; rngState = (rngState + 0x6D2B79F5) | 0; let tt = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState); tt = (tt + Math.imul(tt ^ (tt >>> 7), 61 | tt)) ^ tt; return ((tt ^ (tt >>> 14)) >>> 0) / 4294967296; };
     const cv = refs.cv;
     if (!cv) return;
     const ctx = cv.getContext("2d");
@@ -1239,10 +1241,10 @@ function HaebangRaceGame({ onBack, user }: any) {
       mouthL={y:300,gap:0,target:0,tog:50};mouthR={y:400,gap:0,target:0,tog:110};
     }
     function makeBalls(n:number){const arr:any[]=[],r=Math.max(5,Math.min(14,90/Math.sqrt(n)));
-      for(let i=0;i<n;i++)arr.push({n:i+1,x:LANE+16+Math.random()*(W-LANE-32),y:TOP+4+Math.random()*92,
-        vx:(Math.random()-0.5)*1.2,vy:0,r,color:palette[i%palette.length],done:false,trail:[]});return arr;}
-    function burst(x:number,y:number,color:any,big:any){const N=big?34:22;for(let i=0;i<N;i++){const a=Math.random()*Math.PI*2,s=2+Math.random()*5;
-      confetti.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2.5,life:54,color:Math.random()<0.4?color:palette[Math.floor(Math.random()*palette.length)],sz:3+Math.random()*4});}}
+      for(let i=0;i<n;i++)arr.push({n:i+1,x:LANE+16+rng()*(W-LANE-32),y:TOP+4+rng()*92,
+        vx:(rng()-0.5)*1.2,vy:0,r,color:palette[i%palette.length],done:false,trail:[]});return arr;}
+    function burst(x:number,y:number,color:any,big:any){const N=big?34:22;for(let i=0;i<N;i++){const a=rng()*Math.PI*2,s=2+rng()*5;
+      confetti.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2.5,life:54,color:rng()<0.4?color:palette[Math.floor(rng()*palette.length)],sz:3+rng()*4});}}
     function bigText(txt:any,sub:any,col:any){let h='<div style="display:inline-block;background:rgba(15,11,46,0.84);padding:8px 18px;border-radius:22px;">'
       +'<span style="font-size:21px;font-weight:600;color:'+col+';">'+txt+'</span>';
       if(sub)h+='<div style="font-size:12px;color:#9FE1CB;margin-top:2px;">'+sub+'</div>';h+='</div>';
@@ -1251,7 +1253,7 @@ function HaebangRaceGame({ onBack, user }: any) {
       let tt=((b.x-x1)*dx+(b.y-y1)*dy)/L2;tt=Math.max(0,Math.min(1,tt));
       const px=x1+tt*dx,py=y1+tt*dy,ex=b.x-px,ey=b.y-py,d=Math.hypot(ex,ey);
       if(d<b.r&&d>0){const nx=ex/d,ny=ey/d,dot=b.vx*nx+b.vy*ny;b.vx-=2*dot*nx;b.vy-=2*dot*ny;b.x=px+nx*(b.r+0.5);b.y=py+ny*(b.r+0.5);
-        if(kick){const dir=ny<0?-1:1;b.vy=dir*(kick*(0.55+Math.random()*0.95));b.vx+=(Math.random()-0.5)*1.6;b.boost=34;}else{b.vx*=1.02;b.vy*=1.02;}}}
+        if(kick){const dir=ny<0?-1:1;b.vy=dir*(kick*(0.55+rng()*0.95));b.vx+=(rng()-0.5)*1.6;b.boost=34;}else{b.vx*=1.02;b.vy*=1.02;}}}
     function ballCollide(){const act=balls.filter((b:any)=>!b.done);
       for(let i=0;i<act.length;i++)for(let j=i+1;j<act.length;j++){
         const a=act[i],b=act[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy),min=a.r+b.r;
@@ -1301,18 +1303,18 @@ function HaebangRaceGame({ onBack, user }: any) {
         return;
       }
       t++;const SP=last7?0.3:0.42;const G=0.072*SP,MAXV=4.6*SP;let leadY=0,lead:any=null;
-      if(Math.hypot(gtx-gx,gty-gy)<8){gtx=LANE+55+Math.random()*(W-LANE-105);gty=448+Math.random()*((FLOOR_Y-52)-448);}
+      if(Math.hypot(gtx-gx,gty-gy)<8){gtx=LANE+55+rng()*(W-LANE-105);gty=448+rng()*((FLOOR_Y-52)-448);}
       gx+=(gtx-gx)*(last7?0.03:0.02);gy+=(gty-gy)*(last7?0.03:0.02);
       {const al=balls.filter((b:any)=>!b.done).length;const tgR=Math.max(5,Math.min(20,90/Math.sqrt(Math.max(1,al))));for(const b of balls)if(!b.done)b.r+=(tgR-b.r)*0.04;}
-      if(t>=nextC){windC=26+Math.floor(Math.random()*30);fC=(0.4+Math.random()*1.0)*SP*(Math.random()<0.25?1.7:1);
-        for(const bb of balls){if(!bb.done)bb.wg=0.45+Math.random()*1.05;}
-        nextC=t+140+Math.floor(Math.random()*150);}
-      if(t>=nextL){windL=32+Math.floor(Math.random()*28);fL=(0.45+Math.random()*0.9)*SP*(Math.random()<0.25?1.7:1);nextL=t+90+Math.floor(Math.random()*120);}
-      if(t>=nextR){windR=32+Math.floor(Math.random()*28);fR=(0.45+Math.random()*0.9)*SP*(Math.random()<0.25?1.7:1);nextR=t+90+Math.floor(Math.random()*120);}
-      for(const s of stations){if(t>=s.windT){s.windLife=26+Math.floor(Math.random()*28);s.windF=(0.5+Math.random()*0.9)*SP;if(s.glow<40)s.glow=40;s.windT=t+200+Math.floor(Math.random()*280);}}
+      if(t>=nextC){windC=26+Math.floor(rng()*30);fC=(0.4+rng()*1.0)*SP*(rng()<0.25?1.7:1);
+        for(const bb of balls){if(!bb.done)bb.wg=0.45+rng()*1.05;}
+        nextC=t+140+Math.floor(rng()*150);}
+      if(t>=nextL){windL=32+Math.floor(rng()*28);fL=(0.45+rng()*0.9)*SP*(rng()<0.25?1.7:1);nextL=t+90+Math.floor(rng()*120);}
+      if(t>=nextR){windR=32+Math.floor(rng()*28);fR=(0.45+rng()*0.9)*SP*(rng()<0.25?1.7:1);nextR=t+90+Math.floor(rng()*120);}
+      for(const s of stations){if(t>=s.windT){s.windLife=26+Math.floor(rng()*28);s.windF=(0.5+rng()*0.9)*SP;if(s.glow<40)s.glow=40;s.windT=t+200+Math.floor(rng()*280);}}
       for(const m of [mouthL,mouthR]){
-        if(t>=m.tog){if(m.target>0){m.target=0;m.tog=t+50+Math.floor(Math.random()*70);}
-          else{m.target=52+Math.random()*40;m.y=TOP+90+Math.random()*(FLOOR_Y-TOP-180);m.tog=t+70+Math.floor(Math.random()*80);}}
+        if(t>=m.tog){if(m.target>0){m.target=0;m.tog=t+50+Math.floor(rng()*70);}
+          else{m.target=52+rng()*40;m.y=TOP+90+rng()*(FLOOR_Y-TOP-180);m.tog=t+70+Math.floor(rng()*80);}}
         m.gap+=(m.target-m.gap)*0.12;}
       for(const b of balls){
         if(b.done)continue;
@@ -1323,12 +1325,12 @@ function HaebangRaceGame({ onBack, user }: any) {
           if(windR>0&&b.x>WRX){b.vy-=fR*0.85;b.vx-=fR*0.4;}}
         for(const s of stations){if(s.windLife>0&&Math.abs(b.y-s.y)<55&&b.x<LANE+160){b.vy-=s.windF*0.55;b.vx+=s.windF*0.7;}}
         if(last7){b.trail.push({x:b.x,y:b.y});if(b.trail.length>7)b.trail.shift();}
-        if(b.x<LANE+b.r){if(mouthL.gap>14&&Math.abs(b.y-mouthL.y)<mouthL.gap/2){if(isWinner(b)){b.x=LANE+b.r+2;b.vx=Math.abs(b.vx)*0.8+0.6;b.vy+=(Math.random()-0.5)*1.5;}else{eliminate(b,LANE,b.y);continue;}}b.x=LANE+b.r;b.vx=Math.abs(b.vx)*0.8;}
-        if(b.x>W-b.r){if(mouthR.gap>14&&Math.abs(b.y-mouthR.y)<mouthR.gap/2){if(isWinner(b)){b.x=W-b.r-2;b.vx=-Math.abs(b.vx)*0.8-0.6;b.vy+=(Math.random()-0.5)*1.5;}else{eliminate(b,W,b.y);continue;}}b.x=W-b.r;b.vx=-Math.abs(b.vx)*0.8;}
+        if(b.x<LANE+b.r){if(mouthL.gap>14&&Math.abs(b.y-mouthL.y)<mouthL.gap/2){if(isWinner(b)){b.x=LANE+b.r+2;b.vx=Math.abs(b.vx)*0.8+0.6;b.vy+=(rng()-0.5)*1.5;}else{eliminate(b,LANE,b.y);continue;}}b.x=LANE+b.r;b.vx=Math.abs(b.vx)*0.8;}
+        if(b.x>W-b.r){if(mouthR.gap>14&&Math.abs(b.y-mouthR.y)<mouthR.gap/2){if(isWinner(b)){b.x=W-b.r-2;b.vx=-Math.abs(b.vx)*0.8-0.6;b.vy+=(rng()-0.5)*1.5;}else{eliminate(b,W,b.y);continue;}}b.x=W-b.r;b.vx=-Math.abs(b.vx)*0.8;}
         if(b.y<TOP+b.r){b.y=TOP+b.r;b.vy=Math.abs(b.vy);}
         for(const p of pegs){const dx=b.x-p.x,dy=b.y-p.y,d=Math.hypot(dx,dy);
           if(d<b.r+p.r&&d>0){const nx=dx/d,ny=dy/d;b.x=p.x+nx*(b.r+p.r);b.y=p.y+ny*(b.r+p.r);
-            const dot=b.vx*nx+b.vy*ny;b.vx-=2*dot*nx;b.vy-=2*dot*ny;b.vx=b.vx*1.12+(Math.random()-0.5)*0.6;b.vy*=1.12;p.glow=10;}}
+            const dot=b.vx*nx+b.vy*ny;b.vx-=2*dot*nx;b.vy-=2*dot*ny;b.vx=b.vx*1.12+(rng()-0.5)*0.6;b.vy*=1.12;p.glow=10;}}
         for(const bar of bars){const bx=bar.sw?seesawX(bar):bar.x;const ang=bar.sw?seesawAng(bar):bar.ang;
           const hx=Math.cos(ang)*bar.len/2,hy=Math.sin(ang)*bar.len/2;segHit(b,bx-hx,bar.y-hy,bx+hx,bar.y+hy,4);}
         {const ga=gateAng(),ghx=Math.cos(ga)*GATE_LEN/2,ghy=Math.sin(ga)*GATE_LEN/2;segHit(b,gx-ghx,gy-ghy,gx+ghx,gy+ghy,3.2);}
@@ -1342,12 +1344,12 @@ function HaebangRaceGame({ onBack, user }: any) {
       for(const b of balls){if(b.done)continue;
         const md=Math.hypot(b.x-(b.px==null?b.x:b.px),b.y-(b.py==null?b.y:b.py));b.px=b.x;b.py=b.y;
         if(md<0.35)b.stuck=(b.stuck||0)+1;else b.stuck=0;
-        if(b.stuck>20){b.vx=(Math.random()-0.5)*3.2*SP;b.vy=Math.abs(b.vy)+1.6*SP;b.stuck=0;}
+        if(b.stuck>20){b.vx=(rng()-0.5)*3.2*SP;b.vy=Math.abs(b.vy)+1.6*SP;b.stuck=0;}
         const vv=Math.hypot(b.vx,b.vy);if(vv<0.5*SP)b.vy+=0.45*SP;}
       for(const b of balls){if(b.done)continue;
         if(b.y>=FLOOR_Y-b.r){
           const h=holes[0];
-          if(h.open&&Math.abs(b.x-h.x)<h.hw){if(isWinner(b)){b.y=FLOOR_Y-b.r;b.vy=-Math.abs(b.vy)*0.8-1.2;b.vx+=(b.x<h.x?-1:1)*(1+Math.random()*1.5);}else{eliminate(b,h.x,FLOOR_Y);}}
+          if(h.open&&Math.abs(b.x-h.x)<h.hw){if(isWinner(b)){b.y=FLOOR_Y-b.r;b.vy=-Math.abs(b.vy)*0.8-1.2;b.vx+=(b.x<h.x?-1:1)*(1+rng()*1.5);}else{eliminate(b,h.x,FLOOR_Y);}}
           else{b.y=FLOOR_Y-b.r;b.vy=-Math.abs(b.vy)*0.78;b.vx*=1.05;}
         }}
       if(lead){for(let i=0;i<stations.length;i++){if(leadY>=stations[i].y&&i>lastStation){lastStation=i;stations[i].glow=34;}}}
@@ -1359,7 +1361,7 @@ function HaebangRaceGame({ onBack, user }: any) {
     function draw(){
       physics();
       ctx.save();
-      if(shake>0)ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
+      if(shake>0)ctx.translate((rng()-0.5)*shake,(rng()-0.5)*shake);
       ctx.fillStyle='#0F0B2E';ctx.fillRect(-12,-12,W+24,H+24);
       ctx.fillStyle='#3730A3';ctx.fillRect(0,0,W,TOP);
       ctx.fillStyle='#fff';ctx.font='600 17px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('대공원승무지회',W/2,TOP/2-6);
@@ -1437,7 +1439,7 @@ function HaebangRaceGame({ onBack, user }: any) {
         +'<div style="font-size:15px;color:#fff;margin-top:14px;line-height:1.6;">당첨'+(names?' 명단':' 번호')+'<br><span style="color:#FAC775;font-weight:600;">'+nums+'</span></div>'
         +'</div>';
       overlay.innerHTML=html;
-      for(let k=0;k<10;k++)T(()=>{const w=wins[k%wins.length];if(w)burst(w.x+(Math.random()-0.5)*50,w.y-Math.random()*40,palette[k%palette.length],true);},k*140);
+      for(let k=0;k<10;k++)T(()=>{const w=wins[k%wins.length];if(w)burst(w.x+(rng()-0.5)*50,w.y-rng()*40,palette[k%palette.length],true);},k*140);
     }
     function countdown(cb:any){let c=3;
       overlay.innerHTML='<div style="font-size:88px;font-weight:600;color:#fff;">'+c+'</div>';
@@ -1445,7 +1447,7 @@ function HaebangRaceGame({ onBack, user }: any) {
         else overlay.innerHTML='<div style="font-size:88px;font-weight:600;color:#fff;">'+c+'</div>';},800);timers.push(tk);}
     function start(){
       overlay.innerHTML='';bigmsg.innerHTML='';statusEl.textContent='';if(refs.roster){refs.roster.innerHTML='';refs.roster.style.display='none';}rosterShown=false;t=0;finishers=[];confetti=[];lastStation=-1;last7=false;finished=false;gx=HOLEX;gy=FLOOR_Y-52;gtx=HOLEX;gty=FLOOR_Y-52;flashA=0;shake=0;windC=0;windL=0;windR=0;fC=0;fL=0;fR=0;nextC=WIND_PERIOD;nextL=70;nextR=130;
-      stations.forEach((s:any,i:number)=>{s.glow=0;s.windLife=0;s.windT=70+i*35+Math.floor(Math.random()*140);});build();balls=makeBalls(count);
+      stations.forEach((s:any,i:number)=>{s.glow=0;s.windLife=0;s.windT=70+i*35+Math.floor(rng()*140);});build();balls=makeBalls(count);
       if(raf)cancelAnimationFrame(raf);draw();
       countdown(()=>{statusEl.textContent=names?'':('남은 인원 '+balls.length+'명');if(names&&balls.length<=20){rosterShown=true;renderRoster(balls.length);}});
     }
@@ -1558,7 +1560,7 @@ function HaebangRaceGame({ onBack, user }: any) {
           {mode==="live" ? (
             <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#5DCAA5",color:"#0F0B2E",cursor:lobbyUsers.length<2?"default":"pointer",opacity:lobbyUsers.length<2?0.5:1}} disabled={lobbyUsers.length<2} onClick={startLiveDraw}>🎯 추첨 시작 ({lobbyUsers.length}명)</button>
           ) : (
-            <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#4F46E5",color:"#fff",cursor:(mode==="all"&&memberNames.length<2)?"default":"pointer",opacity:(mode==="all"&&memberNames.length<2)?0.5:1}} disabled={mode==="all"&&memberNames.length<2} onClick={()=>setPlaying(true)}>출발</button>
+            <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#4F46E5",color:"#fff",cursor:(mode==="all"&&memberNames.length<2)?"default":"pointer",opacity:(mode==="all"&&memberNames.length<2)?0.5:1}} disabled={mode==="all"&&memberNames.length<2} onClick={()=>{setFixedWinners(null);setGameSeed(((Math.random()*2147483647)>>>0)||1);setPlaying(true);}}>출발</button>
           )}
           {liveMsg && (<div style={{fontSize:12,color:"#F09595",textAlign:"center",marginTop:8}}>{liveMsg}</div>)}
           <button style={ghostBtn} onClick={()=>setView("list")}>← 게임 목록</button>
@@ -12056,8 +12058,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
             return (
               <g key={i}>
                 <line x1={a} y1={y} x2={b} y2={y} stroke="#111" strokeWidth="1.5" strokeDasharray="4 3" />
-                {r.idxs.length > 0 && <text x={a - 8} y={y - 7} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>}
-                {r.idxs.length > 0 && <text x={b + 8} y={y - 7} fontSize="8.5" fill="#6B7280">{r.end_time}</text>}
+                {r.idxs.length > 0 && <text x={a - 8} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>}
+                {r.idxs.length > 0 && <text x={b + 8} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>}
                 <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
@@ -12075,8 +12077,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
               {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={xOf(r.idxs[0]) - 8} y={y - 7} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
-              <text x={xOf(r.idxs[r.idxs.length - 1]) + 8} y={y - 7} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
+              <text x={xOf(r.idxs[0]) - 8} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
+              <text x={xOf(r.idxs[r.idxs.length - 1]) + 8} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
@@ -12097,6 +12099,22 @@ function RouteInputScreen() {
   const [runs, setRuns] = useState<any[]>([{ train_no: "", section: "", start_time: "", end_time: "" }]);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [exists, setExists] = useState(false);
+
+  React.useEffect(() => {
+    const d = diaNo.trim();
+    if (!d) { setRuns([{ train_no: "", section: "", start_time: "", end_time: "" }]); setWorkForm(""); setExists(false); return; }
+    let cancel = false;
+    (async () => {
+      const { data } = await supabase.from("dia_route").select("*").eq("dia_no", d).eq("category", cat).order("seq", { ascending: true });
+      const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", d).eq("category", cat).maybeSingle();
+      if (cancel) return;
+      if (data && data.length > 0) { setRuns(rebuildRuns(data)); setExists(true); }
+      else { setRuns([{ train_no: "", section: "", start_time: "", end_time: "" }]); setExists(false); }
+      setWorkForm(wf && wf.work_form ? wf.work_form : "");
+    })();
+    return () => { cancel = true; };
+  }, [diaNo, cat]);
 
   const loadExisting = async () => {
     if (!diaNo.trim()) return;
@@ -12138,6 +12156,13 @@ function RouteInputScreen() {
   }, [diaNo, cat]);
   const delRun = (i: number) => setRuns((p) => p.filter((_, idx) => idx !== i));
   const upd = (i: number, k: string, v: string) => setRuns((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
+  const fmtTime = (i: number, k: string, v: string) => {
+    const d = (v || "").replace(/\D/g, "");
+    let out = v;
+    if (d.length === 6) out = d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4, 6);
+    else if (d.length === 5) out = "0" + d.slice(0, 1) + ":" + d.slice(1, 3) + ":" + d.slice(3, 5);
+    if (out !== v) upd(i, k, out);
+  };
 
   const save = async () => {
     if (!diaNo.trim()) { setMsg("다이아 번호를 입력하세요."); return; }
@@ -12299,13 +12324,13 @@ function RouteInputScreen() {
         <div key={i} style={{ ...grid, marginBottom: 6, alignItems: "center" }}>
           <input value={r.train_no} onChange={(e) => upd(i, "train_no", e.target.value)} placeholder="7254" style={ipt} />
           <input value={r.section} onChange={(e) => upd(i, "section", e.target.value)} placeholder="대온" style={ipt} />
-          <input value={r.start_time} onChange={(e) => upd(i, "start_time", e.target.value)} placeholder="18:01:00" style={ipt} />
-          <input value={r.end_time} onChange={(e) => upd(i, "end_time", e.target.value)} placeholder="17:30:50" style={ipt} />
+          <input value={r.start_time} onChange={(e) => upd(i, "start_time", e.target.value)} onBlur={(e) => fmtTime(i, "start_time", e.target.value)} placeholder="073550" inputMode="numeric" style={ipt} />
+          <input value={r.end_time} onChange={(e) => upd(i, "end_time", e.target.value)} onBlur={(e) => fmtTime(i, "end_time", e.target.value)} placeholder="082830" inputMode="numeric" style={ipt} />
           <span onClick={() => delRun(i)} style={{ color: "#EF4444", textAlign: "center", fontSize: 14, cursor: "pointer" }}>✕</span>
         </div>
       ))}
       <button onClick={addRun} style={{ width: "100%", background: "#EEF2FF", color: "#4F46E5", border: "1px dashed #A5B4FC", borderRadius: 8, padding: 9, fontSize: 12, fontWeight: 700, marginTop: 4, cursor: "pointer" }}>+ 열번 추가</button>
-      <button onClick={save} disabled={loading} style={{ width: "100%", background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, marginTop: 12, cursor: "pointer" }}>{loading ? "저장 중…" : "저장"}</button>
+      <button onClick={save} disabled={loading} style={{ width: "100%", background: exists ? "#059669" : "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, marginTop: 12, cursor: "pointer" }}>{loading ? "저장 중…" : exists ? "수정 저장" : "저장"}</button>
       {msg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: "#4F46E5" }}>{msg}</div>}
       <div style={{ marginTop: 18, marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>미리보기 (약자로 자동 생성)</div>
       <RouteDiagram runs={runs} />
