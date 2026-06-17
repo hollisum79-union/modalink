@@ -16095,13 +16095,9 @@ const getKyobunWork = (member: any, date: Date) => {
               </div>
             )}
           </div>
-        </div>
-      </>
-    );
-  };
-
+                </div>
         {allWorkOpen && (() => {
-        const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
+          const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
         const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
         kyobuns.forEach((m: any) => {
           const w = getKyobunWork(m, dateObj);
