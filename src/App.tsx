@@ -14945,6 +14945,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [rideHits, setRideHits] = React.useState<any[]>([]);
   const [rideSel, setRideSel] = React.useState<string | null>(null);
   const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
+  const [rideRoutes, setRideRoutes] = React.useState<any>({});
   const doRideSearch = async () => {
     const q = rideQ.trim();
     setRideSel(null);
@@ -14954,12 +14955,22 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     const sorted = (data || []).sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (a.dia_no - b.dia_no));
     setRideHits(sorted);
     const wfMap: any = {};
+    const rtMap: any = {};
     if (sorted.length > 0) {
       const dias = Array.from(new Set(sorted.map((r: any) => String(r.dia_no))));
       const { data: wfs } = await supabase.from("dia_work_form").select("*").in("dia_no", dias);
       (wfs || []).forEach((w: any) => { wfMap[String(w.dia_no) + "|" + w.category] = w.work_form; });
+      const { data: rts } = await supabase.from("dia_route").select("*").in("dia_no", dias);
+      const grouped: any = {};
+      (rts || []).forEach((r: any) => {
+        const k = String(r.dia_no) + "|" + r.category;
+        if (!grouped[k]) grouped[k] = [];
+        grouped[k].push(r);
+      });
+      Object.keys(grouped).forEach((k) => { rtMap[k] = rebuildRuns(grouped[k]); });
     }
     setRideWorkForms(wfMap);
+    setRideRoutes(rtMap);
     const cats = Array.from(new Set(sorted.map((r: any) => r.category)));
     if (cats.length === 1) setRideSel(cats[0] as string);
   };
@@ -16823,12 +16834,46 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아</div>
                 {rideHits.filter((h: any) => h.category === rideSel).map((h: any, i: number) => {
                   const bs = badgeStyle(h.mark);
+                  const todayDrivers = members
+                    .filter((m: any) => {
+                      const w = getKyobunWork(m, today);
+                      return w && String(w.dia) === String(h.dia_no);
+                    })
+                    .map((m: any) => m.name);
+                  const info = getDiaInfo(h.dia_no, h.category);
+                  const runs = rideRoutes[String(h.dia_no) + "|" + h.category];
                   return (
-                    <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", textAlign: "center", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
-                      <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
-                      <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
-                      {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
-                      {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
+                    <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
+                        <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
+                        {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
+                        {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
+                      </div>
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #F3F4F6", textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>오늘 이 다이아 기관사</div>
+                        {todayDrivers.length > 0
+                          ? <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>{todayDrivers.join(", ")}</div>
+                          : <div style={{ fontSize: 13, color: "#9CA3AF" }}>오늘은 해당 없음</div>}
+                      </div>
+                      {info && (info.start_time || info.end_time) && (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6", display: "flex", justifyContent: "center", gap: 28 }}>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>출근</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "#1D4ED8" }}>{info.start_time || "-"}</div>
+                          </div>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>퇴근</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: "#BE185D" }}>{info.end_time || "-"}</div>
+                          </div>
+                        </div>
+                      )}
+                      {runs && runs.length > 0 && (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+                          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8, textAlign: "center" }}>근무행로</div>
+                          <RouteDiagram runs={runs} />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
