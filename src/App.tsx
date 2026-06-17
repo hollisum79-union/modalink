@@ -12058,8 +12058,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
             return (
               <g key={i}>
                 <line x1={a} y1={y} x2={b} y2={y} stroke="#111" strokeWidth="1.5" strokeDasharray="4 3" />
-                {r.idxs.length > 0 && <text x={a - 8} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>}
-                {r.idxs.length > 0 && <text x={b + 8} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>}
+                {r.idxs.length > 0 && <text x={a - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>}
+                {r.idxs.length > 0 && <text x={b + 14} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>}
                 <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
@@ -12077,8 +12077,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
               {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={xOf(r.idxs[0]) - 8} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
-              <text x={xOf(r.idxs[r.idxs.length - 1]) + 8} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
+              <text x={xOf(r.idxs[0]) - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
+              <text x={xOf(r.idxs[r.idxs.length - 1]) + 14} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
@@ -12157,10 +12157,13 @@ function RouteInputScreen() {
   const delRun = (i: number) => setRuns((p) => p.filter((_, idx) => idx !== i));
   const upd = (i: number, k: string, v: string) => setRuns((p) => p.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
   const fmtTime = (i: number, k: string, v: string) => {
-    const d = (v || "").replace(/\D/g, "");
-    let out = v;
-    if (d.length === 6) out = d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4, 6);
-    else if (d.length === 5) out = "0" + d.slice(0, 1) + ":" + d.slice(1, 3) + ":" + d.slice(3, 5);
+    const fmtOne = (s: string) => {
+      const d = s.replace(/\D/g, "");
+      if (d.length === 6) return d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4, 6);
+      if (d.length === 5) return "0" + d.slice(0, 1) + ":" + d.slice(1, 3) + ":" + d.slice(3, 5);
+      return s.trim();
+    };
+    const out = (v || "").split(",").map(fmtOne).join(",");
     if (out !== v) upd(i, k, out);
   };
 
