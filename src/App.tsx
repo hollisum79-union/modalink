@@ -1206,12 +1206,40 @@ function HaebangRaceGame({ onBack, user }: any) {
         const a=act[i],b=act[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy),min=a.r+b.r;
         if(d<min&&d>0){const nx=dx/d,ny=dy/d,ov=(min-d)/2;a.x-=nx*ov;a.y-=ny*ov;b.x+=nx*ov;b.y+=ny*ov;
           const dva=a.vx*nx+a.vy*ny,dvb=b.vx*nx+b.vy*ny,diff=(dvb-dva)*0.9;a.vx+=nx*diff;a.vy+=ny*diff;b.vx-=nx*diff;b.vy-=ny*diff;}}}
+    let rosterShown = false;
+    function rosterItemHtml(bb:any){
+      return '<div class="roster-item" id="rost-'+bb.n+'" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid '+bb.color+'66;border-radius:8px;padding:7px 10px;margin-bottom:6px;">'
+        +'<span style="width:22px;height:22px;border-radius:50%;background:'+bb.color+';color:#1a1530;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+bb.n+'</span>'
+        +'<span style="font-size:13px;color:#fff;">'+(names?names[bb.n-1]||"?":bb.n+"번")+'</span></div>';
+    }
+    function rosterHeadHtml(remain:number){
+      return '<div id="roster-head" style="font-size:13px;color:#5DCAA5;font-weight:600;margin-bottom:10px;text-align:center;">생존 <b style="color:#fff;">'+remain+'</b>명 · '+winCountLocal+'명 남으면 당첨</div>';
+    }
+    function renderRoster(remain:number){
+      if(!refs.roster)return;
+      const alive=balls.filter((b:any)=>!b.done).sort((a:any,b:any)=>a.n-b.n);
+      refs.roster.style.display='block';
+      refs.roster.innerHTML=rosterHeadHtml(remain)+'<div id="roster-list">'+alive.map(rosterItemHtml).join('')+'</div>';
+    }
+    function popRoster(bb:any,remain:number){
+      if(!refs.roster)return;
+      const head=refs.roster.querySelector('#roster-head');
+      if(head)head.innerHTML='생존 <b style="color:#fff;">'+remain+'</b>명 · '+winCountLocal+'명 남으면 당첨';
+      const el=refs.roster.querySelector('#rost-'+bb.n);
+      if(el){el.className='roster-item pop';T(()=>{if(el&&el.parentNode)el.parentNode.removeChild(el);},430);}
+    }
     function eliminate(b:any,ex:number,ey:number){
       b.done=true;finishers.push(b);
       b.x=LANE+16+(finishers.length-1)*((W-LANE-30)/Math.max(1,balls.length));b.y=FLOOR_Y+(H-FLOOR_Y)/2;
       burst(ex,ey,b.color,false);flashA=0.3;shake=3;
       const remain=balls.length-finishers.length;
-      statusEl.textContent='생존 '+remain+'명';
+      if(names && remain<=20){
+        statusEl.textContent='';
+        if(!rosterShown){rosterShown=true;renderRoster(remain);}
+        else popRoster(b,remain);
+      }else{
+        statusEl.textContent='생존 '+remain+'명';
+      }
       if(!last7&&remain<=winCountLocal+5){last7=true;bigText('마지막 승부!','끝까지 버텨라!','#FAC775');shake=10;}
       if(!finished&&remain<=winCountLocal){finished=true;finish();}
     }
@@ -1360,7 +1388,7 @@ function HaebangRaceGame({ onBack, user }: any) {
       const tk=setInterval(()=>{if(killed){clearInterval(tk);return;}c--;if(c<=0){clearInterval(tk);overlay.innerHTML='<div style="font-size:46px;font-weight:600;color:#5DCAA5;">출발!</div>';T(()=>overlay.innerHTML='',650);cb();}
         else overlay.innerHTML='<div style="font-size:88px;font-weight:600;color:#fff;">'+c+'</div>';},800);timers.push(tk);}
     function start(){
-      overlay.innerHTML='';bigmsg.innerHTML='';statusEl.textContent='';t=0;finishers=[];confetti=[];lastStation=-1;last7=false;finished=false;gx=HOLEX;gy=FLOOR_Y-52;gtx=HOLEX;gty=FLOOR_Y-52;flashA=0;shake=0;windC=0;windL=0;windR=0;fC=0;fL=0;fR=0;nextC=WIND_PERIOD;nextL=70;nextR=130;
+      overlay.innerHTML='';bigmsg.innerHTML='';statusEl.textContent='';if(refs.roster){refs.roster.innerHTML='';refs.roster.style.display='none';}rosterShown=false;t=0;finishers=[];confetti=[];lastStation=-1;last7=false;finished=false;gx=HOLEX;gy=FLOOR_Y-52;gtx=HOLEX;gty=FLOOR_Y-52;flashA=0;shake=0;windC=0;windL=0;windR=0;fC=0;fL=0;fR=0;nextC=WIND_PERIOD;nextL=70;nextR=130;
       stations.forEach((s:any,i:number)=>{s.glow=0;s.windLife=0;s.windT=70+i*35+Math.floor(Math.random()*140);});build();balls=makeBalls(count);
       if(raf)cancelAnimationFrame(raf);draw();
       countdown(()=>{statusEl.textContent='남은 인원 '+balls.length+'명';});
@@ -1375,7 +1403,7 @@ function HaebangRaceGame({ onBack, user }: any) {
 
   return (
     <div style={{maxWidth:480,margin:"0 auto",fontFamily:"sans-serif",padding:16,minHeight:"100vh",background:"#0a0820"}}>
-      <style>{"@keyframes hbgblink{0%,100%{opacity:1}50%{opacity:0.28}} .hbg-blink{animation:hbgblink 0.7s infinite;}"}</style>
+      <style>{"@keyframes hbgblink{0%,100%{opacity:1}50%{opacity:0.28}} .hbg-blink{animation:hbgblink 0.7s infinite;} @keyframes hbgpop{0%{transform:scale(1);opacity:1}35%{transform:scale(1.3)}55%{transform:scale(1.3);background:rgba(226,75,74,0.6);border-color:#fff}100%{transform:scale(0.15);opacity:0}} .roster-item.pop{animation:hbgpop 0.43s ease-out forwards;}"}</style>
       <button onClick={onBack} style={{background:"transparent",border:"none",color:"#b9b6d8",fontSize:15,cursor:"pointer",marginBottom:8}}>← 나가기</button>
 
       {!playing && view==="title" && (
@@ -1475,6 +1503,7 @@ function HaebangRaceGame({ onBack, user }: any) {
           <div ref={(el:any)=>refs.overlay=el} style={{position:"absolute",left:0,top:0,right:0,bottom:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}/>
           <div ref={(el:any)=>refs.bigmsg=el} style={{position:"absolute",top:66,left:0,right:0,textAlign:"center",pointerEvents:"none"}}/>
           <div ref={(el:any)=>refs.status=el} style={{textAlign:"center",fontSize:14,color:"#b9b6d8",marginTop:10,minHeight:20}}/>
+          <div ref={(el:any)=>refs.roster=el} style={{display:"none",marginTop:8,maxWidth:360,marginLeft:"auto",marginRight:"auto"}}/>
           <button style={ghostBtn} onClick={()=>{setPlaying(false);setView("setup");}}>다시 하기</button>
         </div>
       )}
