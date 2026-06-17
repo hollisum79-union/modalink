@@ -12069,7 +12069,7 @@ function RouteDiagram({ runs }: { runs: any[] }) {
                 <line x1={a} y1={y + 2} x2={b} y2={y + 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
                 {r.idxs.length > 0 && <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
                 {r.idxs.length > 0 && <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
-                <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
+                <rect x={mx - 20} y={y - 10} width="40" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
             );
@@ -12092,7 +12092,7 @@ function RouteDiagram({ runs }: { runs: any[] }) {
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
               <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
               <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
-              <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
+              <rect x={mx - 21} y={y - 10} width="42" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
           );
@@ -15879,6 +15879,7 @@ const getKyobunWork = (member: any, date: Date) => {
     );
   };
 
+  const [allWorkOpen, setAllWorkOpen] = React.useState(false);
   // ── 메모 패널 ──
   const renderMemoPanel = (dateStr: string) => {
     const dayMemos = memos[dateStr] || [];
@@ -16024,6 +16025,16 @@ const getKyobunWork = (member: any, date: Date) => {
             </div>
             )}
 
+                      {!isOtherKyobun && (
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              <button onClick={() => setAllWorkOpen(true)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                📋 전체근무
+              </button>
+              <button onClick={() => alert("운행시각표는 준비 중입니다.")} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                🕐 운행시각표
+              </button>
+            </div>
+            )}
             {!isOtherKyobun && (<>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "2px 2px 12px" }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: "#1a1a1a" }}>📝 메모</span>
@@ -16084,7 +16095,61 @@ const getKyobunWork = (member: any, date: Date) => {
               </div>
             )}
           </div>
-        </div>
+                </div>
+                {allWorkOpen && (() => {
+          const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
+          const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
+          kyobuns.forEach((m: any) => {
+            const w = getKyobunWork(m, dateObj);
+            if (!w || !groups[w.type]) return;
+            groups[w.type].push({ name: m.name, emp: String(m.employee_number), dia: w.dia });
+          });
+          groups["주간"].sort((a: any, b: any) => Number(a.dia) - Number(b.dia));
+          groups["야간"].sort((a: any, b: any) => Number(a.dia) - Number(b.dia));
+          groups["비번"].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "ko"));
+          groups["휴무"].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "ko"));
+          const cols = [
+            { key: "주간", icon: "☀️", head: "#EFF6FF", hc: "#2563EB", cellBg: "#FBFCFF", dia: true },
+            { key: "야간", icon: "🌙", head: "#F5F3FF", hc: "#7C3AED", cellBg: "#FCFBFF", dia: true },
+            { key: "비번", icon: "💤", head: "#F3F4F6", hc: "#6B7280", cellBg: "#FFFFFF", dia: false },
+            { key: "휴무", icon: "🏠", head: "#ECFDF5", hc: "#059669", cellBg: "#FBFEFC", dia: false },
+          ];
+          const meEmp = String(user?.employee_number || "");
+          return (
+            <div onClick={() => setAllWorkOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1200 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 400, maxHeight: "84vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", color: "#fff", padding: "13px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 16, fontWeight: 800 }}>📋 전체근무</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>{dateLabel}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
+                  {cols.map((c) => (
+                    <div key={c.key} style={{ textAlign: "center", padding: "9px 0", fontSize: 13, fontWeight: 800, background: c.head, color: c.hc }}>{c.icon} {c.key}</div>
+                  ))}
+                </div>
+                <div style={{ flex: 1, overflowY: "auto" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
+                    {cols.map((c) => (
+                      <div key={c.key} style={{ borderRight: c.key === "휴무" ? "none" : "1px solid #F0F0F4" }}>
+                        {groups[c.key].length === 0 ? (
+                          <div style={{ fontSize: 12, color: "#C1C5CC", textAlign: "center", padding: "12px 4px" }}>없음</div>
+                        ) : groups[c.key].map((p: any, i: number) => {
+                          const isMe = p.emp === meEmp;
+                          return (
+                            <div key={i} style={{ display: "flex", gap: 5, alignItems: "baseline", padding: "8px 7px", fontSize: 13, borderBottom: "1px solid #F3F4F6", background: isMe ? "#FFF7E6" : c.cellBg, boxShadow: isMe ? "inset 3px 0 0 #FBBF24" : "none" }}>
+                              {c.dia && <span style={{ color: "#9CA3AF", fontWeight: 700, fontSize: 11, minWidth: 20, textAlign: "right" }}>{p.dia}</span>}
+                              <span style={{ fontWeight: 700, color: isMe ? "#B45309" : (String(p.name).startsWith("결원") ? "#C1C5CC" : "#1F2937") }}>{p.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </>
     );
   };
@@ -22252,6 +22317,22 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
     await saveRemaining(h.leave_type, cur + Number(h.days));
     loadHistory();
   };
+    // 사용내역 팝업에서 삭제 (잔여일수 복구)
+  const deleteHistoryRow = async (h: any) => {
+    if (!window.confirm("이 내역을 삭제할까요? 잔여일수가 복구됩니다.")) return;
+    const { error } = await supabase
+      .from("leave_history")
+      .update({ status: "취소" })
+      .eq("id", h.id);
+    if (error) {
+      alert("삭제 실패: " + error.message);
+      return;
+    }
+    const cur = (remaining as any)[h.leave_type] || 0;
+    await saveRemaining(h.leave_type, cur + Number(h.days));
+    loadHistory();
+    setHistoryRows((rows) => rows.filter((r) => r.id !== h.id));
+  };
   // 휴가 사용 처리
   const useLeave = async (item) => {
     const days = parseFloat(useDays);
@@ -22769,7 +22850,10 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
                     <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{h.used_date}</span>
                     {h.memo && <span style={{ fontSize: 12, color: "#9CA3AF" }}>{h.memo}</span>}
                   </div>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: historyModal.color }}>{h.days}일</span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: historyModal.color }}>{h.days}일</span>
+                    <button onClick={() => deleteHistoryRow(h)} style={{ fontSize: 12, color: "#EF4444", padding: "5px 10px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff", cursor: "pointer", fontFamily: "inherit" }}>삭제</button>
+                  </div>
                 </div>
               ))
             )}
