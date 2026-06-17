@@ -1157,8 +1157,8 @@ function HaebangRaceGame({ onBack, user }: any) {
     const WIND_PERIOD=180;
     const GATE_LEN=62;
     const WLX=HOLEX-72, WRX=HOLEX+72;
-    const stations:any[]=[{name:'장암역',y:138,big:0},{name:'도봉산',y:215,big:0},
-      {name:'어린이대공원',y:308,big:1},{name:'온수',y:400,big:0},{name:'천왕',y:470,big:0}];
+    const stations:any[]=[{name:'도봉기지',y:120,big:0},{name:'장암역',y:182,big:0},{name:'도봉산',y:244,big:0},
+      {name:'어린이대공원',y:306,big:1},{name:'신풍',y:368,big:0},{name:'온수',y:430,big:0},{name:'천왕기지',y:492,big:0}];
     let balls:any[]=[], raf:any=null, finishers:any[]=[], pegs:any[]=[], bars:any[]=[], holes:any[]=[], confetti:any[]=[], t=0, lastStation=-1;
     let mouthL:any={y:300,gap:0,target:0,tog:50}, mouthR:any={y:400,gap:0,target:0,tog:110}, floorSeg:any[]=[];
     let last7=false, flashA=0, shake=0, finished=false;
@@ -1208,12 +1208,12 @@ function HaebangRaceGame({ onBack, user }: any) {
           const dva=a.vx*nx+a.vy*ny,dvb=b.vx*nx+b.vy*ny,diff=(dvb-dva)*0.9;a.vx+=nx*diff;a.vy+=ny*diff;b.vx-=nx*diff;b.vy-=ny*diff;}}}
     let rosterShown = false;
     function rosterItemHtml(bb:any){
-      return '<div class="roster-item" id="rost-'+bb.n+'" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid '+bb.color+'66;border-radius:8px;padding:7px 10px;margin-bottom:6px;">'
-        +'<span style="width:22px;height:22px;border-radius:50%;background:'+bb.color+';color:#1a1530;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+bb.n+'</span>'
-        +'<span style="font-size:13px;color:#fff;">'+(names?names[bb.n-1]||"?":bb.n+"번")+'</span></div>';
+      return '<div class="roster-item" id="rost-'+bb.n+'" style="display:flex;align-items:center;gap:6px;background:rgba(15,11,46,0.72);border:1px solid '+bb.color+'88;border-radius:7px;padding:4px 6px;margin-bottom:5px;">'
+        +'<span style="width:18px;height:18px;border-radius:50%;background:'+bb.color+';color:#1a1530;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+bb.n+'</span>'
+        +'<span style="font-size:11px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(names?names[bb.n-1]||"?":bb.n+"번")+'</span></div>';
     }
     function rosterHeadHtml(remain:number){
-      return '<div id="roster-head" style="font-size:13px;color:#5DCAA5;font-weight:600;margin-bottom:10px;text-align:center;">생존 <b style="color:#fff;">'+remain+'</b>명 · '+winCountLocal+'명 남으면 당첨</div>';
+      return '<div id="roster-head" style="font-size:11px;color:#9FE1CB;font-weight:600;margin-bottom:7px;text-align:center;background:rgba(15,11,46,0.8);border-radius:7px;padding:4px 6px;">생존 <b style="color:#fff;">'+remain+'</b>명</div>';
     }
     function renderRoster(remain:number){
       if(!refs.roster)return;
@@ -1224,7 +1224,7 @@ function HaebangRaceGame({ onBack, user }: any) {
     function popRoster(bb:any,remain:number){
       if(!refs.roster)return;
       const head=refs.roster.querySelector('#roster-head');
-      if(head)head.innerHTML='생존 <b style="color:#fff;">'+remain+'</b>명 · '+winCountLocal+'명 남으면 당첨';
+      if(head)head.innerHTML='생존 <b style="color:#fff;">'+remain+'</b>명';
       const el=refs.roster.querySelector('#rost-'+bb.n);
       if(el){el.className='roster-item pop';T(()=>{if(el&&el.parentNode)el.parentNode.removeChild(el);},430);}
     }
@@ -1503,7 +1503,7 @@ function HaebangRaceGame({ onBack, user }: any) {
           <div ref={(el:any)=>refs.overlay=el} style={{position:"absolute",left:0,top:0,right:0,bottom:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}/>
           <div ref={(el:any)=>refs.bigmsg=el} style={{position:"absolute",top:66,left:0,right:0,textAlign:"center",pointerEvents:"none"}}/>
           <div ref={(el:any)=>refs.status=el} style={{textAlign:"center",fontSize:14,color:"#b9b6d8",marginTop:10,minHeight:20}}/>
-          <div ref={(el:any)=>refs.roster=el} style={{display:"none",marginTop:8,maxWidth:360,marginLeft:"auto",marginRight:"auto"}}/>
+          <div ref={(el:any)=>refs.roster=el} style={{display:"none",position:"absolute",top:"9%",right:"2%",width:"40%",maxHeight:"82%",overflow:"hidden",pointerEvents:"none"}}/>
           <button style={ghostBtn} onClick={()=>{setPlaying(false);setView("setup");}}>다시 하기</button>
         </div>
       )}
