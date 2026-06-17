@@ -1208,12 +1208,12 @@ function HaebangRaceGame({ onBack, user }: any) {
           const dva=a.vx*nx+a.vy*ny,dvb=b.vx*nx+b.vy*ny,diff=(dvb-dva)*0.9;a.vx+=nx*diff;a.vy+=ny*diff;b.vx-=nx*diff;b.vy-=ny*diff;}}}
     let rosterShown = false;
     function rosterItemHtml(bb:any){
-      return '<div class="roster-item" id="rost-'+bb.n+'" style="display:flex;align-items:center;gap:6px;background:rgba(15,11,46,0.72);border:1px solid '+bb.color+'88;border-radius:7px;padding:4px 6px;margin-bottom:5px;">'
-        +'<span style="width:18px;height:18px;border-radius:50%;background:'+bb.color+';color:#1a1530;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+bb.n+'</span>'
-        +'<span style="font-size:11px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(names?names[bb.n-1]||"?":bb.n+"번")+'</span></div>';
+      return '<div class="roster-item" id="rost-'+bb.n+'" style="display:flex;align-items:center;gap:4px;background:rgba(15,11,46,0.8);border:1px solid '+bb.color+'99;border-radius:5px;padding:2px 4px;margin-bottom:4px;">'
+        +'<span style="width:15px;height:15px;border-radius:50%;background:'+bb.color+';color:#1a1530;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+bb.n+'</span>'
+        +'<span style="font-size:10px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(names?names[bb.n-1]||"?":bb.n+"번")+'</span></div>';
     }
     function rosterHeadHtml(remain:number){
-      return '<div id="roster-head" style="font-size:11px;color:#9FE1CB;font-weight:600;margin-bottom:7px;text-align:center;background:rgba(15,11,46,0.8);border-radius:7px;padding:4px 6px;">생존 <b style="color:#fff;">'+remain+'</b>명</div>';
+      return '<div id="roster-head" style="font-size:10px;color:#9FE1CB;font-weight:600;margin-bottom:5px;text-align:center;background:rgba(15,11,46,0.85);border-radius:5px;padding:3px 4px;">생존 <b style="color:#fff;">'+remain+'</b></div>';
     }
     function renderRoster(remain:number){
       if(!refs.roster)return;
@@ -1503,7 +1503,7 @@ function HaebangRaceGame({ onBack, user }: any) {
           <div ref={(el:any)=>refs.overlay=el} style={{position:"absolute",left:0,top:0,right:0,bottom:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}/>
           <div ref={(el:any)=>refs.bigmsg=el} style={{position:"absolute",top:66,left:0,right:0,textAlign:"center",pointerEvents:"none"}}/>
           <div ref={(el:any)=>refs.status=el} style={{textAlign:"center",fontSize:14,color:"#b9b6d8",marginTop:10,minHeight:20}}/>
-          <div ref={(el:any)=>refs.roster=el} style={{display:"none",position:"absolute",top:"9%",right:"2%",width:"40%",maxHeight:"82%",overflow:"hidden",pointerEvents:"none"}}/>
+          <div ref={(el:any)=>refs.roster=el} style={{display:"none",position:"absolute",top:"7%",left:"1.5%",width:"21%",maxHeight:"86%",overflow:"hidden",pointerEvents:"none"}}/>
           <button style={ghostBtn} onClick={()=>{setPlaying(false);setView("setup");}}>다시 하기</button>
         </div>
       )}
