@@ -1295,6 +1295,11 @@ function HaebangRaceGame({ onBack, user }: any) {
       if(!finished&&remain<=winCountLocal){finished=true;finish();}
     }
     function physics(){
+      if(finished){
+        for(let i=confetti.length-1;i>=0;i--){const c=confetti[i];c.vy+=0.12;c.x+=c.vx;c.y+=c.vy;c.life--;if(c.life<=0)confetti.splice(i,1);}
+        if(flashA>0)flashA-=0.04;if(shake>0)shake-=0.6;
+        return;
+      }
       t++;const SP=last7?0.3:0.42;const G=0.072*SP,MAXV=4.6*SP;let leadY=0,lead:any=null;
       if(Math.hypot(gtx-gx,gty-gy)<8){gtx=LANE+55+Math.random()*(W-LANE-105);gty=448+Math.random()*((FLOOR_Y-52)-448);}
       gx+=(gtx-gx)*(last7?0.03:0.02);gy+=(gty-gy)*(last7?0.03:0.02);
@@ -1442,7 +1447,7 @@ function HaebangRaceGame({ onBack, user }: any) {
       overlay.innerHTML='';bigmsg.innerHTML='';statusEl.textContent='';if(refs.roster){refs.roster.innerHTML='';refs.roster.style.display='none';}rosterShown=false;t=0;finishers=[];confetti=[];lastStation=-1;last7=false;finished=false;gx=HOLEX;gy=FLOOR_Y-52;gtx=HOLEX;gty=FLOOR_Y-52;flashA=0;shake=0;windC=0;windL=0;windR=0;fC=0;fL=0;fR=0;nextC=WIND_PERIOD;nextL=70;nextR=130;
       stations.forEach((s:any,i:number)=>{s.glow=0;s.windLife=0;s.windT=70+i*35+Math.floor(Math.random()*140);});build();balls=makeBalls(count);
       if(raf)cancelAnimationFrame(raf);draw();
-      countdown(()=>{statusEl.textContent='남은 인원 '+balls.length+'명';});
+      countdown(()=>{statusEl.textContent=names?'':('남은 인원 '+balls.length+'명');if(names&&balls.length<=20){rosterShown=true;renderRoster(balls.length);}});
     }
     start();
     return () => { killed=true; if(raf)cancelAnimationFrame(raf); timers.forEach((id:any)=>{clearTimeout(id);clearInterval(id);}); };
