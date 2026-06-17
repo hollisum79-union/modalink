@@ -16096,67 +16096,60 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
           </div>
                 </div>
-        {allWorkOpen && (() => {
+                {allWorkOpen && (() => {
           const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
-        const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
-        kyobuns.forEach((m: any) => {
-          const w = getKyobunWork(m, dateObj);
-          if (!w || !groups[w.type]) return;
-          let s = "", e = "";
-          if (w.type === "주간" || w.type === "야간") {
-            const info = getDiaInfo(w.dia, getDiaDayType(w.type, dateObj));
-            s = (info && info.start_time) || ""; e = (info && info.end_time) || "";
-          }
-          groups[w.type].push({ name: m.name, emp: String(m.employee_number), dia: w.dia, s, e });
-        });
-        const order = [
-          { key: "주간", icon: "☀️", bg: "#EEF0FF", color: "#2563EB", dia: true },
-          { key: "야간", icon: "🌙", bg: "#F3EBFF", color: "#7C3AED", dia: true },
-          { key: "비번", icon: "💤", bg: "#F3F4F6", color: "#6B7280", dia: false },
-          { key: "휴무", icon: "🏠", bg: "#ECFDF5", color: "#059669", dia: false },
-        ];
-        const meEmp = String(user?.employee_number || "");
-        return (
-          <div onClick={() => setAllWorkOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1200 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 380, maxHeight: "82vh", overflowY: "auto", padding: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <span style={{ fontSize: 17, fontWeight: 800, color: "#1a1a1a" }}>📋 전체근무</span>
-                <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700 }}>{dateLabel}</span>
-              </div>
-              {order.map((o) => {
-                const list = groups[o.key];
-                return (
-                  <div key={o.key} style={{ marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-                      <span style={{ fontSize: 14, fontWeight: 800, color: o.color }}>{o.icon} {o.key}</span>
-                      <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700 }}>{list.length}명</span>
-                    </div>
-                    {list.length === 0 ? (
-                      <div style={{ fontSize: 12, color: "#C1C5CC", padding: "2px 4px" }}>없음</div>
-                    ) : list.map((pp: any, i: number) => {
-                      const isMe = pp.emp === meEmp;
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 11px", borderRadius: 11, background: isMe ? "#FFF7E6" : "#FAFAFD", marginBottom: 6, boxShadow: isMe ? "inset 3px 0 0 #FBBF24" : "none" }}>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: isMe ? "#B45309" : "#1F2937" }}>{pp.name}{isMe ? " (나)" : ""}</span>
-                          {o.dia ? (
-                            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 9px", borderRadius: 8, background: o.bg, color: o.color }}>다이아 {pp.dia}</span>
-                              {(pp.s || pp.e) && <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>{pp.s}~{pp.e}</span>}
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 12, color: "#9CA3AF" }}>—</span>
-                          )}
-                        </div>
-                      );
-                    })}
+          const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
+          kyobuns.forEach((m: any) => {
+            const w = getKyobunWork(m, dateObj);
+            if (!w || !groups[w.type]) return;
+            groups[w.type].push({ name: m.name, emp: String(m.employee_number), dia: w.dia });
+          });
+          groups["주간"].sort((a: any, b: any) => Number(a.dia) - Number(b.dia));
+          groups["야간"].sort((a: any, b: any) => Number(a.dia) - Number(b.dia));
+          groups["비번"].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "ko"));
+          groups["휴무"].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "ko"));
+          const cols = [
+            { key: "주간", icon: "☀️", head: "#EFF6FF", hc: "#2563EB", cellBg: "#FBFCFF", dia: true },
+            { key: "야간", icon: "🌙", head: "#F5F3FF", hc: "#7C3AED", cellBg: "#FCFBFF", dia: true },
+            { key: "비번", icon: "💤", head: "#F3F4F6", hc: "#6B7280", cellBg: "#FFFFFF", dia: false },
+            { key: "휴무", icon: "🏠", head: "#ECFDF5", hc: "#059669", cellBg: "#FBFEFC", dia: false },
+          ];
+          const meEmp = String(user?.employee_number || "");
+          return (
+            <div onClick={() => setAllWorkOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1200 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 400, maxHeight: "84vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", color: "#fff", padding: "13px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 16, fontWeight: 800 }}>📋 전체근무</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.95 }}>{dateLabel}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
+                  {cols.map((c) => (
+                    <div key={c.key} style={{ textAlign: "center", padding: "9px 0", fontSize: 13, fontWeight: 800, background: c.head, color: c.hc }}>{c.icon} {c.key}</div>
+                  ))}
+                </div>
+                <div style={{ flex: 1, overflowY: "auto" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
+                    {cols.map((c) => (
+                      <div key={c.key} style={{ borderRight: c.key === "휴무" ? "none" : "1px solid #F0F0F4" }}>
+                        {groups[c.key].length === 0 ? (
+                          <div style={{ fontSize: 12, color: "#C1C5CC", textAlign: "center", padding: "12px 4px" }}>없음</div>
+                        ) : groups[c.key].map((p: any, i: number) => {
+                          const isMe = p.emp === meEmp;
+                          return (
+                            <div key={i} style={{ display: "flex", gap: 5, alignItems: "baseline", padding: "8px 7px", fontSize: 13, borderBottom: "1px solid #F3F4F6", background: isMe ? "#FFF7E6" : c.cellBg, boxShadow: isMe ? "inset 3px 0 0 #FBBF24" : "none" }}>
+                              {c.dia && <span style={{ color: "#9CA3AF", fontWeight: 700, fontSize: 11, minWidth: 20, textAlign: "right" }}>{p.dia}</span>}
+                              <span style={{ fontWeight: 700, color: isMe ? "#B45309" : (String(p.name).startsWith("결원") ? "#C1C5CC" : "#1F2937") }}>{p.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-              <button onClick={() => setAllWorkOpen(false)} style={{ width: "100%", marginTop: 4, padding: 13, background: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+                </div>
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
       </>
     );
   };
