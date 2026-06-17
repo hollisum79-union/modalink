@@ -14937,6 +14937,8 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave }: { 
   const [rotationData, setRotationData] = React.useState<any[]>([]);
 const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
+  const [workForms, setWorkForms] = React.useState<any>({});
+  const [popupRoute, setPopupRoute] = React.useState<any>(null);
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
@@ -15242,6 +15244,19 @@ if (data) {
     fetchDia();
   }, []);
 
+  // 근무형태(dia_work_form) 전체 불러오기 → 다이아번호|근무유형 맵
+  React.useEffect(() => {
+    const fetchWF = async () => {
+      const { data } = await supabase.from("dia_work_form").select("*");
+      if (data) {
+        const map: any = {};
+        data.forEach((w: any) => { map[String(w.dia_no) + "|" + w.category] = w.work_form; });
+        setWorkForms(map);
+      }
+    };
+    fetchWF();
+  }, []);
+
   React.useEffect(() => {
     if (subScreen !== "contacts") return;
     supabase
@@ -15529,6 +15544,29 @@ const getKyobunWork = (member: any, date: Date) => {
     }
     return mine;
   };
+
+  // 근무표 상세 팝업: 그 날 교번 다이아의 근무행로 불러오기
+  React.useEffect(() => {
+    if (!editingDate || activeTab !== "교번" || !selectedMember) { setPopupRoute(null); return; }
+    const w = getKyobunWork(selectedMember, new Date(editingDate));
+    if (!w) { setPopupRoute(null); return; }
+    const dt = getDiaDayType(w.type, new Date(editingDate));
+    if (!dt) { setPopupRoute([]); return; }
+    let cancel = false;
+    setPopupRoute(undefined);
+    (async () => {
+      const { data } = await supabase
+        .from("dia_route")
+        .select("*")
+        .eq("dia_no", String(w.dia))
+        .eq("category", dt)
+        .order("seq", { ascending: true });
+      if (cancel) return;
+      setPopupRoute(data && data.length > 0 ? rebuildRuns(data) : []);
+    })();
+    return () => { cancel = true; };
+  }, [editingDate, selectedMember, activeTab]);
+
   const isToday = (y: number, m: number, d: number) =>
     d === today.getDate() &&
     m === today.getMonth() + 1 &&
@@ -15837,6 +15875,7 @@ const getKyobunWork = (member: any, date: Date) => {
     const kInfo = kWork ? workInfo(kWork.type) : null;
     const kLabel = kInfo ? (LABEL_MAP[kInfo.short] || kInfo.short) : "-";
     const kColor = kInfo ? (COLOR_MAP[kInfo.short] || "#7C3AED") : "#7C3AED";
+    const kWorkForm = (kWork && kDayType) ? workForms[String(kWork.dia) + "|" + kDayType] : null;
     return (
       <>
         <div
@@ -15880,7 +15919,7 @@ const getKyobunWork = (member: any, date: Date) => {
               kWork && (
                 <div style={{ marginTop: 14, background: "#fff", borderRadius: 16, padding: "13px 15px", color: "#1a1a1a" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: kDia?.start_time ? 11 : 0 }}>
-                    <span style={{ fontSize: 15, fontWeight: 800, color: kColor }}>{kLabel} (교번)</span>
+                    <span style={{ fontSize: kWorkForm ? 14 : 15, fontWeight: 800, color: kColor }}>{kWorkForm ? "근무형태 : " + kWorkForm : kLabel + " (교번)"}</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", padding: "4px 10px", borderRadius: 11 }}>
                       다이아 {kWork.dia}
                     </span>
@@ -16006,6 +16045,19 @@ const getKyobunWork = (member: any, date: Date) => {
               </div>
             )}
             </>)}
+
+            {isKyobun && kWork && (
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a1a", marginBottom: 10 }}>🚉 근무행로</div>
+                {popupRoute === undefined ? (
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>불러오는 중...</div>
+                ) : (popupRoute && popupRoute.length > 0) ? (
+                  <RouteDiagram runs={popupRoute} />
+                ) : (
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 미입력</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </>
