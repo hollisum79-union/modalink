@@ -12055,11 +12055,17 @@ function RouteDiagram({ runs }: { runs: any[] }) {
             const a = r.idxs.length ? xOf(r.idxs[0]) : padL;
             const b = r.idxs.length ? xOf(r.idxs[r.idxs.length - 1]) : xOf(5);
             const mx = (a + b) / 2;
+            const prevR = rows[i - 1];
+            const linked = prevR && prevR.group === r.group && prevR.to === r.from;
+            const py = top + (i - 1) * rowH + 16;
             return (
               <g key={i}>
-                <line x1={a} y1={y} x2={b} y2={y} stroke="#111" strokeWidth="1.5" strokeDasharray="4 3" />
-                {r.idxs.length > 0 && <text x={a - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>}
-                {r.idxs.length > 0 && <text x={b + 14} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>}
+                {linked && <line x1={a - 2} y1={py} x2={a - 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
+                {linked && <line x1={a + 2} y1={py} x2={a + 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
+                <line x1={a} y1={y - 2} x2={b} y2={y - 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
+                <line x1={a} y1={y + 2} x2={b} y2={y + 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
+                {r.idxs.length > 0 && <text x={a - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
+                {r.idxs.length > 0 && <text x={b + 14} y={y + 3} fontSize="8.5" fill="#6B7280" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
                 <ellipse cx={mx} cy={y} rx="20" ry="10" fill="#fff" stroke="#111" />
                 <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
               </g>
@@ -12077,8 +12083,8 @@ function RouteDiagram({ runs }: { runs: any[] }) {
               <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
               {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
               {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={xOf(r.idxs[0]) - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end">{r.start_time}</text>
-              <text x={xOf(r.idxs[r.idxs.length - 1]) + 14} y={y + 3} fontSize="8.5" fill="#6B7280">{r.end_time}</text>
+              <text x={xOf(r.idxs[0]) - 14} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor="end" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
+              <text x={xOf(r.idxs[r.idxs.length - 1]) + 14} y={y + 3} fontSize="8.5" fill="#6B7280" stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
               <ellipse cx={mx} cy={y} rx="21" ry="10" fill="#fff" stroke="#111" />
               <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
             </g>
