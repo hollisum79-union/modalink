@@ -1114,6 +1114,10 @@ function HaebangRaceGame({ onBack, user }: any) {
   const [phrase, setPhrase] = useState("7호선을 움직이는 우리,\n오늘은 행운도 함께 달려요!");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [saveMsg, setSaveMsg] = useState("");
+  const [mode, setMode] = useState<string>("manual");
+  const [memberNames, setMemberNames] = useState<string[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   useEffect(() => {
     supabase.from("game_settings").select("value").eq("key", "haebang_phrase").maybeSingle()
@@ -1123,9 +1127,21 @@ function HaebangRaceGame({ onBack, user }: any) {
   const savePhrase = async () => {
     const v = draft.trim();
     if (!v) return;
-    await supabase.from("game_settings").upsert({ key: "haebang_phrase", value: v, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("game_settings").upsert({ key: "haebang_phrase", value: v, updated_at: new Date().toISOString() });
+    if (error) { setSaveMsg("저장 실패: " + (error.message || "")); return; }
     setPhrase(v);
     setEditing(false);
+    setSaveMsg("");
+  };
+
+  const loadAllMembers = async () => {
+    setLoadingMembers(true);
+    const { data } = await supabase.from("members").select("name").eq("is_union", true);
+    const arr = (data || []).map((x: any) => x.name).filter(Boolean);
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    setMemberNames(arr);
+    if (arr.length >= 2) setCount(Math.min(200, arr.length));
+    setLoadingMembers(false);
   };
 
   useEffect(() => {
@@ -1149,6 +1165,7 @@ function HaebangRaceGame({ onBack, user }: any) {
     let gx=HOLEX, gy=FLOOR_Y-52, gtx=HOLEX, gty=FLOOR_Y-52;
     let windC=0,windL=0,windR=0,fC=0,fL=0,fR=0,nextC=WIND_PERIOD,nextL=70,nextR=130;
     const winCountLocal = Math.max(1, Math.min(winCount, count-1));
+    const names: string[] | null = (mode === "all" && memberNames.length >= 2) ? memberNames : null;
     let killed=false; const timers:any[]=[];
     const T=(fn:any,ms:number)=>{const id=setTimeout(()=>{if(!killed)fn();},ms);timers.push(id);return id;};
 
@@ -1321,13 +1338,19 @@ function HaebangRaceGame({ onBack, user }: any) {
     function finish(){
       const wins=balls.filter((b:any)=>!b.done);for(const w of wins){w.vx=0;w.vy=0;}
       flashA=0.5;shake=10;
-      const nums=wins.map((w:any)=>w.n).sort((a:number,b:number)=>a-b).join(', ');
-      let html='<div style="background:rgba(15,11,46,0.93);border-radius:16px;padding:24px 30px;text-align:center;min-width:240px;max-width:90%;">'
+      const sorted=wins.slice().sort((a:any,b:any)=>a.n-b.n);
+      let nums:string;
+      if(names){
+        nums=sorted.map((w:any)=>w.n+'번 '+(names[w.n-1]||'?')).join('<br>');
+      }else{
+        nums=sorted.map((w:any)=>w.n).join(', ');
+      }
+      let html='<div style="background:rgba(15,11,46,0.93);border-radius:16px;padding:24px 30px;text-align:center;min-width:240px;max-width:90%;max-height:80%;overflow:auto;">'
         +'<div style="font-size:12px;color:#9FE1CB;letter-spacing:1px;">대공원승무지회 · 해방역</div>'
         +'<div style="font-size:58px;font-weight:600;color:#FAC775;line-height:1.1;" class="hbg-blink">'+wins.length+'</div>'
         +'<div style="font-size:15px;color:#fff;margin-top:-4px;">명 당첨</div>'
         +'<div style="font-size:20px;font-weight:600;color:#5DCAA5;margin-top:8px;" class="hbg-blink">7호선의 행운</div>'
-        +'<div style="font-size:15px;color:#fff;margin-top:14px;line-height:1.5;">당첨 번호<br><span style="color:#FAC775;font-weight:600;">'+nums+'</span></div>'
+        +'<div style="font-size:15px;color:#fff;margin-top:14px;line-height:1.6;">당첨'+(names?' 명단':' 번호')+'<br><span style="color:#FAC775;font-weight:600;">'+nums+'</span></div>'
         +'</div>';
       overlay.innerHTML=html;
       for(let k=0;k<10;k++)T(()=>{const w=wins[k%wins.length];if(w)burst(w.x+(Math.random()-0.5)*50,w.y-Math.random()*40,palette[k%palette.length],true);},k*140);
@@ -1372,6 +1395,7 @@ function HaebangRaceGame({ onBack, user }: any) {
               <textarea value={draft} onChange={(e)=>setDraft(e.target.value)} rows={3}
                 style={{width:"100%",boxSizing:"border-box",padding:10,borderRadius:10,border:"1px solid #4a4570",background:"#16123A",color:"#fff",fontSize:14,resize:"vertical"}}/>
               <div style={{fontSize:11,color:"#6b6890",marginTop:4,textAlign:"left"}}>줄바꿈하려면 엔터를 누르세요</div>
+              {saveMsg && (<div style={{fontSize:12,color:"#F09595",marginTop:6,textAlign:"left"}}>{saveMsg}</div>)}
               <div style={{display:"flex",gap:8,marginTop:8}}>
                 <button onClick={savePhrase} style={{flex:1,padding:10,borderRadius:10,border:"none",background:"#4F46E5",color:"#fff",fontWeight:600,cursor:"pointer"}}>저장</button>
                 <button onClick={()=>setEditing(false)} style={{flex:1,padding:10,borderRadius:10,border:"1px solid #4a4570",background:"transparent",color:"#b9b6d8",cursor:"pointer"}}>취소</button>
@@ -1408,19 +1432,40 @@ function HaebangRaceGame({ onBack, user }: any) {
             <div style={{fontSize:19,fontWeight:600,color:"#fff"}}>해방역 레이스</div>
             <div style={{fontSize:12,color:"#5DCAA5",marginTop:3}}>행운의 레이스</div>
           </div>
-          <div style={rowBox}>
-            <label style={{fontSize:14,color:"#b9b6d8"}}>참가 인원</label>
-            <input type="range" min={8} max={200} value={count} step={1} style={{flex:1}} onChange={(e)=>setCount(parseInt(e.target.value,10))}/>
-            <span style={{fontSize:16,fontWeight:600,color:"#fff",minWidth:30,textAlign:"right"}}>{count}</span>
-          </div>
+
+          {user?.is_admin && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:13,color:"#b9b6d8",marginBottom:8}}>참가 대상 (관리자)</div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>setMode("manual")}
+                  style={{flex:1,padding:10,borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer",border:mode==="manual"?"none":"1px solid #4a4570",background:mode==="manual"?"#4F46E5":"transparent",color:mode==="manual"?"#fff":"#b9b6d8"}}>직접 인원</button>
+                <button onClick={()=>{setMode("all");loadAllMembers();}}
+                  style={{flex:1,padding:10,borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer",border:mode==="all"?"none":"1px solid #4a4570",background:mode==="all"?"#4F46E5":"transparent",color:mode==="all"?"#fff":"#b9b6d8"}}>전체 조합원</button>
+              </div>
+            </div>
+          )}
+
+          {mode==="all" ? (
+            <div style={{...rowBox,justifyContent:"space-between"}}>
+              <label style={{fontSize:14,color:"#b9b6d8"}}>참가 인원</label>
+              <span style={{fontSize:16,fontWeight:600,color:"#fff"}}>{loadingMembers?"불러오는 중…":(memberNames.length+"명 (조합원 전체)")}</span>
+            </div>
+          ) : (
+            <div style={rowBox}>
+              <label style={{fontSize:14,color:"#b9b6d8"}}>참가 인원</label>
+              <input type="range" min={8} max={200} value={count} step={1} style={{flex:1}} onChange={(e)=>setCount(parseInt(e.target.value,10))}/>
+              <span style={{fontSize:16,fontWeight:600,color:"#fff",minWidth:30,textAlign:"right"}}>{count}</span>
+            </div>
+          )}
+
           <div style={rowBox}>
             <label style={{fontSize:14,color:"#b9b6d8"}}>뽑을 인원</label>
             <input type="range" min={1} max={20} value={winCount} step={1} style={{flex:1}} onChange={(e)=>setWinCount(parseInt(e.target.value,10))}/>
             <span style={{fontSize:16,fontWeight:600,color:"#fff",minWidth:30,textAlign:"right"}}>{winCount}</span>
           </div>
-          <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#4F46E5",color:"#fff",cursor:"pointer"}} onClick={()=>setPlaying(true)}>출발</button>
+          <button style={{width:"100%",padding:14,fontSize:16,fontWeight:600,borderRadius:14,border:"none",background:"#4F46E5",color:"#fff",cursor:(mode==="all"&&memberNames.length<2)?"default":"pointer",opacity:(mode==="all"&&memberNames.length<2)?0.5:1}} disabled={mode==="all"&&memberNames.length<2} onClick={()=>setPlaying(true)}>출발</button>
           <button style={ghostBtn} onClick={()=>setView("list")}>← 게임 목록</button>
-          <div style={{fontSize:11,color:"#6b6890",textAlign:"center",marginTop:8}}>앱 연동 시 접속자 전원 자동 참여</div>
+          <div style={{fontSize:11,color:"#6b6890",textAlign:"center",marginTop:8}}>{mode==="all"?"조합원 명단에 무작위 번호가 부여됩니다":"직접 인원을 정해 진행합니다"}</div>
         </div>
       )}
 
