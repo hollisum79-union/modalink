@@ -14655,7 +14655,10 @@ function WorkManageScreen() {
   const [휴무입력, set휴무입력] = React.useState("");
 
   const [소속입력, set소속입력] = React.useState("대공원");
-  const [로딩, set로딩] = React.useState(false);
+    const [로딩, set로딩] = React.useState(false);
+  const [ttDayType, setTtDayType] = React.useState("평일");
+  const [ttUploading, setTtUploading] = React.useState(false);
+  const [ttResult, setTtResult] = React.useState("");
 
   React.useEffect(() => {
     불러오기();
@@ -14689,7 +14692,29 @@ function WorkManageScreen() {
     set휴무입력("");
     불러오기();
   };
-
+      <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>🕐 다이아 운행시각표 업로드</div>
+        <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6, marginBottom: 14 }}>엑셀의 시트 이름(1, 2, 3…)이 다이아 번호로 저장돼요. 같은 다이아·구분은 새 파일로 덮어써져요.</div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>구분</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
+          {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((d) => (
+            <button key={d} onClick={() => setTtDayType(d)} style={{ padding: "9px 0", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: ttDayType === d ? "2px solid #4F46E5" : "1px solid #E5E7EB", background: ttDayType === d ? "#EEF2FF" : "#fff", color: ttDayType === d ? "#4F46E5" : "#6B7280" }}>{d}</button>
+          ))}
+        </div>
+        <label style={{ display: "block", width: "100%", padding: 14, borderRadius: 12, border: "1.5px dashed #C7D2FE", background: ttUploading ? "#F3F4F6" : "#F5F3FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, textAlign: "center", boxSizing: "border-box", cursor: ttUploading ? "default" : "pointer" }}>
+          {ttUploading ? "⏳ 업로드 중…" : "📁 엑셀 파일 선택"}
+          <input type="file" accept=".xlsx,.xls" disabled={ttUploading} style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleTimetableUpload(f); e.currentTarget.value = ""; }} />
+        </label>
+        {ttResult && <div style={{ marginTop: 12, padding: "11px 13px", borderRadius: 10, fontSize: 13, fontWeight: 600, background: ttResult.startsWith("✅") ? "#ECFDF5" : "#FEF2F2", color: ttResult.startsWith("✅") ? "#059669" : "#DC2626" }}>{ttResult}</div>}
+      </div>
+      <div
+        style={{
+          background: "#FEF2F2",
+          borderRadius: 16,
+          padding: 16,
+          marginBottom: 16,
+        }}
+      >
   const 휴무삭제 = async (id: number) => {
     const { error } = await supabase.from("off_dias").delete().eq("id", id);
     if (error) {
