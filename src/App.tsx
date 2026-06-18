@@ -16188,11 +16188,24 @@ const getKyobunWork = (member: any, date: Date) => {
                   return <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>시각표 형식을 읽지 못했어요</div>;
                 }
                 const runs = runCols.map((ci) => ({ train: String((g[6] || [])[ci] == null ? "" : (g[6] || [])[ci]), dest: String((g[8] || [])[ci] == null ? "" : (g[8] || [])[ci]) }));
+                let stCol = -1, kmCol = -1, labelRowIdx = -1;
+                for (let rr = 8; rr < 14 && rr < g.length; rr++) {
+                  const lr = (g[rr] || []) as any[];
+                  lr.forEach((v: any, ci: number) => {
+                    const t = String(v == null ? "" : v);
+                    if (t.indexOf("역명") >= 0) { stCol = ci; labelRowIdx = rr; }
+                    if (t.indexOf("누계") >= 0) kmCol = ci;
+                  });
+                  if (stCol >= 0) break;
+                }
+                if (stCol < 0) stCol = runCols.length ? runCols[0] - 1 : 4;
+                if (kmCol < 0) kmCol = stCol - 3 >= 0 ? stCol - 3 : 1;
+                const startRow = labelRowIdx >= 0 ? labelRowIdx + 1 : 11;
                 const drows: { st: string; ckm: string; times: string[] }[] = [];
-                for (let r = 11; r < g.length; r++) {
-                  const st = String((g[r] || [])[5] == null ? "" : (g[r] || [])[5]).trim();
+                for (let r = startRow; r < g.length; r++) {
+                  const st = String((g[r] || [])[stCol] == null ? "" : (g[r] || [])[stCol]).trim();
                   if (!st) continue;
-                  drows.push({ st, ckm: String((g[r] || [])[2] == null ? "" : (g[r] || [])[2]), times: runCols.map((ci) => String((g[r] || [])[ci] == null ? "" : (g[r] || [])[ci])) });
+                  drows.push({ st, ckm: String((g[r] || [])[kmCol] == null ? "" : (g[r] || [])[kmCol]), times: runCols.map((ci) => String((g[r] || [])[ci] == null ? "" : (g[r] || [])[ci])) });
                 }
                 const fl = runCols.map((_c, ci) => {
                   const idxs = drows.map((rr, i) => (rr.times[ci] ? i : -1)).filter((i) => i >= 0);
