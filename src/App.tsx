@@ -14691,6 +14691,51 @@ function WorkManageScreen() {
     set휴무입력("");
     불러오기();
   };
+  const handleTimetableUpload = (file: File) => {
+    setTtUploading(true); setTtResult("");
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const sc = document.createElement("script");
+      sc.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      sc.onload = () => resolve((window as any).XLSX);
+      sc.onerror = reject;
+      document.head.appendChild(sc);
+    });
+    ensureXLSX().then((XLSX: any) => {
+      const reader = new FileReader();
+      reader.onload = async (ev: any) => {
+        try {
+          const data = new Uint8Array(ev.target.result);
+          const wb = XLSX.read(data, { type: "array" });
+          const rows = (wb.SheetNames as string[]).map((name: string) => {
+            const ws = wb.Sheets[name];
+            const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+            return { dia_no: String(name).trim(), day_type: ttDayType, grid: aoa, updated_at: new Date().toISOString() };
+          }).filter((r: any) => r.dia_no);
+          if (rows.length === 0) { setTtUploading(false); setTtResult("시트를 찾지 못했어요."); return; }
+          const { error } = await supabase.from("dia_timetable").upsert(rows, { onConflict: "dia_no,day_type" });
+          setTtUploading(false);
+          if (error) { setTtResult("저장 실패: " + error.message); return; }
+          setTtResult(`✅ ${ttDayType} ${rows.length}개 다이아 시간표 저장 완료`);
+        } catch (err: any) {
+          setTtUploading(false);
+          setTtResult("읽기 실패: " + (err?.message || ""));
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }).catch(() => { setTtUploading(false); setTtResult("엑셀 라이브러리 로드 실패"); });
+  };
+  const 휴무삭제 = async (id: number) => {
+    const { error } = await supabase.from("off_dias").delete().eq("id", id);
+    if (error) {
+      alert("삭제 실패: " + error.message);
+      return;
+    }
+    불러오기();
+  };
+
+  return (
+    <div>
       <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>🕐 다이아 운행시각표 업로드</div>
         <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6, marginBottom: 14 }}>엑셀의 시트 이름(1, 2, 3…)이 다이아 번호로 저장돼요. 같은 다이아·구분은 새 파일로 덮어써져요.</div>
@@ -14706,25 +14751,6 @@ function WorkManageScreen() {
         </label>
         {ttResult && <div style={{ marginTop: 12, padding: "11px 13px", borderRadius: 10, fontSize: 13, fontWeight: 600, background: ttResult.startsWith("✅") ? "#ECFDF5" : "#FEF2F2", color: ttResult.startsWith("✅") ? "#059669" : "#DC2626" }}>{ttResult}</div>}
       </div>
-      <div
-        style={{
-          background: "#FEF2F2",
-          borderRadius: 16,
-          padding: 16,
-          marginBottom: 16,
-        }}
-      >
-  const 휴무삭제 = async (id: number) => {
-    const { error } = await supabase.from("off_dias").delete().eq("id", id);
-    if (error) {
-      alert("삭제 실패: " + error.message);
-      return;
-    }
-    불러오기();
-  };
-
-  return (
-    <div>
       <div
         style={{
           background: "#FEF2F2",
