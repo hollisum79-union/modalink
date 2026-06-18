@@ -16175,19 +16175,61 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>
               ) : !ttvGrid || ttvGrid.length === 0 ? (
                 <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>저장된 시각표가 없어요{ttvDia ? "" : " (다이아 정보 없음)"}</div>
-              ) : (
-                <table style={{ borderCollapse: "collapse", fontSize: 11, whiteSpace: "nowrap" }}>
-                  <tbody>
-                    {ttvGrid.map((row: any[], ri: number) => (
-                      <tr key={ri}>
-                        {(row || []).map((cell: any, ci: number) => (
-                          <td key={ci} style={{ border: "1px solid #EDEDF2", padding: "4px 6px", color: "#1F2937" }}>{cell === null || cell === undefined ? "" : String(cell)}</td>
-                        ))}
+              ) : (() => {
+                const HWAN = ["도봉산", "노원", "태릉입구", "상봉", "군자", "건대입구", "강남구청", "논현", "고속터미널", "이수", "총신대", "보라매", "대림", "가산디지털", "온수"];
+                const isH = (st: string) => HWAN.some((h) => st.includes(h));
+                const destBg = (dd: string) => (dd.includes("도봉산") ? "#8B4513" : dd.includes("석남") ? "#16A34A" : "#E5E7EB");
+                const destFc = (dd: string) => (dd.includes("도봉산") || dd.includes("석남") ? "#fff" : "#111827");
+                const g = ttvGrid as any[][];
+                const hdr = (g[6] || []) as any[];
+                const runCols: number[] = [];
+                hdr.forEach((v: any, ci: number) => { if (/^\d+$/.test(String(v == null ? "" : v).trim())) runCols.push(ci); });
+                if (runCols.length === 0) {
+                  return <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>시각표 형식을 읽지 못했어요</div>;
+                }
+                const runs = runCols.map((ci) => ({ train: String((g[6] || [])[ci] == null ? "" : (g[6] || [])[ci]), dest: String((g[8] || [])[ci] == null ? "" : (g[8] || [])[ci]) }));
+                const drows: { st: string; ckm: string; times: string[] }[] = [];
+                for (let r = 11; r < g.length; r++) {
+                  const st = String((g[r] || [])[5] == null ? "" : (g[r] || [])[5]).trim();
+                  if (!st) continue;
+                  drows.push({ st, ckm: String((g[r] || [])[2] == null ? "" : (g[r] || [])[2]), times: runCols.map((ci) => String((g[r] || [])[ci] == null ? "" : (g[r] || [])[ci])) });
+                }
+                const fl = runCols.map((_c, ci) => {
+                  const idxs = drows.map((rr, i) => (rr.times[ci] ? i : -1)).filter((i) => i >= 0);
+                  return idxs.length ? [idxs[0], idxs[idxs.length - 1]] : [-1, -1];
+                });
+                const th: any = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap" };
+                const td: any = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap" };
+                const stnTh: any = { ...th, textAlign: "left", position: "sticky", left: 0, background: "#EEF2FF", zIndex: 3, fontWeight: 800 };
+                return (
+                  <table style={{ borderCollapse: "collapse", fontSize: 11, background: "#fff" }}>
+                    <thead>
+                      <tr>
+                        <th style={stnTh}>역명</th>
+                        <th style={th}>KM</th>
+                        {runs.map((rn, ci) => (<th key={ci} style={{ ...th, background: destBg(rn.dest), color: destFc(rn.dest), fontWeight: 800 }}>{rn.train}</th>))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                      <tr>
+                        <th style={stnTh}>행선</th>
+                        <th style={th}></th>
+                        {runs.map((rn, ci) => (<th key={ci} style={{ ...th, background: destBg(rn.dest), color: destFc(rn.dest), fontSize: 10 }}>{rn.dest.replace("역", "")}</th>))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drows.map((rr, i) => (
+                        <tr key={i}>
+                          <td style={{ ...td, textAlign: "left", position: "sticky", left: 0, zIndex: 1, fontWeight: 600, background: isH(rr.st) ? "#FEF08A" : "#fff" }}>{rr.st}</td>
+                          <td style={{ ...td, color: "#6B7280", fontSize: 10 }}>{rr.ckm}</td>
+                          {rr.times.map((t, ci) => {
+                            const dep = !!t && (i === fl[ci][0] || i === fl[ci][1]);
+                            return <td key={ci} style={{ ...td, ...(dep ? { background: "#111827", color: "#fff", fontWeight: 700 } : {}) }}>{t ? t.slice(0, 8) : ""}</td>;
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           </div>
         </div>
