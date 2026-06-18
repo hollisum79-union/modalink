@@ -15930,6 +15930,18 @@ const getKyobunWork = (member: any, date: Date) => {
   };
 
   const [allWorkOpen, setAllWorkOpen] = React.useState(false);
+  const [ttvOpen, setTtvOpen] = React.useState(false);
+  const [ttvDia, setTtvDia] = React.useState("");
+  const [ttvType, setTtvType] = React.useState("평일");
+  const [ttvGrid, setTtvGrid] = React.useState<any[][] | null>(null);
+  const [ttvLoading, setTtvLoading] = React.useState(false);
+  const loadTimetableView = async (dia: string, type: string) => {
+    if (!dia) { setTtvGrid(null); return; }
+    setTtvLoading(true);
+    const { data } = await supabase.from("dia_timetable").select("grid").eq("dia_no", String(dia)).eq("day_type", type).maybeSingle();
+    setTtvLoading(false);
+    setTtvGrid(data ? ((data as any).grid as any[][]) : null);
+  };
   // ── 메모 패널 ──
   const renderMemoPanel = (dateStr: string) => {
     const dayMemos = memos[dateStr] || [];
@@ -16080,7 +16092,7 @@ const getKyobunWork = (member: any, date: Date) => {
               <button onClick={() => setAllWorkOpen(true)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 📋 전체근무
               </button>
-              <button onClick={() => alert("운행시각표는 준비 중입니다.")} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+              <button onClick={() => { const d = String((kWork as any)?.dia || ""); setTtvDia(d); setTtvType("평일"); setTtvOpen(true); loadTimetableView(d, "평일"); }} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 🕐 운행시각표
               </button>
             </div>
@@ -16146,7 +16158,41 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
           </div>
                 </div>
-                {allWorkOpen && (() => {
+                {ttvOpen && (
+        <div onClick={() => setTtvOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, zIndex: 1200 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "86vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", color: "#fff", padding: "13px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 16, fontWeight: 800 }}>🕐 운행시각표 {ttvDia ? `· 다이아 ${ttvDia}` : ""}</span>
+              <button onClick={() => setTtvOpen(false)} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 16, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ display: "flex", gap: 6, padding: "10px 12px 4px", overflowX: "auto" }}>
+              {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((d) => (
+                <button key={d} onClick={() => { setTtvType(d); loadTimetableView(ttvDia, d); }} style={{ flexShrink: 0, padding: "6px 13px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: ttvType === d ? "1.5px solid #C7D2FE" : "1px solid #E5E7EB", background: ttvType === d ? "#EEF2FF" : "#fff", color: ttvType === d ? "#4F46E5" : "#6B7280" }}>{d}</button>
+              ))}
+            </div>
+            <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
+              {ttvLoading ? (
+                <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>
+              ) : !ttvGrid || ttvGrid.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>저장된 시각표가 없어요{ttvDia ? "" : " (다이아 정보 없음)"}</div>
+              ) : (
+                <table style={{ borderCollapse: "collapse", fontSize: 11, whiteSpace: "nowrap" }}>
+                  <tbody>
+                    {ttvGrid.map((row: any[], ri: number) => (
+                      <tr key={ri}>
+                        {(row || []).map((cell: any, ci: number) => (
+                          <td key={ci} style={{ border: "1px solid #EDEDF2", padding: "4px 6px", color: "#1F2937" }}>{cell === null || cell === undefined ? "" : String(cell)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {allWorkOpen && (() => {
           const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
           const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
           kyobuns.forEach((m: any) => {
