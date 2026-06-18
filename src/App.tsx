@@ -12,7 +12,6 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = []) {
   if (!member || rotationData.length === 0) return null;
 
-
   const calc = (mem: any) => {
     if (!mem) return null;
     const groupName = mem.work_group === "도봉" ? "도봉 41" : "대공원 114";
@@ -14655,7 +14654,10 @@ function WorkManageScreen() {
   const [휴무입력, set휴무입력] = React.useState("");
 
   const [소속입력, set소속입력] = React.useState("대공원");
-  const [로딩, set로딩] = React.useState(false);
+    const [로딩, set로딩] = React.useState(false);
+  const [ttDayType, setTtDayType] = React.useState("평일");
+  const [ttUploading, setTtUploading] = React.useState(false);
+  const [ttResult, setTtResult] = React.useState("");
 
   React.useEffect(() => {
     불러오기();
@@ -14689,7 +14691,29 @@ function WorkManageScreen() {
     set휴무입력("");
     불러오기();
   };
-
+      <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>🕐 다이아 운행시각표 업로드</div>
+        <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6, marginBottom: 14 }}>엑셀의 시트 이름(1, 2, 3…)이 다이아 번호로 저장돼요. 같은 다이아·구분은 새 파일로 덮어써져요.</div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>구분</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
+          {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((d) => (
+            <button key={d} onClick={() => setTtDayType(d)} style={{ padding: "9px 0", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: ttDayType === d ? "2px solid #4F46E5" : "1px solid #E5E7EB", background: ttDayType === d ? "#EEF2FF" : "#fff", color: ttDayType === d ? "#4F46E5" : "#6B7280" }}>{d}</button>
+          ))}
+        </div>
+        <label style={{ display: "block", width: "100%", padding: 14, borderRadius: 12, border: "1.5px dashed #C7D2FE", background: ttUploading ? "#F3F4F6" : "#F5F3FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, textAlign: "center", boxSizing: "border-box", cursor: ttUploading ? "default" : "pointer" }}>
+          {ttUploading ? "⏳ 업로드 중…" : "📁 엑셀 파일 선택"}
+          <input type="file" accept=".xlsx,.xls" disabled={ttUploading} style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleTimetableUpload(f); e.currentTarget.value = ""; }} />
+        </label>
+        {ttResult && <div style={{ marginTop: 12, padding: "11px 13px", borderRadius: 10, fontSize: 13, fontWeight: 600, background: ttResult.startsWith("✅") ? "#ECFDF5" : "#FEF2F2", color: ttResult.startsWith("✅") ? "#059669" : "#DC2626" }}>{ttResult}</div>}
+      </div>
+      <div
+        style={{
+          background: "#FEF2F2",
+          borderRadius: 16,
+          padding: 16,
+          marginBottom: 16,
+        }}
+      >
   const 휴무삭제 = async (id: number) => {
     const { error } = await supabase.from("off_dias").delete().eq("id", id);
     if (error) {
@@ -26284,6 +26308,35 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
   const [partsByEvent, setPartsByEvent] = React.useState<Record<string, { 참석: string[]; 미정: string[]; 불참: string[] }>>({});
   const [myResp, setMyResp] = React.useState<Record<string, string>>({});
   const [openRoster, setOpenRoster] = React.useState<string | null>(null);
+  const [editId, setEditId] = React.useState<string | null>(null);
+  const [ef, setEf] = React.useState<any>({ title: "", date: "", endDate: "", time: "", timeEnd: "", loc: "", survey: false });
+  const [saving, setSaving] = React.useState(false);
+  const isAdmin = !!(user as any)?.is_admin;
+  const efInput = { width: "100%", padding: "9px 11px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const };
+  const startEdit = (s: any) => {
+    const tv = String(s.event_time || "");
+    const parts = tv.includes("~") ? tv.split("~") : [tv, ""];
+    setEf({ title: s.title || "", date: s.event_date || "", endDate: s.end_date || "", time: (parts[0] || "").trim(), timeEnd: (parts[1] || "").trim(), loc: s.location || "", survey: !!s.survey_on });
+    setEditId(s.id);
+  };
+  const saveEdit = async () => {
+    if (!ef.title.trim()) { alert("제목을 입력하세요"); return; }
+    if (!ef.date) { alert("날짜를 선택하세요"); return; }
+    setSaving(true);
+    const tv = ef.time.trim() ? (ef.timeEnd.trim() ? `${ef.time.trim()}~${ef.timeEnd.trim()}` : ef.time.trim()) : null;
+    const payload = { title: ef.title.trim(), event_date: ef.date, event_time: tv, location: ef.loc.trim() || null, survey_on: ef.survey, end_date: ef.endDate || null };
+    const { error } = await supabase.from("union_schedule").update(payload).eq("id", editId);
+    setSaving(false);
+    if (error) { alert("수정 실패: " + error.message); return; }
+    setList((prev: any[]) => prev.map((x: any) => x.id === editId ? { ...x, ...payload } : x).sort((a: any, b: any) => String(a.event_date).localeCompare(String(b.event_date))));
+    setEditId(null);
+  };
+  const delSchedule = async (s: any) => {
+    if (!window.confirm(`'${s.title}' 일정을 삭제할까요?`)) return;
+    const { error } = await supabase.from("union_schedule").delete().eq("id", s.id);
+    if (error) { alert("삭제 실패: " + error.message); return; }
+    setList((prev: any[]) => prev.filter((x: any) => x.id !== s.id));
+  };
   const loadParts = async (ids: string[]) => {
     if (ids.length === 0) { setPartsByEvent({}); setMyResp({}); return; }
     const { data } = await supabase.from("event_participants").select("*").in("schedule_id", ids);
@@ -26384,6 +26437,34 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+                )}
+        {isAdmin && editId !== s.id && (
+          <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+            <button onClick={() => startEdit(s)} style={{ flex: 1, padding: 10, borderRadius: 10, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✏️ 수정</button>
+            <button onClick={() => delSchedule(s)} style={{ flex: 1, padding: 10, borderRadius: 10, border: "1.5px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🗑 삭제</button>
+          </div>
+        )}
+        {isAdmin && editId === s.id && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+            <input value={ef.title} onChange={(e) => setEf({ ...ef, title: e.target.value })} placeholder="일정 제목" style={{ ...efInput, marginBottom: 8 }} />
+            <input type="date" value={ef.date} onChange={(e) => setEf({ ...ef, date: e.target.value })} style={{ ...efInput, marginBottom: 8 }} />
+            <input type="date" value={ef.endDate} onChange={(e) => setEf({ ...ef, endDate: e.target.value })} style={{ ...efInput, marginBottom: 8 }} />
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input value={ef.time} onChange={(e) => setEf({ ...ef, time: e.target.value })} placeholder="시작 08:00" style={efInput} />
+              <input value={ef.timeEnd} onChange={(e) => setEf({ ...ef, timeEnd: e.target.value })} placeholder="종료 10:00" style={efInput} />
+            </div>
+            <input value={ef.loc} onChange={(e) => setEf({ ...ef, loc: e.target.value })} placeholder="장소(선택)" style={{ ...efInput, marginBottom: 8 }} />
+            <div onClick={() => setEf({ ...ef, survey: !ef.survey })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 11px", border: "1px solid #E5E7EB", borderRadius: 10, marginBottom: 10, cursor: "pointer" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>참여 조사 받기</span>
+              <div style={{ width: 40, height: 24, borderRadius: 12, background: ef.survey ? "#4F46E5" : "#D1D5DB", position: "relative", flexShrink: 0 }}>
+                <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: ef.survey ? 19 : 3 }} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={saveEdit} disabled={saving} style={{ flex: 1, padding: 11, borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>{saving ? "저장 중..." : "수정 저장"}</button>
+              <button onClick={() => setEditId(null)} style={{ padding: "11px 16px", borderRadius: 10, border: "1px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>취소</button>
             </div>
           </div>
         )}
@@ -29532,10 +29613,17 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     );
   if (screen === "register")
     return <RegisterScreen onBack={() => setScreen("login")} />;
+    if (screen === "noticeEdit" && selectedNotice)
+    return (
+      <NoticeForm
+        item={selectedNotice}
+        onClose={(r: boolean) => { if (r) loadNotices(); setScreen("noticeList"); }}
+      />
+    );
   if (screen === "noticeDetail" && selectedNotice)
     return (
       <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 80 }}>
-        <div
+  <div
           style={{
             background: "linear-gradient(135deg, #3730A3, #4F46E5, #6D28D9)",
             borderRadius: 28,
@@ -29644,8 +29732,14 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     </div>
                   );
                 })}
-            </div>
+                        </div>
           </div>
+          {(user as any)?.is_admin && (
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button onClick={() => setScreen("noticeEdit")} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>✏️ 수정</button>
+              <button onClick={async () => { if (!window.confirm("이 공지를 삭제할까요? 되돌릴 수 없습니다.")) return; const { error } = await supabase.from("notices").delete().eq("id", (selectedNotice as any).id); if (error) { alert("삭제 실패: " + error.message); return; } loadNotices(); setScreen("noticeList"); }} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>🗑 삭제</button>
+            </div>
+          )}
         </div>
       </div>
     );
