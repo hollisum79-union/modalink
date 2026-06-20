@@ -16189,106 +16189,6 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
           </div>
                 </div>
-                {ttvOpen && (
-        <div onClick={() => setTtvOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, zIndex: 1200 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "86vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", color: "#fff", padding: "13px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 16, fontWeight: 800 }}>🕐 운행시각표 {ttvDia ? `· 다이아 ${ttvDia}` : ""}</span>
-              <button onClick={() => setTtvOpen(false)} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 16, cursor: "pointer" }}>✕</button>
-            </div>
-            <div style={{ display: "flex", gap: 6, padding: "10px 12px", overflowX: "auto", flexShrink: 0, background: "#fff" }}>
-              {(ttvShift === "야간" ? ["평평", "평휴", "휴휴", "휴평"] : ["평일", "휴일"]).map((d) => (
-                <button key={d} onClick={() => { setTtvType(d); loadTimetableView(ttvDia, d); }} style={{ flexShrink: 0, padding: "6px 13px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: ttvType === d ? "1.5px solid #C7D2FE" : "1px solid #E5E7EB", background: ttvType === d ? "#EEF2FF" : "#fff", color: ttvType === d ? "#4F46E5" : "#6B7280" }}>{d}</button>
-              ))}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
-              {ttvLoading ? (
-                <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>
-              ) : !ttvGrid || ttvGrid.length === 0 ? (
-                <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>저장된 시각표가 없어요{ttvDia ? "" : " (다이아 정보 없음)"}</div>
-              ) : (() => {
-                const HWAN = ["도봉산", "노원", "태릉입구", "상봉", "군자", "건대입구", "강남구청", "논현", "고속터미널", "이수", "총신대", "보라매", "대림", "가산디지털", "온수"];
-                const isH = (st: string) => HWAN.some((h) => st.includes(h));
-                const destBg = (dd: string) => (dd.includes("도봉산") ? "#8B4513" : dd.includes("석남") ? "#16A34A" : "#E5E7EB");
-                const destFc = (dd: string) => (dd.includes("도봉산") || dd.includes("석남") ? "#fff" : "#111827");
-                const g = ttvGrid as any[][];
-                const hdr = (g[6] || []) as any[];
-                const runCols: number[] = [];
-                hdr.forEach((v: any, ci: number) => { if (/^\d+$/.test(String(v == null ? "" : v).trim())) runCols.push(ci); });
-                if (runCols.length === 0) {
-                  return <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>시각표 형식을 읽지 못했어요</div>;
-                }
-                const runs = runCols.map((ci) => ({ train: String((g[6] || [])[ci] == null ? "" : (g[6] || [])[ci]), dest: String((g[8] || [])[ci] == null ? "" : (g[8] || [])[ci]) }));
-                let stCol = -1, kmCol = -1, labelRowIdx = -1;
-                for (let rr = 8; rr < 14 && rr < g.length; rr++) {
-                  const lr = (g[rr] || []) as any[];
-                  lr.forEach((v: any, ci: number) => {
-                    const t = String(v == null ? "" : v);
-                    if (t.indexOf("역명") >= 0) { stCol = ci; labelRowIdx = rr; }
-                    if (t.indexOf("누계") >= 0) kmCol = ci;
-                  });
-                  if (stCol >= 0) break;
-                }
-                if (stCol < 0) stCol = runCols.length ? runCols[0] - 1 : 4;
-                if (kmCol < 0) kmCol = stCol - 3 >= 0 ? stCol - 3 : 1;
-                const startRow = labelRowIdx >= 0 ? labelRowIdx + 1 : 11;
-                const drows: { st: string; ckm: string; times: string[] }[] = [];
-                for (let r = startRow; r < g.length; r++) {
-                  const st = String((g[r] || [])[stCol] == null ? "" : (g[r] || [])[stCol]).trim();
-                  if (!st) continue;
-                  drows.push({ st, ckm: String((g[r] || [])[kmCol] == null ? "" : (g[r] || [])[kmCol]), times: runCols.map((ci) => String((g[r] || [])[ci] == null ? "" : (g[r] || [])[ci])) });
-                }
-                const STOP: any = { 도봉기지: 30, 장암: 30, 도봉산: 30, 수락산: 30, 마들: 30, 노원: 30, 중계: 30, 하계: 30, 공릉: 30, 태릉입구: 30, 먹골: 20, 중화: 30, 상봉: 40, 면목: 30, 사가정: 30, 용마산: 20, 중곡: 30, 군자: 40, 어린이대공원: 30, 건대입구: 40, 자양: 20, 청담: 30, 강남구청: 40, 학동: 30, 논현: 30, 반포: 20, 고속터미널: 40, 내방: 30, 이수: 40, 남성: 30, 숭실대입구: 30, 상도: 30, 장승배기: 30, 신대방삼거리: 30, 보라매: 20, 신풍: 30, 대림: 30, 남구로: 30, 가산디지털단지: 30, 철산: 30, 광명사거리: 30, 천왕: 20, 온수: 30 };
-                const norm = (x: string) => x.replace(/\(.*?\)/g, "").replace(/역$/, "").replace(/\s/g, "").trim();
-                const stopOf = (x: string) => { const v = STOP[norm(x)]; return v == null ? "" : String(v); };
-                let showRows = drows;
-                const oi = drows.findIndex((r) => r.st.indexOf("온수") >= 0);
-                const gi = drows.findIndex((r) => r.st.indexOf("천왕기지") >= 0);
-                if (oi >= 0) { const head = drows.slice(0, oi + 1); if (gi > oi) head.push(drows[gi]); showRows = head; }
-                const fl = runCols.map((_c, ci) => {
-                  const idxs = showRows.map((rr, i) => (rr.times[ci] ? i : -1)).filter((i) => i >= 0);
-                  return idxs.length ? [idxs[0], idxs[idxs.length - 1]] : [-1, -1];
-                });
-                const cell: any = { padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap", boxShadow: "inset 0 0 0 0.6px #cbd5e1" };
-                const hStn: any = { ...cell, position: "sticky", left: 0, width: 92, minWidth: 92, maxWidth: 92, textAlign: "left" };
-                const hStop: any = { ...cell, position: "sticky", left: 92, width: 34, minWidth: 34 };
-                return (
-                  <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 11, background: "#fff" }}>
-                    <thead>
-                      <tr>
-                        <th style={{ ...hStn, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800 }}>역명</th>
-                        <th style={{ ...hStop, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800 }}>정차</th>
-                        {runs.map((rn, ci) => (
-                          <th key={ci} style={{ ...cell, position: "sticky", top: 0, zIndex: 50, background: destBg(rn.dest), color: destFc(rn.dest) }}>
-                            <div style={{ fontWeight: 800 }}>{rn.train}</div>
-                            <div style={{ fontSize: 9, fontWeight: 600 }}>{rn.dest.replace("역", "")}</div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {showRows.map((rr, i) => {
-                        const h = isH(rr.st); const rbg = h ? "#FEF08A" : "#fff";
-                        return (
-                          <tr key={i}>
-                            <td style={{ ...hStn, zIndex: 30, background: rbg, fontWeight: 600 }}>{rr.st}</td>
-                            <td style={{ ...hStop, zIndex: 30, background: rbg, color: "#374151" }}>{stopOf(rr.st)}</td>
-                            {rr.times.map((t, ci) => {
-                              const dep = !!t && (i === fl[ci][0] || i === fl[ci][1]);
-                              const cs = dep ? { background: "#111827", color: "#fff", fontWeight: 700 } : (h ? { background: "#FEF08A" } : { background: "#fff" });
-                              return <td key={ci} style={{ ...cell, ...cs }}>{t ? t.slice(0, 8) : ""}</td>;
-                            })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
       {allWorkOpen && (() => {
           const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
           const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
@@ -17251,7 +17151,12 @@ const getKyobunWork = (member: any, date: Date) => {
       <div style={{ padding: "16px 16px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>다이아 검색</div>
-          <button onClick={() => setSubScreen(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📅 내 근무</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {diaNo && diaSel && (
+              <button onClick={() => { const shift = (diaSel === "평일" || diaSel === "휴일") ? "주간" : "야간"; setTtvDia(diaNo); setTtvShift(shift); setTtvType(diaSel); setTtvOpen(true); loadTimetableView(diaNo, diaSel); }} style={{ display: "flex", alignItems: "center", gap: 4, background: "#fff", color: "#4F46E5", border: "1.5px solid #C7D2FE", borderRadius: 10, padding: "7px 11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🕐 시각표</button>
+            )}
+            <button onClick={() => setSubScreen(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📅 내 근무</button>
+          </div>
         </div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>다이아 번호를 입력하면 행로와 시간 정보가 나와요</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
@@ -18216,6 +18121,107 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
       </div>
 
                        <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
+                {ttvOpen && (
+        <div onClick={() => setTtvOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "stretch", justifyContent: "center", padding: 0, zIndex: 1200 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 0, width: "100%", height: "100%", maxWidth: "none", maxHeight: "none", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", color: "#fff", padding: "calc(env(safe-area-inset-top, 14px) + 14px) 16px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 16, fontWeight: 800 }}>🕐 운행시각표 {ttvDia ? `· 다이아 ${ttvDia}` : ""}</span>
+              <button onClick={() => setTtvOpen(false)} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 16, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ display: "flex", gap: 6, padding: "10px 12px", overflowX: "auto", flexShrink: 0, background: "#fff" }}>
+              {(ttvShift === "야간" ? ["평평", "평휴", "휴휴", "휴평"] : ["평일", "휴일"]).map((d) => (
+                <button key={d} onClick={() => { setTtvType(d); loadTimetableView(ttvDia, d); }} style={{ flexShrink: 0, padding: "6px 13px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: ttvType === d ? "1.5px solid #C7D2FE" : "1px solid #E5E7EB", background: ttvType === d ? "#EEF2FF" : "#fff", color: ttvType === d ? "#4F46E5" : "#6B7280" }}>{d}</button>
+              ))}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
+              {ttvLoading ? (
+                <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>
+              ) : !ttvGrid || ttvGrid.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>저장된 시각표가 없어요{ttvDia ? "" : " (다이아 정보 없음)"}</div>
+              ) : (() => {
+                const HWAN = ["도봉산", "노원", "태릉입구", "상봉", "군자", "건대입구", "강남구청", "논현", "고속터미널", "이수", "총신대", "보라매", "대림", "가산디지털", "온수"];
+                const isH = (st: string) => HWAN.some((h) => st.includes(h));
+                const destBg = (dd: string) => (dd.includes("도봉산") ? "#8B4513" : dd.includes("석남") ? "#16A34A" : "#E5E7EB");
+                const destFc = (dd: string) => (dd.includes("도봉산") || dd.includes("석남") ? "#fff" : "#111827");
+                const g = ttvGrid as any[][];
+                const hdr = (g[6] || []) as any[];
+                const runCols: number[] = [];
+                hdr.forEach((v: any, ci: number) => { if (/^\d+$/.test(String(v == null ? "" : v).trim())) runCols.push(ci); });
+                if (runCols.length === 0) {
+                  return <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>시각표 형식을 읽지 못했어요</div>;
+                }
+                const runs = runCols.map((ci) => ({ train: String((g[6] || [])[ci] == null ? "" : (g[6] || [])[ci]), dest: String((g[8] || [])[ci] == null ? "" : (g[8] || [])[ci]) }));
+                let stCol = -1, kmCol = -1, labelRowIdx = -1;
+                for (let rr = 8; rr < 14 && rr < g.length; rr++) {
+                  const lr = (g[rr] || []) as any[];
+                  lr.forEach((v: any, ci: number) => {
+                    const t = String(v == null ? "" : v);
+                    if (t.indexOf("역명") >= 0) { stCol = ci; labelRowIdx = rr; }
+                    if (t.indexOf("누계") >= 0) kmCol = ci;
+                  });
+                  if (stCol >= 0) break;
+                }
+                if (stCol < 0) stCol = runCols.length ? runCols[0] - 1 : 4;
+                if (kmCol < 0) kmCol = stCol - 3 >= 0 ? stCol - 3 : 1;
+                const startRow = labelRowIdx >= 0 ? labelRowIdx + 1 : 11;
+                const drows: { st: string; ckm: string; times: string[] }[] = [];
+                for (let r = startRow; r < g.length; r++) {
+                  const st = String((g[r] || [])[stCol] == null ? "" : (g[r] || [])[stCol]).trim();
+                  if (!st) continue;
+                  drows.push({ st, ckm: String((g[r] || [])[kmCol] == null ? "" : (g[r] || [])[kmCol]), times: runCols.map((ci) => String((g[r] || [])[ci] == null ? "" : (g[r] || [])[ci])) });
+                }
+                const STOP: any = { 도봉기지: 30, 장암: 30, 도봉산: 30, 수락산: 30, 마들: 30, 노원: 30, 중계: 30, 하계: 30, 공릉: 30, 태릉입구: 30, 먹골: 20, 중화: 30, 상봉: 40, 면목: 30, 사가정: 30, 용마산: 20, 중곡: 30, 군자: 40, 어린이대공원: 30, 건대입구: 40, 자양: 20, 청담: 30, 강남구청: 40, 학동: 30, 논현: 30, 반포: 20, 고속터미널: 40, 내방: 30, 이수: 40, 남성: 30, 숭실대입구: 30, 상도: 30, 장승배기: 30, 신대방삼거리: 30, 보라매: 20, 신풍: 30, 대림: 30, 남구로: 30, 가산디지털단지: 30, 철산: 30, 광명사거리: 30, 천왕: 20, 온수: 30 };
+                const norm = (x: string) => x.replace(/\(.*?\)/g, "").replace(/역$/, "").replace(/\s/g, "").trim();
+                const stopOf = (x: string) => { const v = STOP[norm(x)]; return v == null ? "" : String(v); };
+                let showRows = drows;
+                const oi = drows.findIndex((r) => r.st.indexOf("온수") >= 0);
+                const gi = drows.findIndex((r) => r.st.indexOf("천왕기지") >= 0);
+                if (oi >= 0) { const head = drows.slice(0, oi + 1); if (gi > oi) head.push(drows[gi]); showRows = head; }
+                const fl = runCols.map((_c, ci) => {
+                  const idxs = showRows.map((rr, i) => (rr.times[ci] ? i : -1)).filter((i) => i >= 0);
+                  return idxs.length ? [idxs[0], idxs[idxs.length - 1]] : [-1, -1];
+                });
+                const cell: any = { padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap", boxShadow: "inset 0 0 0 0.6px #cbd5e1" };
+                const hStn: any = { ...cell, position: "sticky", left: 0, width: 92, minWidth: 92, maxWidth: 92, textAlign: "left" };
+                const hStop: any = { ...cell, position: "sticky", left: 92, width: 34, minWidth: 34, boxShadow: "inset 0 0 0 0.6px #cbd5e1, 4px 0 5px -2px rgba(0,0,0,0.13)" };
+                return (
+                  <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 11, background: "#fff" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...hStn, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800, boxShadow: "inset 0 0 0 0.6px #cbd5e1, 0 4px 5px -2px rgba(0,0,0,0.13)" }}>역명</th>
+                        <th style={{ ...hStop, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800, boxShadow: "inset 0 0 0 0.6px #cbd5e1, 4px 0 5px -2px rgba(0,0,0,0.13), 0 4px 5px -2px rgba(0,0,0,0.13)" }}>정차</th>
+                        {runs.map((rn, ci) => (
+                          <th key={ci} style={{ ...cell, position: "sticky", top: 0, zIndex: 50, background: destBg(rn.dest), color: destFc(rn.dest), boxShadow: "inset 0 0 0 0.6px #cbd5e1, 0 4px 5px -2px rgba(0,0,0,0.13)" }}>
+                            <div style={{ fontWeight: 800 }}>{rn.train}</div>
+                            <div style={{ fontSize: 9, fontWeight: 600 }}>{rn.dest.replace("역", "")}</div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {showRows.map((rr, i) => {
+                        const h = isH(rr.st); const rbg = h ? "#FEF08A" : "#fff";
+                        return (
+                          <tr key={i}>
+                            <td style={{ ...hStn, zIndex: 30, background: rbg, fontWeight: 600 }}>{rr.st}</td>
+                            <td style={{ ...hStop, zIndex: 30, background: rbg, color: "#374151" }}>{stopOf(rr.st)}</td>
+                            {rr.times.map((t, ci) => {
+                              const dep = !!t && (i === fl[ci][0] || i === fl[ci][1]);
+                              const cs = dep ? { background: "#111827", color: "#fff", fontWeight: 700 } : (h ? { background: "#FEF08A" } : { background: "#fff" });
+                              return <td key={ci} style={{ ...cell, ...cs }}>{t ? t.slice(0, 8) : ""}</td>;
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
         {subScreen === "search" && renderSearch()}
         {subScreen === "menu" && renderMenu()}
         {subScreen === "contacts" && renderContacts()}
