@@ -17231,7 +17231,7 @@ const getKyobunWork = (member: any, date: Date) => {
       <div style={{ padding: "16px 16px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>다이아 검색</div>
-          <button onClick={() => setScreen("schedule")} style={{ display: "flex", alignItems: "center", gap: 4, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📅 내 근무</button>
+          <button onClick={() => setSubScreen(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📅 내 근무</button>
         </div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>다이아 번호를 입력하면 행로와 시간 정보가 나와요</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
