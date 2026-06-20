@@ -17229,8 +17229,10 @@ const getKyobunWork = (member: any, date: Date) => {
     ].filter((f) => f.show) : [];
     return (
       <div style={{ padding: "16px 16px 24px" }}>
-        <button onClick={() => { setSubScreen("menu"); setDiaQ(""); setDiaNo(null); setDiaCats([]); setDiaSel(null); setDiaRouteMap({}); }} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 메뉴화면</button>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>다이아 검색</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>다이아 검색</div>
+          <button onClick={() => setScreen("schedule")} style={{ display: "flex", alignItems: "center", gap: 4, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📅 내 근무</button>
+        </div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>다이아 번호를 입력하면 행로와 시간 정보가 나와요</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           <input
@@ -18135,6 +18137,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
           </button>
         </div>
 
+        {subScreen !== "diasearch" && (
         <div
           style={{
             display: "flex",
@@ -18189,6 +18192,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
             ›
           </button>
         </div>
+        )}
       </div>
 
                        <div style={{ background: "#fff", flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
