@@ -15905,6 +15905,26 @@ const getKyobunWork = (member: any, date: Date) => {
                       </div>
                     );
                   })()}
+                  {(() => {
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
+                    const lv = leaveRecords.filter((r: any) => r.used_date === key);
+                    if (lv.length === 0) return null;
+                    const LV: any = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체", study: "학습", longService: "장기재직" };
+                    return (
+                      <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {lv.map((r: any, i: number) => (
+                          <div key={`lv${i}`} style={{ background: "#EEF0FF", borderRadius: 5, padding: "2px 3px" }}>
+                            <div style={{ fontSize: 9, color: "#4F46E5", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>
+                              {LV[r.leave_type] || r.leave_type}
+                            </div>
+                            <div style={{ fontSize: 9, color: "#4F46E5", lineHeight: 1.3, textAlign: "center" }}>
+                              {r.days}일
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {dayMemos.length > 0 && (
                     <div style={{ textAlign: "center", marginTop: 3 }}>
                       {dayMemos.slice(0, 3).map((_, i) => (
@@ -22884,15 +22904,10 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
               </div>
             ) : (
               <div
-                onClick={() => {
-                  setEditingId(item.id);
-                  setEditValue(String(item.days));
-                }}
                 style={{
                   display: "flex",
                   alignItems: "baseline",
                   gap: 4,
-                  cursor: "pointer",
                 }}
               >
                 <span
@@ -22901,7 +22916,13 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
                   {item.days}
                 </span>
                 <span style={{ fontSize: 12, color: "#888" }}>일</span>
-                <span style={{ fontSize: 10, color: "#9CA3AF", marginLeft: 4 }}>
+                <span
+                  onClick={() => {
+                    setEditingId(item.id);
+                    setEditValue(String(item.days));
+                  }}
+                  style={{ fontSize: 14, color: "#9CA3AF", marginLeft: 4, cursor: "pointer", padding: "2px 6px" }}
+                >
                   ✏️
                 </span>
               </div>
