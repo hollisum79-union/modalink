@@ -14933,7 +14933,7 @@ function WorkManageScreen() {
 // [교체 위치] App.tsx에서 기존 ScheduleScreen 함수 전체를 이 코드로 교체
 // ============================================================
 
-function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave }: { onBack: () => void; user: any; refreshUser?: () => void; onGoAdjust?: (d: string) => void; onGoLeave?: (d: string) => void }) {
+function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refreshSignal }: { onBack: () => void; user: any; refreshUser?: () => void; onGoAdjust?: (d: string) => void; onGoLeave?: (d: string) => void; refreshSignal?: number }) {
   const [activeTab, setActiveTab] = React.useState<
     "교대" | "교번" | "통상" | "변형통상"
   >(user?.work_type || "교대");
@@ -15121,7 +15121,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
       if (data) setLeaveRecords(data);
     };
     loadLeave();
-  }, [selectedMember]);
+  }, [selectedMember, refreshSignal]);
 
   // 근무조정 기록 불러오기 (선택된 사람 기준)
   React.useEffect(() => {
@@ -15134,7 +15134,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
       if (data) setAdjustRecords(data);
     };
     loadAdjust();
-  }, [selectedMember]);
+  }, [selectedMember, refreshSignal]);
 
   // 교번교체(수락된 것) 불러오기 - 선택된 사람이 a거나 b인 경우
   const [swapData, setSwapData] = React.useState<any[]>([]);
@@ -15568,7 +15568,7 @@ React.useEffect(() => {
       if (data) setAdjustRecords(data);
     };
     loadAdjust();
-  }, [selectedMember]);
+  }, [selectedMember, refreshSignal]);
 
   
 const getKyobunWork = (member: any, date: Date) => {
@@ -28640,6 +28640,7 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
 }
 export default function App() {
       const [screen, setScreen] = useState("login");
+      const [schedRefresh, setSchedRefresh] = useState(0);
     const screenRef = React.useRef("login");
     React.useEffect(() => { screenRef.current = screen; }, [screen]);
     React.useEffect(() => {
@@ -30082,7 +30083,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   if (screen === "notice-admin")
     return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("home"); }} />;
   if (screen === "workAdjust")
-        return <WorkAdjustScreen onBack={() => setScreen(adjustReturn)} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
+        return <WorkAdjustScreen onBack={() => { setSchedRefresh((v) => v + 1); setScreen(adjustReturn); }} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
   if (screen === "salary")
     return (
       <>
@@ -30091,7 +30092,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       </>
     );
   if (screen === "leave")
-      return <LeaveScreen onBack={() => setScreen(leaveReturn)} user={user} initialDate={leaveInitDate} />;
+      return <LeaveScreen onBack={() => { setSchedRefresh((v) => v + 1); setScreen(leaveReturn); }} user={user} initialDate={leaveInitDate} />;
   if (screen === "distance")
     return <DistanceScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "logbook")
@@ -30105,6 +30106,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         refreshUser={refreshUser}
         onGoAdjust={(d) => { setAdjustInitDate(d); setAdjustReturn("schedule"); setScreen("workAdjust"); }}
         onGoLeave={(d) => { setLeaveInitDate(d); setLeaveReturn("schedule"); setScreen("leave"); }}
+        refreshSignal={schedRefresh}
       />
         <BottomTabBar screen={screen} setScreen={setScreen} />
       </>
