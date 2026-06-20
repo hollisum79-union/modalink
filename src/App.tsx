@@ -15933,6 +15933,7 @@ const getKyobunWork = (member: any, date: Date) => {
   const [ttvOpen, setTtvOpen] = React.useState(false);
   const [ttvDia, setTtvDia] = React.useState("");
   const [ttvType, setTtvType] = React.useState("평일");
+  const [ttvShift, setTtvShift] = React.useState("주간");
   const [ttvGrid, setTtvGrid] = React.useState<any[][] | null>(null);
   const [ttvLoading, setTtvLoading] = React.useState(false);
   const loadTimetableView = async (dia: string, type: string) => {
@@ -16092,7 +16093,15 @@ const getKyobunWork = (member: any, date: Date) => {
               <button onClick={() => setAllWorkOpen(true)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 📋 전체근무
               </button>
-              <button onClick={() => { const d = String((kWork as any)?.dia || ""); setTtvDia(d); setTtvType("평일"); setTtvOpen(true); loadTimetableView(d, "평일"); }} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+              <button onClick={() => {
+                const d = String((kWork as any)?.dia || "");
+                const shift = String((kWork as any)?.type || "주간");
+                const isHolD = (dt: Date) => { const gg = dt.getDay(); if (gg === 0 || gg === 6) return true; const yy = dt.getFullYear(), mm = String(dt.getMonth() + 1).padStart(2, "0"), dd2 = String(dt.getDate()).padStart(2, "0"); return (holidays || []).includes(`${yy}-${mm}-${dd2}`); };
+                let dtp = "평일";
+                if (shift === "야간") { const tm = new Date(dateObj); tm.setDate(tm.getDate() + 1); const th2 = isHolD(dateObj), mh2 = isHolD(tm); dtp = (!th2 && !mh2) ? "평평" : (!th2 && mh2) ? "평휴" : (th2 && mh2) ? "휴휴" : "휴평"; }
+                else { dtp = isHolD(dateObj) ? "휴일" : "평일"; }
+                setTtvDia(d); setTtvShift(shift); setTtvType(dtp); setTtvOpen(true); loadTimetableView(d, dtp);
+              }} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                 🕐 운행시각표
               </button>
             </div>
@@ -16165,12 +16174,12 @@ const getKyobunWork = (member: any, date: Date) => {
               <span style={{ fontSize: 16, fontWeight: 800 }}>🕐 운행시각표 {ttvDia ? `· 다이아 ${ttvDia}` : ""}</span>
               <button onClick={() => setTtvOpen(false)} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 16, cursor: "pointer" }}>✕</button>
             </div>
-            <div style={{ display: "flex", gap: 6, padding: "10px 12px 4px", overflowX: "auto" }}>
-              {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((d) => (
+            <div style={{ display: "flex", gap: 6, padding: "10px 12px", overflowX: "auto", flexShrink: 0, background: "#fff" }}>
+              {(ttvShift === "야간" ? ["평평", "평휴", "휴휴", "휴평"] : ["평일", "휴일"]).map((d) => (
                 <button key={d} onClick={() => { setTtvType(d); loadTimetableView(ttvDia, d); }} style={{ flexShrink: 0, padding: "6px 13px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: ttvType === d ? "1.5px solid #C7D2FE" : "1px solid #E5E7EB", background: ttvType === d ? "#EEF2FF" : "#fff", color: ttvType === d ? "#4F46E5" : "#6B7280" }}>{d}</button>
               ))}
             </div>
-            <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
+            <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 12 }}>
               {ttvLoading ? (
                 <div style={{ textAlign: "center", padding: 30, color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>
               ) : !ttvGrid || ttvGrid.length === 0 ? (
@@ -16211,27 +16220,28 @@ const getKyobunWork = (member: any, date: Date) => {
                   const idxs = drows.map((rr, i) => (rr.times[ci] ? i : -1)).filter((i) => i >= 0);
                   return idxs.length ? [idxs[0], idxs[idxs.length - 1]] : [-1, -1];
                 });
-                const th: any = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap" };
+                const th: any = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 5, background: "#EEF2FF" };
                 const td: any = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap" };
-                const stnTh: any = { ...th, textAlign: "left", position: "sticky", left: 0, background: "#EEF2FF", zIndex: 3, fontWeight: 800 };
+                const cornerTh: any = { ...th, left: 0, zIndex: 6, textAlign: "left" };
+                const stTd: any = { ...td, textAlign: "left", position: "sticky", left: 0, zIndex: 4, fontWeight: 600 };
                 return (
                   <table style={{ borderCollapse: "collapse", fontSize: 11, background: "#fff" }}>
                     <thead>
                       <tr>
-                        <th style={stnTh}>역명</th>
+                        <th style={cornerTh}>역명</th>
                         <th style={th}>KM</th>
-                        {runs.map((rn, ci) => (<th key={ci} style={{ ...th, background: destBg(rn.dest), color: destFc(rn.dest), fontWeight: 800 }}>{rn.train}</th>))}
-                      </tr>
-                      <tr>
-                        <th style={stnTh}>행선</th>
-                        <th style={th}></th>
-                        {runs.map((rn, ci) => (<th key={ci} style={{ ...th, background: destBg(rn.dest), color: destFc(rn.dest), fontSize: 10 }}>{rn.dest.replace("역", "")}</th>))}
+                        {runs.map((rn, ci) => (
+                          <th key={ci} style={{ ...th, background: destBg(rn.dest), color: destFc(rn.dest) }}>
+                            <div style={{ fontWeight: 800 }}>{rn.train}</div>
+                            <div style={{ fontSize: 9, fontWeight: 600 }}>{rn.dest.replace("역", "")}</div>
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {drows.map((rr, i) => (
                         <tr key={i}>
-                          <td style={{ ...td, textAlign: "left", position: "sticky", left: 0, zIndex: 1, fontWeight: 600, background: isH(rr.st) ? "#FEF08A" : "#fff" }}>{rr.st}</td>
+                          <td style={{ ...stTd, background: isH(rr.st) ? "#FEF08A" : "#fff" }}>{rr.st}</td>
                           <td style={{ ...td, color: "#6B7280", fontSize: 10 }}>{rr.ckm}</td>
                           {rr.times.map((t, ci) => {
                             const dep = !!t && (i === fl[ci][0] || i === fl[ci][1]);
