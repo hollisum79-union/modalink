@@ -15442,19 +15442,19 @@ if (data) {
 
   // 터치 핸들러
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isAnimating) return;
+    if (isAnimating || editingDate) return;
     touchStartX.current = e.touches[0].clientX;
     setOffset(0);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isAnimating) return;
+    if (isAnimating || editingDate) return;
     const diff = e.touches[0].clientX - touchStartX.current;
     setOffset(diff);
   };
 
   const handleTouchEnd = () => {
-    if (isAnimating) return;
+    if (isAnimating || editingDate) return;
     const w = containerWidth.current;
     if (Math.abs(offset) > w * 0.25) {
       // 슬라이드 완료
@@ -15485,9 +15485,11 @@ if (data) {
 
   const kyobunTouchX = React.useRef(0);
   const handleKyobunTouchStart = (e: React.TouchEvent) => {
+    if (editingDate) return;
     kyobunTouchX.current = e.touches[0].clientX;
   };
   const handleKyobunTouchEnd = (e: React.TouchEvent) => {
+    if (editingDate) return;
     const diff = e.changedTouches[0].clientX - kyobunTouchX.current;
     if (Math.abs(diff) > 60) {
       if (diff < 0) {
@@ -15973,8 +15975,8 @@ const getKyobunWork = (member: any, date: Date) => {
         />
         <div
           style={{
-            position: "fixed", top: 40, left: 0, right: 0, bottom: 0, zIndex: 1000,
-            maxWidth: 430, margin: "0 auto", background: "#fff", borderRadius: "28px 28px 0 0",
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000,
+            maxWidth: 430, margin: "0 auto", background: "#fff", borderRadius: 0,
             display: "flex", flexDirection: "column", overflow: "hidden",
             boxShadow: "0 -8px 40px rgba(0,0,0,0.2)",
           }}
@@ -15984,7 +15986,7 @@ const getKyobunWork = (member: any, date: Date) => {
               background: isKyobun
                 ? "linear-gradient(135deg,#5B21B6,#6D28D9,#7C3AED)"
                 : "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)",
-              padding: "16px 20px 18px", borderRadius: "28px 28px 24px 24px",
+              padding: "calc(env(safe-area-inset-top, 12px) + 16px) 20px 18px", borderRadius: "0 0 24px 24px",
               color: "#fff", position: "relative", flexShrink: 0,
             }}
           >
@@ -18053,21 +18055,6 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
           flexShrink: 0,
         }}
       >
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: 16,
-            fontWeight: 800,
-            color: "#4F46E5",
-            letterSpacing: "-0.3px",
-          }}
-        >
-          {now.getFullYear()}년 {now.getMonth() + 1}월 {now.getDate()}일{" "}
-          {["일", "월", "화", "수", "목", "금", "토"][now.getDay()]}요일{" "}
-          {String(now.getHours()).padStart(2, "0")}:
-          {String(now.getMinutes()).padStart(2, "0")}:
-          {String(now.getSeconds()).padStart(2, "0")}
-        </div>
 
         <div
           style={{
