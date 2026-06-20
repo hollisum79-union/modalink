@@ -16216,22 +16216,28 @@ const getKyobunWork = (member: any, date: Date) => {
                   if (!st) continue;
                   drows.push({ st, ckm: String((g[r] || [])[kmCol] == null ? "" : (g[r] || [])[kmCol]), times: runCols.map((ci) => String((g[r] || [])[ci] == null ? "" : (g[r] || [])[ci])) });
                 }
+                const STOP: any = { 도봉기지: 30, 장암: 30, 도봉산: 30, 수락산: 30, 마들: 30, 노원: 30, 중계: 30, 하계: 30, 공릉: 30, 태릉입구: 30, 먹골: 20, 중화: 30, 상봉: 40, 면목: 30, 사가정: 30, 용마산: 20, 중곡: 30, 군자: 40, 어린이대공원: 30, 건대입구: 40, 자양: 20, 청담: 30, 강남구청: 40, 학동: 30, 논현: 30, 반포: 20, 고속터미널: 40, 내방: 30, 이수: 40, 남성: 30, 숭실대입구: 30, 상도: 30, 장승배기: 30, 신대방삼거리: 30, 보라매: 20, 신풍: 30, 대림: 30, 남구로: 30, 가산디지털단지: 30, 철산: 30, 광명사거리: 30, 천왕: 20, 온수: 30 };
+                const norm = (x: string) => x.replace(/\(.*?\)/g, "").replace(/역$/, "").replace(/\s/g, "").trim();
+                const stopOf = (x: string) => { const v = STOP[norm(x)]; return v == null ? "" : String(v); };
+                let showRows = drows;
+                const oi = drows.findIndex((r) => r.st.indexOf("온수") >= 0);
+                const gi = drows.findIndex((r) => r.st.indexOf("천왕기지") >= 0);
+                if (oi >= 0) { const head = drows.slice(0, oi + 1); if (gi > oi) head.push(drows[gi]); showRows = head; }
                 const fl = runCols.map((_c, ci) => {
-                  const idxs = drows.map((rr, i) => (rr.times[ci] ? i : -1)).filter((i) => i >= 0);
+                  const idxs = showRows.map((rr, i) => (rr.times[ci] ? i : -1)).filter((i) => i >= 0);
                   return idxs.length ? [idxs[0], idxs[idxs.length - 1]] : [-1, -1];
                 });
-                const th: any = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 5, background: "#EEF2FF" };
-                const td: any = { border: "1px solid #cbd5e1", padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap" };
-                const cornerTh: any = { ...th, left: 0, zIndex: 6, textAlign: "left" };
-                const stTd: any = { ...td, textAlign: "left", position: "sticky", left: 0, zIndex: 4, fontWeight: 600 };
+                const cell: any = { padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap", boxShadow: "inset 0 0 0 0.6px #cbd5e1" };
+                const hStn: any = { ...cell, position: "sticky", left: 0, width: 92, minWidth: 92, maxWidth: 92, textAlign: "left" };
+                const hStop: any = { ...cell, position: "sticky", left: 92, width: 34, minWidth: 34 };
                 return (
-                  <table style={{ borderCollapse: "collapse", fontSize: 11, background: "#fff" }}>
+                  <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 11, background: "#fff" }}>
                     <thead>
                       <tr>
-                        <th style={cornerTh}>역명</th>
-                        <th style={th}>KM</th>
+                        <th style={{ ...hStn, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800 }}>역명</th>
+                        <th style={{ ...hStop, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800 }}>정차</th>
                         {runs.map((rn, ci) => (
-                          <th key={ci} style={{ ...th, background: destBg(rn.dest), color: destFc(rn.dest) }}>
+                          <th key={ci} style={{ ...cell, position: "sticky", top: 0, zIndex: 50, background: destBg(rn.dest), color: destFc(rn.dest) }}>
                             <div style={{ fontWeight: 800 }}>{rn.train}</div>
                             <div style={{ fontSize: 9, fontWeight: 600 }}>{rn.dest.replace("역", "")}</div>
                           </th>
@@ -16239,16 +16245,20 @@ const getKyobunWork = (member: any, date: Date) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {drows.map((rr, i) => (
-                        <tr key={i}>
-                          <td style={{ ...stTd, background: isH(rr.st) ? "#FEF08A" : "#fff" }}>{rr.st}</td>
-                          <td style={{ ...td, color: "#6B7280", fontSize: 10 }}>{rr.ckm}</td>
-                          {rr.times.map((t, ci) => {
-                            const dep = !!t && (i === fl[ci][0] || i === fl[ci][1]);
-                            return <td key={ci} style={{ ...td, ...(dep ? { background: "#111827", color: "#fff", fontWeight: 700 } : {}) }}>{t ? t.slice(0, 8) : ""}</td>;
-                          })}
-                        </tr>
-                      ))}
+                      {showRows.map((rr, i) => {
+                        const h = isH(rr.st); const rbg = h ? "#FEF08A" : "#fff";
+                        return (
+                          <tr key={i}>
+                            <td style={{ ...hStn, zIndex: 30, background: rbg, fontWeight: 600 }}>{rr.st}</td>
+                            <td style={{ ...hStop, zIndex: 30, background: rbg, color: "#374151" }}>{stopOf(rr.st)}</td>
+                            {rr.times.map((t, ci) => {
+                              const dep = !!t && (i === fl[ci][0] || i === fl[ci][1]);
+                              const cs = dep ? { background: "#111827", color: "#fff", fontWeight: 700 } : (h ? { background: "#FEF08A" } : { background: "#fff" });
+                              return <td key={ci} style={{ ...cell, ...cs }}>{t ? t.slice(0, 8) : ""}</td>;
+                            })}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 );
