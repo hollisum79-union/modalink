@@ -16190,9 +16190,9 @@ const getKyobunWork = (member: any, date: Date) => {
           </div>
                 </div>
                 {ttvOpen && (
-        <div onClick={() => setTtvOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, zIndex: 1200 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 440, maxHeight: "86vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", color: "#fff", padding: "13px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div onClick={() => setTtvOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", display: "flex", alignItems: "stretch", justifyContent: "center", padding: 0, zIndex: 1200 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 0, width: "100%", height: "100%", maxWidth: "none", maxHeight: "none", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(135deg,#3730A3,#4F46E5,#6D28D9)", color: "#fff", padding: "calc(env(safe-area-inset-top, 14px) + 14px) 16px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 16, fontWeight: 800 }}>🕐 운행시각표 {ttvDia ? `· 다이아 ${ttvDia}` : ""}</span>
               <button onClick={() => setTtvOpen(false)} style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 16, cursor: "pointer" }}>✕</button>
             </div>
@@ -16251,15 +16251,15 @@ const getKyobunWork = (member: any, date: Date) => {
                 });
                 const cell: any = { padding: "3px 5px", textAlign: "center", whiteSpace: "nowrap", boxShadow: "inset 0 0 0 0.6px #cbd5e1" };
                 const hStn: any = { ...cell, position: "sticky", left: 0, width: 92, minWidth: 92, maxWidth: 92, textAlign: "left" };
-                const hStop: any = { ...cell, position: "sticky", left: 92, width: 34, minWidth: 34 };
+                const hStop: any = { ...cell, position: "sticky", left: 92, width: 34, minWidth: 34, boxShadow: "inset 0 0 0 0.6px #cbd5e1, 4px 0 5px -2px rgba(0,0,0,0.13)" };
                 return (
                   <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 11, background: "#fff" }}>
                     <thead>
                       <tr>
-                        <th style={{ ...hStn, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800 }}>역명</th>
-                        <th style={{ ...hStop, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800 }}>정차</th>
+                        <th style={{ ...hStn, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800, boxShadow: "inset 0 0 0 0.6px #cbd5e1, 0 4px 5px -2px rgba(0,0,0,0.13)" }}>역명</th>
+                        <th style={{ ...hStop, top: 0, zIndex: 60, background: "#EEF2FF", fontWeight: 800, boxShadow: "inset 0 0 0 0.6px #cbd5e1, 4px 0 5px -2px rgba(0,0,0,0.13), 0 4px 5px -2px rgba(0,0,0,0.13)" }}>정차</th>
                         {runs.map((rn, ci) => (
-                          <th key={ci} style={{ ...cell, position: "sticky", top: 0, zIndex: 50, background: destBg(rn.dest), color: destFc(rn.dest) }}>
+                          <th key={ci} style={{ ...cell, position: "sticky", top: 0, zIndex: 50, background: destBg(rn.dest), color: destFc(rn.dest), boxShadow: "inset 0 0 0 0.6px #cbd5e1, 0 4px 5px -2px rgba(0,0,0,0.13)" }}>
                             <div style={{ fontWeight: 800 }}>{rn.train}</div>
                             <div style={{ fontSize: 9, fontWeight: 600 }}>{rn.dest.replace("역", "")}</div>
                           </th>
@@ -17251,7 +17251,12 @@ const getKyobunWork = (member: any, date: Date) => {
       <div style={{ padding: "16px 16px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937" }}>다이아 검색</div>
-          <button onClick={() => setSubScreen(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📅 내 근무</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {diaNo && diaSel && (
+              <button onClick={() => { const shift = (diaSel === "평일" || diaSel === "휴일") ? "주간" : "야간"; setTtvDia(diaNo); setTtvShift(shift); setTtvType(diaSel); setTtvOpen(true); loadTimetableView(diaNo, diaSel); }} style={{ display: "flex", alignItems: "center", gap: 4, background: "#fff", color: "#4F46E5", border: "1.5px solid #C7D2FE", borderRadius: 10, padding: "7px 11px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🕐 시각표</button>
+            )}
+            <button onClick={() => setSubScreen(null)} style={{ display: "flex", alignItems: "center", gap: 4, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📅 내 근무</button>
+          </div>
         </div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>다이아 번호를 입력하면 행로와 시간 정보가 나와요</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
