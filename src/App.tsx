@@ -2347,7 +2347,13 @@ function CanteenScreen({ onBack, user }) {
     };
     return () => { (window as any).__backHandler = null; };
   });
-  const allDates = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean))).sort((a, b) => toNum(a) - toNum(b));
+  const allDates = (() => {
+    const uniq = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean)));
+    const t = toNum(todayKey);
+    const future = uniq.filter((d) => toNum(d) >= t).sort((a, b) => toNum(a) - toNum(b));
+    const past = uniq.filter((d) => toNum(d) < t).sort((a, b) => toNum(a) - toNum(b));
+    return [...future, ...past];
+  })();
   const viewDate = pickedDate || todayKey;
     const isAdmin = user?.is_admin;
   const [uploading, setUploading] = useState(false);
@@ -20509,11 +20515,12 @@ function MySettingsScreen({
             </div>
           )}
           {editNotify && [
-            { key: "notify_urgent", label: "긴급공지", desc: "긴급 공지사항 알림" },
-            { key: "notify_notice", label: "일반공지", desc: "새 공지사항 알림" },
+            { key: "notify_urgent", label: "긴급공지", desc: "중요 알림이라 항상 켜져 있어요", locked: true },
+            { key: "notify_notice", label: "일반공지", desc: "중요 알림이라 항상 켜져 있어요", locked: true },
+            { key: "notify_event", label: "조합 일정", desc: "중요 알림이라 항상 켜져 있어요", locked: true },
             { key: "notify_swap", label: "교번교체", desc: "교체 요청·수락·거절 알림" },
             { key: "notify_vote", label: "설문·투표", desc: "새 투표·설문 알림" },
-          ].map((item, i, arr) => (
+          ].map((item: any, i, arr) => (
             <div
               key={item.key}
               style={{
@@ -20535,7 +20542,7 @@ function MySettingsScreen({
                     gap: 6,
                   }}
                 >
-              {item.label}
+              {item.label}{item.locked ? <span style={{ fontSize: 11 }}> 🔒</span> : null}
                 </div>
                 <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>
                   {item.desc}
@@ -20543,6 +20550,7 @@ function MySettingsScreen({
               </div>
               <button
                 onClick={async () => {
+                  if (item.locked) return;
                   const next = !notifSettings[item.key];
                   setNotifSettings((prev) => ({ ...prev, [item.key]: next }));
                   try {
@@ -20557,8 +20565,9 @@ function MySettingsScreen({
                   height: 24,
                   borderRadius: 12,
                   border: "none",
-                  cursor: "pointer",
-                  background: notifSettings[item.key] ? "#4F46E5" : "#E5E7EB",
+                  cursor: item.locked ? "default" : "pointer",
+                  background: (item.locked || notifSettings[item.key]) ? "#4F46E5" : "#E5E7EB",
+                  opacity: item.locked ? 0.55 : 1,
                   position: "relative",
                   transition: "background 0.2s",
                   flexShrink: 0,
@@ -20572,7 +20581,7 @@ function MySettingsScreen({
                     background: "#fff",
                     position: "absolute",
                     top: 3,
-                    left: notifSettings[item.key] ? 23 : 3,
+                    left: (item.locked || notifSettings[item.key]) ? 23 : 3,
                     transition: "left 0.2s",
                   }}
                 />
@@ -27510,6 +27519,17 @@ function EventForm({ event, eventTypes, onClose }) {
       } else {
         const { error } = await supabase.from("events").insert([payload]);
         if (error) throw error;
+        fetch("/.netlify/functions/send-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "📅 새 조합 일정",
+            message: `${eventType}${eventDate ? " · " + eventDate : ""}${location.trim() ? " · " + location.trim() : ""}`,
+            url: "/",
+            type: "event",
+            from: String(JSON.parse(localStorage.getItem("union_user") || "{}").employee_number || ""),
+          }),
+        }).catch(() => {});
       }
       onClose(true);
     } catch (err) {
