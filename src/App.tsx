@@ -2590,9 +2590,7 @@ function CanteenScreen({ onBack, user }) {
               >
                 {(() => {
                   const sameMeal = menus.filter((m) => m.meal_type === meal.key && m.menu_date);
-              const pastOrToday = sameMeal.filter((m) => toNum(m.menu_date) <= toNum(todayKey));
-              const pool = pastOrToday.length ? pastOrToday : sameMeal;
-              const row = pool.slice().sort((a, b) => toNum(b.menu_date) - toNum(a.menu_date))[0];
+              const row = sameMeal.find((m) => String(m.menu_date) === String(viewDate));
                   const list = row && row.items && row.items[0] ? String(row.items[0]).split(",").map((x) => x.trim()).filter(Boolean) : [];
                   if (list.length === 0) return (<div style={{ padding: "16px 18px", color: "#9CA3AF", fontSize: 13 }}>오늘 등록된 메뉴가 없습니다.</div>);
                   return list.map((name, i) => (
