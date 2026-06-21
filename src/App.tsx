@@ -28714,8 +28714,10 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
 export default function App() {
       const [screen, setScreen] = useState("login");
       const [schedRefresh, setSchedRefresh] = useState(0);
+      const [notifBlocked, setNotifBlocked] = useState(false);
     const screenRef = React.useRef("login");
     React.useEffect(() => { screenRef.current = screen; }, [screen]);
+    React.useEffect(() => { try { if ("Notification" in window && Notification.permission !== "granted") setNotifBlocked(true); else setNotifBlocked(false); } catch (e) {} }, [screen, user]);
     React.useEffect(() => {
       // ── 탭 기반 히스토리 충전 ──
       // 크롬은 사용자 제스처 없이 만든 히스토리를 건너뛰므로,
@@ -31265,6 +31267,16 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             <div style={{ background: "#EF4444", color: "#fff", fontSize: 12, fontWeight: 800, borderRadius: 10, minWidth: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px" }}>{swapReqCount}</div>
           </div>
         )}
+        {notifBlocked ? (
+          <div onClick={async () => { const ok = await enablePush(); if (ok) setNotifBlocked(false); }} style={{ display: "flex", alignItems: "center", gap: 10, background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 14, padding: "13px 14px", marginBottom: 12, cursor: "pointer" }}>
+            <div style={{ fontSize: 20 }}>🔔</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#DC2626" }}>알림이 꺼져 있어요</div>
+              <div style={{ fontSize: 12, color: "#991B1B", marginTop: 2, lineHeight: 1.5 }}>공지·조합 일정을 놓칠 수 있어요. 눌러서 켜주세요.</div>
+            </div>
+            <div style={{ background: "#DC2626", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 9, padding: "7px 12px", flexShrink: 0 }}>켜기</div>
+          </div>
+        ) : null}
         <HomeCarousel
           urgentNotice={urgentNotice}
           carouselNotices={carouselNotices}
