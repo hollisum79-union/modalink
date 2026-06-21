@@ -28717,7 +28717,7 @@ export default function App() {
       const [notifBlocked, setNotifBlocked] = useState(false);
     const screenRef = React.useRef("login");
     React.useEffect(() => { screenRef.current = screen; }, [screen]);
-    React.useEffect(() => { try { if ("Notification" in window && Notification.permission !== "granted") setNotifBlocked(true); else setNotifBlocked(false); } catch (e) {} }, [screen, user]);
+    React.useEffect(() => { try { if ("Notification" in window && Notification.permission !== "granted") setNotifBlocked(true); else setNotifBlocked(false); } catch (e) {} }, [screen]);
     React.useEffect(() => {
       // ── 탭 기반 히스토리 충전 ──
       // 크롬은 사용자 제스처 없이 만든 히스토리를 건너뛰므로,
