@@ -2347,7 +2347,13 @@ function CanteenScreen({ onBack, user }) {
     };
     return () => { (window as any).__backHandler = null; };
   });
-  const allDates = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean))).sort((a, b) => toNum(a) - toNum(b));
+  const allDates = (() => {
+    const uniq = Array.from(new Set(menus.map((m) => m.menu_date).filter(Boolean)));
+    const t = toNum(todayKey);
+    const future = uniq.filter((d) => toNum(d) >= t).sort((a, b) => toNum(a) - toNum(b));
+    const past = uniq.filter((d) => toNum(d) < t).sort((a, b) => toNum(a) - toNum(b));
+    return [...future, ...past];
+  })();
   const viewDate = pickedDate || todayKey;
     const isAdmin = user?.is_admin;
   const [uploading, setUploading] = useState(false);
@@ -10481,6 +10487,29 @@ function MemberManageScreen() {
     </div>
   );
 }
+function AdminGuide({ steps, tip }: { steps: string[]; tip?: string }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{ border: "1px solid #DBEAFE", background: "#F5F8FF", borderRadius: 13, marginBottom: 16, overflow: "hidden" }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", cursor: "pointer" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#4F46E5" }}>📖 입력 방법</div>
+        <div style={{ color: "#9CA3AF", fontSize: 12 }}>{open ? "▲ 접기" : "▼ 펼치기"}</div>
+      </div>
+      {open ? (
+        <div style={{ padding: "0 14px 14px", fontSize: 13, color: "#374151", lineHeight: 1.8 }}>
+          {steps.map((st, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+              <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: "50%", background: "#4F46E5", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 2 }}>{i + 1}</span>
+              <span>{st}</span>
+            </div>
+          ))}
+          {tip ? <div style={{ marginTop: 8, padding: "8px 10px", background: "#FEF9E7", borderRadius: 8, fontSize: 12, color: "#92766A" }}>{tip}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ScheduleUpdateAdmin() {
   const [list, setList] = React.useState<any[]>([]);
   const [newDate, setNewDate] = React.useState("");
@@ -10520,6 +10549,7 @@ function ScheduleUpdateAdmin() {
 
   return (
     <div>
+      <AdminGuide steps={["적용일을 고르세요 — 새 교번표가 시작되는 날짜예요", "메모를 적으세요 (예: 6월 개정 교번표 반영)", "저장하면 그 날짜부터 새 근무표가 적용돼요"]} tip="⚠️ 적용일 이전 근무표는 그대로 유지돼요. 되돌리려면 아래 목록에서 삭제하세요." />
       <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
         근무표 업데이트
       </div>
@@ -12280,6 +12310,7 @@ function RouteInputScreen() {
   return (
     <div style={{ padding: "16px 16px 28px" }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>🚆 근무행로 입력</div>
+      <AdminGuide steps={["다이아 번호와 구분을 고르세요 (예: 61 / 평일)", "근무형태 약어를 통으로 적으세요 (예: 천기신장대)", "열번별 행로를 한 줄씩 입력하세요: 열번 / 구간 / 출발 / 도착", "아래 미리보기로 그림이 자동 생성돼요 — 확인 후 저장"]} tip="💡 엑셀/CSV로 여러 행로를 한 번에 올릴 수도 있어요." />
 
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <button onClick={downloadTemplate} style={{ flex: 1, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: "#4338CA", cursor: "pointer" }}>📄 엑셀 양식 받기</button>
@@ -13267,6 +13298,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
 {activeMenu === "kyobundia" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록 (여러 장)</div>
+    <AdminGuide steps={["[파일] 엑셀/CSV를 선택하면 여러 다이아가 한 번에 등록돼요", "[사진] 시간표 사진 여러 장을 선택하면 AI가 자동으로 읽어 표로 만들어요", "AI가 읽은 내용을 확인·수정한 뒤 저장하세요"]} tip="💡 AI가 읽은 값이 틀릴 수 있으니 저장 전에 꼭 확인하세요." />
         {/* ===== 엑셀(CSV) 한 번에 업로드 ===== */}
     <label style={{ display: "block", padding: 16, border: "2px dashed #6EE7B7", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#059669", fontSize: 14, fontWeight: 700, marginBottom: 8, background: "#F0FDF4" }}>
             📄 엑셀 또는 CSV 파일로 한 번에 올리기
@@ -14734,6 +14766,7 @@ function WorkManageScreen() {
 
   return (
     <div>
+      <AdminGuide steps={["구분을 먼저 고르세요 (평일/휴일/평평/평휴/휴휴/휴평)", "그 구분의 운행시각표 엑셀(.xlsx)을 선택하세요", "업로드하면 자동으로 저장됩니다"]} tip="⚠️ 엑셀의 시트 이름이 다이아 번호여야 해요 (예: 시트명 '6' = 다이아 6). 한 파일에 여러 다이아(시트)를 넣을 수 있어요." />
       <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>🕐 다이아 운행시각표 업로드</div>
         <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6, marginBottom: 14 }}>엑셀의 시트 이름(1, 2, 3…)이 다이아 번호로 저장돼요. 같은 다이아·구분은 새 파일로 덮어써져요.</div>
@@ -20509,11 +20542,12 @@ function MySettingsScreen({
             </div>
           )}
           {editNotify && [
-            { key: "notify_urgent", label: "긴급공지", desc: "긴급 공지사항 알림" },
-            { key: "notify_notice", label: "일반공지", desc: "새 공지사항 알림" },
+            { key: "notify_urgent", label: "긴급공지", desc: "중요 알림이라 항상 켜져 있어요", locked: true },
+            { key: "notify_notice", label: "일반공지", desc: "중요 알림이라 항상 켜져 있어요", locked: true },
+            { key: "notify_event", label: "조합 일정", desc: "중요 알림이라 항상 켜져 있어요", locked: true },
             { key: "notify_swap", label: "교번교체", desc: "교체 요청·수락·거절 알림" },
             { key: "notify_vote", label: "설문·투표", desc: "새 투표·설문 알림" },
-          ].map((item, i, arr) => (
+          ].map((item: any, i, arr) => (
             <div
               key={item.key}
               style={{
@@ -20535,7 +20569,7 @@ function MySettingsScreen({
                     gap: 6,
                   }}
                 >
-              {item.label}
+              {item.label}{item.locked ? <span style={{ fontSize: 11 }}> 🔒</span> : null}
                 </div>
                 <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>
                   {item.desc}
@@ -20543,6 +20577,7 @@ function MySettingsScreen({
               </div>
               <button
                 onClick={async () => {
+                  if (item.locked) return;
                   const next = !notifSettings[item.key];
                   setNotifSettings((prev) => ({ ...prev, [item.key]: next }));
                   try {
@@ -20557,8 +20592,9 @@ function MySettingsScreen({
                   height: 24,
                   borderRadius: 12,
                   border: "none",
-                  cursor: "pointer",
-                  background: notifSettings[item.key] ? "#4F46E5" : "#E5E7EB",
+                  cursor: item.locked ? "default" : "pointer",
+                  background: (item.locked || notifSettings[item.key]) ? "#4F46E5" : "#E5E7EB",
+                  opacity: item.locked ? 0.55 : 1,
                   position: "relative",
                   transition: "background 0.2s",
                   flexShrink: 0,
@@ -20572,7 +20608,7 @@ function MySettingsScreen({
                     background: "#fff",
                     position: "absolute",
                     top: 3,
-                    left: notifSettings[item.key] ? 23 : 3,
+                    left: (item.locked || notifSettings[item.key]) ? 23 : 3,
                     transition: "left 0.2s",
                   }}
                 />
@@ -23465,6 +23501,7 @@ function DistanceScreen({ onBack, user }) {
 
         <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>기준 누적키로 입력</div>
+          <div style={{ fontSize: 12, color: "#6B7280", background: "#F3F4F6", borderRadius: 8, padding: "9px 12px", marginBottom: 14, lineHeight: 1.6 }}>💡 회사 자료의 누적 주행키로와 그 기준일을 넣으면, 다음 날부터 앱이 매일 운행 km를 자동으로 더해요.</div>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>지금까지 누적 주행키로 (km)</div>
             <input type="number" value={baseKm} onChange={(e) => setBaseKm(e.target.value)} placeholder="예: 850000" style={{ width: "100%", padding: "12px 14px", border: "1px solid #E5E7EB", borderRadius: 12, fontSize: 15, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
@@ -27510,6 +27547,17 @@ function EventForm({ event, eventTypes, onClose }) {
       } else {
         const { error } = await supabase.from("events").insert([payload]);
         if (error) throw error;
+        fetch("/.netlify/functions/send-push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "📅 새 조합 일정",
+            message: `${eventType}${eventDate ? " · " + eventDate : ""}${location.trim() ? " · " + location.trim() : ""}`,
+            url: "/",
+            type: "event",
+            from: String(JSON.parse(localStorage.getItem("union_user") || "{}").employee_number || ""),
+          }),
+        }).catch(() => {});
       }
       onClose(true);
     } catch (err) {
