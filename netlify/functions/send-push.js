@@ -18,12 +18,18 @@ exports.handler = async (event) => {
     const { title, message, url, type } = body;
 
     let query = supabase.from("push_subscriptions").select("*");
+
+    // 특정 대상 / 발신자 제외
     if (body.to) query = query.eq("employee_number", String(body.to));
     if (body.from) query = query.neq("employee_number", String(body.from));
-    if (type === "notice") query = query.eq("notify_notice", true);
-    else if (type === "swap") query = query.eq("notify_swap", true);
+
+    // ── 알림 종류별 필터 ──
+    // 공지(notice)·긴급(urgent)·조합일정(event)은 "중요 알림"이라
+    // 사용자 설정과 무관하게 무조건 전체 발송한다. (필터 없음)
+    // comment·inquiry는 본인(to)에게만 가므로 추가 필터 없음.
+    // 그 외(swap·vote)는 사용자 설정대로 발송한다.
+    if (type === "swap") query = query.eq("notify_swap", true);
     else if (type === "vote") query = query.eq("notify_vote", true);
-    else if (type === "urgent") query = query.eq("notify_urgent", true);
 
     const { data: subs, error } = await query;
     if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
