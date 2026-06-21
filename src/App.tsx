@@ -14686,6 +14686,9 @@ function WorkManageScreen() {
   const [소속입력, set소속입력] = React.useState("대공원");
     const [로딩, set로딩] = React.useState(false);
   const [ttDayType, setTtDayType] = React.useState("평일");
+  const [ttRegistered, setTtRegistered] = React.useState<any[]>([]);
+  const loadTtRegistered = async () => { const { data } = await supabase.from("dia_timetable").select("dia_no, day_type"); setTtRegistered(data || []); };
+  React.useEffect(() => { loadTtRegistered(); }, []);
   const [ttUploading, setTtUploading] = React.useState(false);
   const [ttResult, setTtResult] = React.useState("");
 
@@ -14747,6 +14750,7 @@ function WorkManageScreen() {
           setTtUploading(false);
           if (error) { setTtResult("저장 실패: " + error.message); return; }
           setTtResult(`✅ ${ttDayType} ${rows.length}개 다이아 시간표 저장 완료`);
+          loadTtRegistered();
         } catch (err: any) {
           setTtUploading(false);
           setTtResult("읽기 실패: " + (err?.message || ""));
@@ -14781,6 +14785,23 @@ function WorkManageScreen() {
           <input type="file" accept=".xlsx,.xls" disabled={ttUploading} style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleTimetableUpload(f); e.currentTarget.value = ""; }} />
         </label>
         {ttResult && <div style={{ marginTop: 12, padding: "11px 13px", borderRadius: 10, fontSize: 13, fontWeight: 600, background: ttResult.startsWith("✅") ? "#ECFDF5" : "#FEF2F2", color: ttResult.startsWith("✅") ? "#059669" : "#DC2626" }}>{ttResult}</div>}
+      </div>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>📋 현재 등록된 시각표</div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 12 }}>구분별로 등록된 다이아 번호예요 (읽기 전용)</div>
+        {["평일", "휴일", "평평", "평휴", "휴휴", "휴평"].map((dt) => {
+          const dias = ttRegistered.filter((r) => r.day_type === dt).map((r) => r.dia_no).sort((a, b) => Number(a) - Number(b));
+          return (
+            <div key={dt} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+              <span style={{ flexShrink: 0, width: 38, fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{dt}</span>
+              <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {dias.length ? dias.map((d, i) => (
+                  <span key={i} style={{ fontSize: 11, fontWeight: 600, color: "#374151", background: "#EEF2FF", borderRadius: 6, padding: "2px 7px" }}>{d}</span>
+                )) : <span style={{ fontSize: 12, color: "#D1D5DB" }}>없음</span>}
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div
         style={{
