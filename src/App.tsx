@@ -7099,6 +7099,7 @@ function ArchiveScreen({ onBack, user }) {
 const [showAddCat, setShowAddCat] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameDesc, setRenameDesc] = useState("");
   const [moveFile, setMoveFile] = useState(null);
   // ── 뒤로가기: 팝업 닫기 → 카테고리 목록 ──
   useEffect(() => {
@@ -7318,14 +7319,14 @@ const [showAddCat, setShowAddCat] = useState(false);
     if (!newName) { alert("제목을 입력해주세요."); return; }
     const { error } = await supabase
       .from("archive_files")
-      .update({ name: newName })
+      .update({ name: newName, description: renameDesc.trim() || null })
       .eq("id", renameFile.id);
-    if (error) { alert("제목 변경 실패: " + error.message); return; }
+    if (error) { alert("변경 실패: " + error.message); return; }
     setDbFiles((prev) =>
-      prev.map((f) => (f.id === renameFile.id ? { ...f, name: newName } : f))
+      prev.map((f) => (f.id === renameFile.id ? { ...f, name: newName, description: renameDesc.trim() || null } : f))
     );
     setRenameFile(null);
-    alert("제목이 변경되었습니다.");
+    alert("저장되었습니다.");
   };
 
   // 파일을 다른 분류로 이동 (정보만 변경, 스토리지 파일은 그대로 둠)
@@ -7915,6 +7916,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                         e.stopPropagation();
                         setRenameFile(file);
                         setRenameValue(file.name);
+                        setRenameDesc(file.description || "");
                       }}
                       style={{
                         background: "#FEF3C7",
@@ -8309,10 +8311,10 @@ const [showAddCat, setShowAddCat] = useState(false);
             }}
           >
             <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
-              제목 수정 ✏️
+              자료 수정 ✏️
             </div>
             <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 16 }}>
-              자료 제목을 새로 입력하세요.
+              제목과 설명을 수정하세요. 설명은 검색에도 활용돼요.
             </div>
             <input
               value={renameValue}
@@ -8325,9 +8327,16 @@ const [showAddCat, setShowAddCat] = useState(false);
                 border: "1px solid #E5E7EB",
                 borderRadius: 10,
                 fontSize: 14,
-                marginBottom: 18,
+                marginBottom: 12,
                 fontFamily: "inherit",
               }}
+            />
+            <textarea
+              value={renameDesc}
+              onChange={(e) => setRenameDesc(e.target.value)}
+              placeholder="설명 (선택) — 검색에 활용돼요"
+              rows={3}
+              style={{ width: "100%", boxSizing: "border-box", padding: "12px", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 14, marginBottom: 18, fontFamily: "inherit", resize: "vertical" }}
             />
             <div style={{ display: "flex", gap: 8 }}>
               <button
