@@ -27081,12 +27081,22 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   }, []);
     const [index, setIndex] = React.useState(1);
   const [actSlide, setActSlide] = React.useState(0);
+  const [photoRound, setPhotoRound] = React.useState(0);
+  const prevSlideRef = React.useRef(0);
     const [showPointGuide, setShowPointGuide] = React.useState(false); 
   React.useEffect(() => {
-      if (index === 3 && recentActs.length > 1) {
-        setActSlide((p) => (p + 1) % recentActs.length);
+      if (index === 3) {
+        if (recentActs.length > 1) {
+          setActSlide((p) => (p + 1) % recentActs.length);
+        } else if (recentActs.length === 1) {
+          setPhotoRound((r) => r + 1);
+        }
       }
     }, [index]);
+  React.useEffect(() => {
+      if (actSlide === 0 && prevSlideRef.current !== 0) setPhotoRound((r) => r + 1);
+      prevSlideRef.current = actSlide;
+    }, [actSlide]);
   const realIndex = (index - 1 + 3) % 3;
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
@@ -27245,7 +27255,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const condolenceCard = recentActs.length > 0 ? (
     (() => {
       const a: any = recentActs[actIdx] || recentActs[0];
-      const hero = ((a && a.photos) || [])[0];
+      const pics = (a && a.photos) || []; const hero = pics.length > 0 ? pics[photoRound % pics.length] : null;
       return (
         <div
           onClick={onActivityClick}
