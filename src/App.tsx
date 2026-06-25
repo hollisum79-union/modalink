@@ -7494,7 +7494,7 @@ const [showAddCat, setShowAddCat] = useState(false);
               }}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
-              placeholder="호봉산정기준 확인, 단체협약 등 검색..."
+              placeholder="규정·자료 이름으로 검색..."
               style={{
                 flex: 1,
                 background: "none",
@@ -7530,6 +7530,16 @@ const [showAddCat, setShowAddCat] = useState(false);
       </div>
 
       <div style={{ padding: "12px 16px" }}>
+        {searchQuery.trim().length === 0 && allFiles.length > 0 ? (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>🔖 빠른 검색</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {allFiles.slice(0, 8).map((f, i) => (
+                <button key={i} onClick={() => { setSearchQuery(f.name); setSelectedCat(null); }} style={{ fontSize: 12, fontWeight: 600, color: "#4F46E5", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 999, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}>{f.name}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {/* 검색 결과 */}
         {searchQuery.trim().length > 0 && (
           <div style={{ marginBottom: 12 }}>
