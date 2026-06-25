@@ -11886,6 +11886,12 @@ function FieldActivityList() {
     if (error) { alert("삭제 실패: " + error.message); return; }
     setActs((prev) => prev.filter((x) => x.id !== a.id));
   };
+  const handleToggleHidden = async (a: any) => {
+    const next = !a.is_hidden;
+    const { error } = await supabase.from("field_activities").update({ is_hidden: next }).eq("id", a.id);
+    if (error) { alert("변경 실패: " + error.message); return; }
+    setActs((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_hidden: next } : x)));
+  };
   return (
     <div>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>등록된 활동 전체 · 삭제하면 홈 캐러셀에서도 사라집니다</div>
@@ -11936,6 +11942,9 @@ function FieldActivityList() {
                   {a.activity_date || "날짜 없음"} · 참여 {a.count}명{a.point > 0 ? ` · ${a.point}P` : ""}
                 </div>
               </div>
+              <button onClick={() => handleToggleHidden(a)} style={{ padding: "7px 12px", borderRadius: 9, background: a.is_hidden ? "#FEF3C7" : "#ECFDF5", color: a.is_hidden ? "#92400E" : "#059669", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                {a.is_hidden ? "숨김" : "표시"}
+              </button>
               <button onClick={() => startEdit(a)} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
                 수정
               </button>
@@ -27042,6 +27051,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       const { data: acts } = await supabase
         .from("field_activities")
         .select("id, title, activity_date, photos")
+        .eq("is_hidden", false)
         .order("activity_date", { ascending: false })
         .limit(5);
       if (!acts || acts.length === 0) { setRecentActs([]); return; }
@@ -27071,12 +27081,22 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   }, []);
     const [index, setIndex] = React.useState(1);
   const [actSlide, setActSlide] = React.useState(0);
+  const [photoRound, setPhotoRound] = React.useState(0);
+  const prevSlideRef = React.useRef(0);
     const [showPointGuide, setShowPointGuide] = React.useState(false); 
   React.useEffect(() => {
-      if (index === 3 && recentActs.length > 1) {
-        setActSlide((p) => (p + 1) % recentActs.length);
+      if (index === 3) {
+        if (recentActs.length > 1) {
+          setActSlide((p) => (p + 1) % recentActs.length);
+        } else if (recentActs.length === 1) {
+          setPhotoRound((r) => r + 1);
+        }
       }
     }, [index]);
+  React.useEffect(() => {
+      if (actSlide === 0 && prevSlideRef.current !== 0) setPhotoRound((r) => r + 1);
+      prevSlideRef.current = actSlide;
+    }, [actSlide]);
   const realIndex = (index - 1 + 3) % 3;
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
@@ -27235,7 +27255,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const condolenceCard = recentActs.length > 0 ? (
     (() => {
       const a: any = recentActs[actIdx] || recentActs[0];
-      const hero = ((a && a.photos) || [])[0];
+      const pics = (a && a.photos) || []; const hero = pics.length > 0 ? pics[photoRound % pics.length] : null;
       return (
         <div
           onClick={onActivityClick}
