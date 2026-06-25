@@ -11886,6 +11886,12 @@ function FieldActivityList() {
     if (error) { alert("삭제 실패: " + error.message); return; }
     setActs((prev) => prev.filter((x) => x.id !== a.id));
   };
+  const handleToggleHidden = async (a: any) => {
+    const next = !a.is_hidden;
+    const { error } = await supabase.from("field_activities").update({ is_hidden: next }).eq("id", a.id);
+    if (error) { alert("변경 실패: " + error.message); return; }
+    setActs((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_hidden: next } : x)));
+  };
   return (
     <div>
       <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>등록된 활동 전체 · 삭제하면 홈 캐러셀에서도 사라집니다</div>
@@ -11936,6 +11942,9 @@ function FieldActivityList() {
                   {a.activity_date || "날짜 없음"} · 참여 {a.count}명{a.point > 0 ? ` · ${a.point}P` : ""}
                 </div>
               </div>
+              <button onClick={() => handleToggleHidden(a)} style={{ padding: "7px 12px", borderRadius: 9, background: a.is_hidden ? "#FEF3C7" : "#ECFDF5", color: a.is_hidden ? "#92400E" : "#059669", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
+                {a.is_hidden ? "숨김" : "표시"}
+              </button>
               <button onClick={() => startEdit(a)} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
                 수정
               </button>
@@ -27042,6 +27051,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       const { data: acts } = await supabase
         .from("field_activities")
         .select("id, title, activity_date, photos")
+        .eq("is_hidden", false)
         .order("activity_date", { ascending: false })
         .limit(5);
       if (!acts || acts.length === 0) { setRecentActs([]); return; }
