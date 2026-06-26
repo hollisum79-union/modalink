@@ -8586,6 +8586,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
   // ── 조직도(간부) 기능 ──
   const [officers, setOfficers] = useState([]);
   const [officerForm, setOfficerForm] = useState(null);
+  const [officerSaving, setOfficerSaving] = useState(false);
   const isAdmin = user?.is_admin;
 
   const officerColor = (role) => {
@@ -8609,43 +8610,64 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
     loadOfficers();
   }, []);
 
-  const handleSaveOfficer = () => {
-    if (!officerForm.role.trim() || !officerForm.name.trim()) return;
-    const payload = {
-      org_group: officerForm.org_group,
-      role: officerForm.role,
-      name: officerForm.name,
-      description: officerForm.description,
-      sort_order: officerForm.sort_order || 0,
-    };
-    if (officerForm.id) {
-      supabase
-        .from("officers")
-        .update(payload)
-        .eq("id", officerForm.id)
-        .then(() => {
-          setOfficerForm(null);
-          loadOfficers();
-        });
-    } else {
-      supabase
-        .from("officers")
-        .insert([payload])
-        .then(() => {
-          setOfficerForm(null);
-          loadOfficers();
-        });
+  const handleSaveOfficer = async () => {
+    if (officerSaving) return; // 연타 방지
+    if (!officerForm.role.trim() || !officerForm.name.trim()) {
+      alert("직책과 이름을 입력해주세요.");
+      return;
+    }
+    setOfficerSaving(true);
+    try {
+      const payload = {
+        org_group: officerForm.org_group,
+        role: officerForm.role,
+        name: officerForm.name,
+        description: officerForm.description,
+        sort_order: officerForm.sort_order || 0,
+      };
+      if (officerForm.id) {
+        const { error } = await supabase
+          .from("officers")
+          .update(payload)
+          .eq("id", officerForm.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("officers").insert([payload]);
+        if (error) throw error;
+      }
+      setOfficerForm(null);
+      loadOfficers();
+      alert("저장되었습니다.");
+    } catch (e: any) {
+      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "임원진 저장 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "임원진관리",
+        userId: getUserId(user),
+        userName: user?.name,
+      });
+    } finally {
+      setOfficerSaving(false);
     }
   };
 
-  const handleDeleteOfficer = (id) => {
-    supabase
-      .from("officers")
-      .delete()
-      .eq("id", id)
-      .then(() => {
-        loadOfficers();
+  const handleDeleteOfficer = async (id) => {
+    if (!window.confirm("이 임원진을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    try {
+      const { error } = await supabase.from("officers").delete().eq("id", id);
+      if (error) throw error;
+      loadOfficers();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "임원진 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "임원진관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    }
   };
 
   const jihoeOfficers = officers.filter((o) => o.org_group === "지회");
@@ -9501,20 +9523,23 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                     </button>
                     <button
                       onClick={handleSaveOfficer}
+                      disabled={officerSaving}
                       style={{
                         flex: 1,
                         padding: "12px",
                         borderRadius: 10,
                         border: "none",
-                        background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                        background: officerSaving
+                          ? "#A5B4FC"
+                          : "linear-gradient(135deg, #4F46E5, #6D28D9)",
                         color: "#fff",
                         fontSize: 14,
                         fontWeight: 700,
-                        cursor: "pointer",
+                        cursor: officerSaving ? "default" : "pointer",
                         fontFamily: "inherit",
                       }}
                     >
-                      저장
+                      {officerSaving ? "저장 중..." : "저장"}
                     </button>
                   </div>
                 </div>
