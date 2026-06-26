@@ -3854,10 +3854,20 @@ const dummyInquiries = [
 function InquiryWrite({ onBack, onSubmit, user }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (!title.trim() || !content.trim()) return;
-    onSubmit({ title, content });
+  const handleSubmit = async () => {
+    if (submitting) return; // 연타 방지
+    if (!title.trim() || !content.trim()) {
+      alert("제목과 내용을 입력해주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit({ title, content });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -3898,19 +3908,22 @@ function InquiryWrite({ onBack, onSubmit, user }) {
         </div>
         <button
           onClick={handleSubmit}
+          disabled={submitting}
           style={{
-            background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+            background: submitting
+              ? "#A5B4FC"
+              : "linear-gradient(135deg, #4F46E5, #6D28D9)",
             color: "#fff",
             border: "none",
             borderRadius: 10,
             padding: "8px 18px",
             fontSize: 14,
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: submitting ? "default" : "pointer",
             fontFamily: "inherit",
           }}
         >
-          등록
+          {submitting ? "등록 중..." : "등록"}
         </button>
       </div>
       <div style={{ padding: "20px 16px" }}>
@@ -5324,6 +5337,7 @@ function VoteDetail({ vote, onBack, user }) {
   const [results, setResults] = useState([]);
   const [myVote, setMyVote] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
 const [nameMap, setNameMap] = useState({});
   const loadResults = () => {
     supabase
@@ -5371,30 +5385,56 @@ const [nameMap, setNameMap] = useState({});
     setMyVote(idx);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (voteSubmitting) return; // 연타 방지
     if (myVote === null) return;
-    const choice = optionLabels[myVote];
-    supabase
-      .from("vote_results")
-      .insert([{ vote_id: vote.id, member_id: myId, choice: choice }])
-      .then(({ error }) => {
-        if (!error) {
-          setSubmitted(true);
-          loadResults();
-        }
+    setVoteSubmitting(true);
+    try {
+      const choice = optionLabels[myVote];
+      const { error } = await supabase
+        .from("vote_results")
+        .insert([{ vote_id: vote.id, member_id: myId, choice: choice }]);
+      if (error) throw error;
+      setSubmitted(true);
+      loadResults();
+    } catch (e: any) {
+      alert("투표 제출에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "투표 제출 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표참여",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    } finally {
+      setVoteSubmitting(false);
+    }
   };
-  const handleRevote = () => {
-    supabase
-      .from("vote_results")
-      .delete()
-      .eq("vote_id", vote.id)
-      .eq("member_id", myId)
-      .then(() => {
-        setSubmitted(false);
-        setMyVote(null);
-        loadResults();
+  const handleRevote = async () => {
+    if (voteSubmitting) return;
+    setVoteSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("vote_results")
+        .delete()
+        .eq("vote_id", vote.id)
+        .eq("member_id", myId);
+      if (error) throw error;
+      setSubmitted(false);
+      setMyVote(null);
+      loadResults();
+    } catch (e: any) {
+      alert("재투표 처리에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "재투표 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표참여",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    } finally {
+      setVoteSubmitting(false);
+    }
   };
 
   const showResult = vote.status === "종료";
@@ -5634,24 +5674,24 @@ const [nameMap, setNameMap] = useState({});
         {!submitted && vote.status === "진행중" && user && (
           <button
             onClick={handleSubmit}
-            disabled={myVote === null}
+            disabled={myVote === null || voteSubmitting}
             style={{
               width: "100%",
               padding: "15px",
               background:
-                myVote === null
+                myVote === null || voteSubmitting
                   ? "#E5E7EB"
                   : "linear-gradient(135deg, #4F46E5, #6D28D9)",
-              color: myVote === null ? "#9CA3AF" : "#fff",
+              color: myVote === null || voteSubmitting ? "#9CA3AF" : "#fff",
               border: "none",
               borderRadius: 14,
               fontSize: 16,
               fontWeight: 700,
-              cursor: myVote === null ? "not-allowed" : "pointer",
+              cursor: myVote === null || voteSubmitting ? "not-allowed" : "pointer",
               fontFamily: "inherit",
             }}
           >
-            {vote.type} 참여하기
+            {voteSubmitting ? "제출 중..." : `${vote.type} 참여하기`}
           </button>
         )}
         {submitted && (
@@ -10088,15 +10128,20 @@ function MemberManageScreen() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const handleDelete = (m) => {
-    supabase
-      .from("members")
-      .delete()
-      .eq("id", m.id)
-      .then(() => {
-        setDeleteTarget(null);
-        loadMembers();
+  const handleDelete = async (m) => {
+    try {
+      const { error } = await supabase.from("members").delete().eq("id", m.id);
+      if (error) throw error;
+      setDeleteTarget(null);
+      loadMembers();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "조합원 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "조합원관리",
       });
+    }
   };
 
   const toggleAdmin = (m) => {
@@ -30331,26 +30376,36 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       <InquiryWrite
         onBack={() => setScreen("inquiry")}
         user={user}
-        onSubmit={(inq) => {
-          const newInq = {
-            author: user?.name,
-            author_emp_id: String(user?.emp_id || user?.id || "guest"),
-            title: inq.title,
-            content: inq.content,
-            status: "대기중",
-          };
-          supabase
-            .from("inquiries")
-            .insert([newInq])
-            .select()
-            .then(({ data }) => {
-              if (data && data[0]) {
-                setSelectedInquiry(data[0]);
-                setScreen("inquiryDetail");
-              } else {
-                setScreen("inquiry");
-              }
+        onSubmit={async (inq) => {
+          try {
+            const newInq = {
+              author: user?.name,
+              author_emp_id: String(user?.emp_id || user?.id || "guest"),
+              title: inq.title,
+              content: inq.content,
+              status: "대기중",
+            };
+            const { data, error } = await supabase
+              .from("inquiries")
+              .insert([newInq])
+              .select();
+            if (error) throw error;
+            if (data && data[0]) {
+              setSelectedInquiry(data[0]);
+              setScreen("inquiryDetail");
+            } else {
+              setScreen("inquiry");
+            }
+          } catch (e: any) {
+            alert("문의 등록에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            logError({
+              message: "문의 등록 실패: " + (e?.message || String(e)),
+              stack: e?.stack,
+              screen: "문의작성",
+              userId: getUserId(user),
+              userName: user?.name,
             });
+          }
         }}
       />
     );
