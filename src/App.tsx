@@ -33,6 +33,16 @@ async function logError(info: any) {
   }
 }
 
+// ── 토스트 알림 (화면 아래에서 떴다가 자동으로 사라짐) ──
+// 어디서든 showToast("메시지") 또는 showToast("실패", "error") 로 호출.
+function showToast(message: string, type: "success" | "error" = "success") {
+  try {
+    window.dispatchEvent(
+      new CustomEvent("ml-toast", { detail: { message, type } })
+    );
+  } catch (e) {}
+}
+
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
@@ -28972,7 +28982,7 @@ function BottomTabBar({ screen, setScreen }: { screen: string; setScreen: (s: st
     </div>
   );
 }
-export default function App() {
+function AppInner() {
       const [screen, setScreen] = useState("login");
       const [schedRefresh, setSchedRefresh] = useState(0);
       const [notifBlocked, setNotifBlocked] = useState(false);
@@ -32033,5 +32043,81 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       <BottomTabBar screen={screen} setScreen={setScreen} />
             
     </div>
+  );
+}
+
+// ── 토스트 표시 UI ──
+// showToast가 보낸 신호를 받아 화면 아래에 알림을 띄운다.
+function ToastContainer() {
+  const [toasts, setToasts] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const id = Date.now() + Math.random();
+      const message = e?.detail?.message ?? "";
+      const type = e?.detail?.type === "error" ? "error" : "success";
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 2500);
+    };
+    window.addEventListener("ml-toast", handler);
+    return () => window.removeEventListener("ml-toast", handler);
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 90,
+        left: 0,
+        right: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 8,
+        zIndex: 99999,
+        pointerEvents: "none",
+        padding: "0 16px",
+      }}
+    >
+      <style>{`
+        @keyframes ml-toast-in {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          style={{
+            maxWidth: 360,
+            width: "fit-content",
+            padding: "12px 20px",
+            borderRadius: 12,
+            background: t.type === "error" ? "#DC2626" : "#1F2937",
+            color: "#fff",
+            fontSize: 14,
+            fontWeight: 600,
+            lineHeight: 1.4,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+            animation: "ml-toast-in 0.3s ease",
+            fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
+          }}
+        >
+          {t.type === "error" ? "⚠️ " : "✓ "}
+          {t.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── 앱 진입점: 화면(AppInner) + 토스트를 함께 그린다 ──
+export default function App() {
+  return (
+    <>
+      <AppInner />
+      <ToastContainer />
+    </>
   );
 }
