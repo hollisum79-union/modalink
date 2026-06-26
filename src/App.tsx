@@ -933,7 +933,7 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
     const path = `posts/${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from("archive").upload(path, file);
     if (error) {
-      alert("사진 업로드 실패: " + error.message);
+      showToast("사진 업로드 실패: " + error.message, "error");
       setUploading(false);
       return;
     }
@@ -946,7 +946,7 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
     const handleSubmit = async () => {
     if (submitting) return; // 연타 방지
     if (!title.trim() || (!content.trim() && !imageUrl)) {
-      alert("제목과 내용을 입력해주세요.");
+      showToast("제목과 내용을 입력해주세요.");
       return;
     }
     setSubmitting(true);
@@ -3869,7 +3869,7 @@ function InquiryWrite({ onBack, onSubmit, user }) {
   const handleSubmit = async () => {
     if (submitting) return; // 연타 방지
     if (!title.trim() || !content.trim()) {
-      alert("제목과 내용을 입력해주세요.");
+      showToast("제목과 내용을 입력해주세요.");
       return;
     }
     setSubmitting(true);
@@ -4814,7 +4814,7 @@ function WelfareScreen({ onBack, user }) {
   const handleSaveWelfare = async () => {
     if (welfareSaving) return; // 연타 방지
     if (!welfareForm.title.trim()) {
-      alert("제목을 입력해주세요.");
+      showToast("제목을 입력해주세요.");
       return;
     }
     setWelfareSaving(true);
@@ -4838,9 +4838,9 @@ function WelfareScreen({ onBack, user }) {
       }
       setWelfareForm(null);
       loadWelfare();
-      alert("저장되었습니다.");
+      showToast("저장되었습니다.");
     } catch (e: any) {
-      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("저장에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "복지 저장 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -4859,7 +4859,7 @@ function WelfareScreen({ onBack, user }) {
       if (error) throw error;
       loadWelfare();
     } catch (e: any) {
-      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "복지 삭제 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -5408,7 +5408,7 @@ const [nameMap, setNameMap] = useState({});
       setSubmitted(true);
       loadResults();
     } catch (e: any) {
-      alert("투표 제출에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("투표 제출에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "투표 제출 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -5434,7 +5434,7 @@ const [nameMap, setNameMap] = useState({});
       setMyVote(null);
       loadResults();
     } catch (e: any) {
-      alert("재투표 처리에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("재투표 처리에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "재투표 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -5835,7 +5835,7 @@ const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
   const handleSaveVote = async () => {
     if (voteSaving) return; // 연타 방지
     if (!editVote.title.trim()) {
-      alert("제목을 입력해주세요.");
+      showToast("제목을 입력해주세요.");
       return;
     }
     setVoteSaving(true);
@@ -5852,9 +5852,9 @@ const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
       if (error) throw error;
       setEditVote(null);
       loadVotes();
-      alert("저장되었습니다.");
+      showToast("저장되었습니다.");
     } catch (e: any) {
-      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("저장에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "투표 저장 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -5880,7 +5880,7 @@ const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
       loadVotes();
       loadMyVotes();
     } catch (e: any) {
-      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "투표 삭제 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -6861,7 +6861,7 @@ const [selectedReport, setSelectedReport] = useState(null);
     );
     setSelectedReport(null);
     setReplyText("");
-    alert("답변이 저장되었습니다.");
+    showToast("답변이 저장되었습니다.");
   };
   // DB에서 익명제보 목록 불러오기
   useEffect(() => {
@@ -7260,7 +7260,7 @@ const [showAddCat, setShowAddCat] = useState(false);
 
   // 새 분류 추가
   const handleAddCategory = async () => {
-    if (!newCatName.trim()) { alert("분류 이름을 입력해주세요."); return; }
+    if (!newCatName.trim()) { showToast("분류 이름을 입력해주세요."); return; }
     const newCat = {
       id: "cat_" + Date.now(),
       label: newCatName.trim(),
@@ -7269,32 +7269,32 @@ const [showAddCat, setShowAddCat] = useState(false);
       bg: "#EDE9FE",
     };
     const { error } = await supabase.from("archive_categories").insert(newCat);
-    if (error) { alert("추가 실패: " + error.message); return; }
+    if (error) { showToast("추가 실패: " + error.message, "error"); return; }
     setExtraCats((prev) => [...prev, newCat]);
     setNewCatName("");
     setShowAddCat(false);
-        alert("분류가 추가되었습니다.");
+        showToast("분류가 추가되었습니다.");
   };
 
   const handleRenameCategory = async (cat: any) => {
     const newName = prompt("새 분류 이름을 입력하세요.", cat.label);
     if (newName === null) return;
-    if (!newName.trim()) { alert("이름을 입력해주세요."); return; }
+    if (!newName.trim()) { showToast("이름을 입력해주세요."); return; }
     const { error } = await supabase
       .from("archive_categories")
       .update({ label: newName.trim() })
       .eq("id", cat.id);
-    if (error) { alert("이름 변경 실패: " + error.message); return; }
+    if (error) { showToast("이름 변경 실패: " + error.message, "error"); return; }
     setExtraCats((prev) =>
       prev.map((c) => (c.id === cat.id ? { ...c, label: newName.trim() } : c))
     );
-        alert("이름이 변경되었습니다.");
+        showToast("이름이 변경되었습니다.");
   };
 
   const handleDeleteCategory = async (cat: any) => {
     const count = dbFiles.filter((f) => f.category_id === cat.id).length;
     if (count > 0) {
-      alert("이 분류 안에 파일이 " + count + "개 있습니다.\n파일을 다른 분류로 옮기거나 삭제한 뒤에 분류를 지울 수 있어요.");
+      showToast("이 분류 안에 파일이 " + count + "개 있습니다.\n파일을 다른 분류로 옮기거나 삭제한 뒤에 분류를 지울 수 있어요.");
       return;
     }
     if (!confirm("'" + cat.label + "' 분류를 삭제할까요?\n이 작업은 되돌릴 수 없습니다.")) return;
@@ -7302,9 +7302,9 @@ const [showAddCat, setShowAddCat] = useState(false);
       .from("archive_categories")
       .delete()
       .eq("id", cat.id);
-    if (error) { alert("삭제 실패: " + error.message); return; }
+    if (error) { showToast("삭제 실패: " + error.message, "error"); return; }
     setExtraCats((prev) => prev.filter((c) => c.id !== cat.id));
-    alert("분류가 삭제되었습니다.");
+    showToast("분류가 삭제되었습니다.");
   };
 
   // 내 즐겨찾기 목록 불러오기
@@ -7406,8 +7406,8 @@ const [showAddCat, setShowAddCat] = useState(false);
 
   // 파일 업로드 처리
   const handleUpload = async () => {
-    if (!upFile) { alert("PDF 파일을 선택해주세요."); return; }
-    if (!upName.trim()) { alert("자료 제목을 입력해주세요."); return; }
+    if (!upFile) { showToast("PDF 파일을 선택해주세요."); return; }
+    if (!upName.trim()) { showToast("자료 제목을 입력해주세요."); return; }
     setUploading(true);
     try {
       const safeName = Date.now() + "_" + upFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
@@ -7425,14 +7425,14 @@ const [showAddCat, setShowAddCat] = useState(false);
         description: upDesc.trim() || null,
       }).select();
       if (dbErr) throw dbErr;
-      alert("자료가 등록되었습니다.");
+      showToast("자료가 등록되었습니다.");
       if (inserted && inserted[0]) {
         setDbFiles((prev) => [inserted[0], ...prev]);
       }
       setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
       setShowUpload(false);
    } catch (err) {
-      alert("업로드 실패: " + err.message);
+      showToast("업로드 실패: " + err.message, "error");
     } finally {
       setUploading(false);
     }
@@ -7449,9 +7449,9 @@ const [showAddCat, setShowAddCat] = useState(false);
       if (error) throw error;
       const { data } = await supabase.from("archive_files").select("*").order("created_at", { ascending: false });
       setDbFiles(data || []);
-            alert("삭제되었습니다.");
+            showToast("삭제되었습니다.");
     } catch (err) {
-      alert("삭제 실패: " + err.message);
+      showToast("삭제 실패: " + err.message, "error");
     }
   };
 
@@ -7459,17 +7459,17 @@ const [showAddCat, setShowAddCat] = useState(false);
   const handleRename = async () => {
     if (!renameFile) return;
     const newName = renameValue.trim();
-    if (!newName) { alert("제목을 입력해주세요."); return; }
+    if (!newName) { showToast("제목을 입력해주세요."); return; }
     const { error } = await supabase
       .from("archive_files")
       .update({ name: newName, description: renameDesc.trim() || null })
       .eq("id", renameFile.id);
-    if (error) { alert("변경 실패: " + error.message); return; }
+    if (error) { showToast("변경 실패: " + error.message, "error"); return; }
     setDbFiles((prev) =>
       prev.map((f) => (f.id === renameFile.id ? { ...f, name: newName, description: renameDesc.trim() || null } : f))
     );
     setRenameFile(null);
-    alert("저장되었습니다.");
+    showToast("저장되었습니다.");
   };
 
   // 파일을 다른 분류로 이동 (정보만 변경, 스토리지 파일은 그대로 둠)
@@ -7480,7 +7480,7 @@ const [showAddCat, setShowAddCat] = useState(false);
       .from("archive_files")
       .update({ category_id: targetCat.id, category_label: targetCat.label })
       .eq("id", moveFile.id);
-    if (error) { alert("이동 실패: " + error.message); return; }
+    if (error) { showToast("이동 실패: " + error.message, "error"); return; }
     setDbFiles((prev) =>
       prev.map((f) =>
         f.id === moveFile.id
@@ -7489,7 +7489,7 @@ const [showAddCat, setShowAddCat] = useState(false);
       )
     );
     setMoveFile(null);
-    alert("'" + targetCat.label + "' 분류로 이동했습니다.");
+    showToast("'" + targetCat.label + "' 분류로 이동했습니다.");
   };
 
   return (
@@ -8676,7 +8676,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
   const handleSaveOfficer = async () => {
     if (officerSaving) return; // 연타 방지
     if (!officerForm.role.trim() || !officerForm.name.trim()) {
-      alert("직책과 이름을 입력해주세요.");
+      showToast("직책과 이름을 입력해주세요.");
       return;
     }
     setOfficerSaving(true);
@@ -8700,9 +8700,9 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
       }
       setOfficerForm(null);
       loadOfficers();
-      alert("저장되었습니다.");
+      showToast("저장되었습니다.");
     } catch (e: any) {
-      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("저장에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "임원진 저장 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -8722,7 +8722,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
       if (error) throw error;
       loadOfficers();
     } catch (e: any) {
-      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "임원진 삭제 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -9700,7 +9700,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                           );
                           setKickTarget(null);
                         } catch (e: any) {
-                          alert("방출에 실패했습니다. 잠시 후 다시 시도해주세요.");
+                          showToast("방출에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
                           logError({
                             message: "조합원 방출 실패: " + (e?.message || String(e)),
                             stack: e?.stack,
@@ -10090,7 +10090,7 @@ function MemberManageScreen() {
 
   const handleSave = () => {
     if (!form.name.trim() || !form.employee_number.trim()) {
-      alert("이름과 사번은 필수입니다.");
+      showToast("이름과 사번은 필수입니다.");
       return;
     }
     const payload = {
@@ -10107,7 +10107,7 @@ function MemberManageScreen() {
         .eq("id", form.id)
         .then(({ error }) => {
           if (error) {
-            alert("저장 실패: " + error.message);
+            showToast("저장 실패: " + error.message, "error");
           } else {
             setForm(null);
             loadMembers();
@@ -10126,7 +10126,7 @@ function MemberManageScreen() {
         ])
         .then(({ error }) => {
           if (error) {
-            alert("추가 실패: " + error.message);
+            showToast("추가 실패: " + error.message, "error");
           } else {
             fetch("/.netlify/functions/set-credential", {
               method: "POST",
@@ -10156,7 +10156,7 @@ function MemberManageScreen() {
       setDeleteTarget(null);
       loadMembers();
     } catch (e: any) {
-      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "조합원 삭제 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -10174,7 +10174,7 @@ function MemberManageScreen() {
       if (error) throw error;
       loadMembers();
     } catch (e: any) {
-      alert("권한 변경에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      showToast("권한 변경에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
         message: "관리자 권한 변경 실패: " + (e?.message || String(e)),
         stack: e?.stack,
@@ -10201,9 +10201,9 @@ function MemberManageScreen() {
       .then((r) => r.json())
       .then((j) => {
         if (j.result !== "ok") {
-          alert("초기화 실패: " + (j.detail || j.result));
+          showToast("초기화 실패: " + (j.detail || j.result), "error");
         } else {
-          alert(
+          showToast(
             `${m.name} 조합원의 비밀번호가 union0000으로 초기화되었습니다.`
           );
           loadMembers();
@@ -10740,13 +10740,13 @@ function ScheduleUpdateAdmin() {
   React.useEffect(() => { load(); }, []);
 
   const add = async () => {
-    if (!newDate) { alert("적용일을 선택해주세요."); return; }
+    if (!newDate) { showToast("적용일을 선택해주세요."); return; }
     setSaving(true);
     const { error } = await supabase
       .from("schedule_updates")
       .insert({ effective_date: newDate, note: newNote || null });
     setSaving(false);
-    if (error) { alert("저장 실패: " + error.message); return; }
+    if (error) { showToast("저장 실패: " + error.message, "error"); return; }
     setNewDate("");
     setNewNote("");
     load();
@@ -10848,7 +10848,7 @@ function SalaryTableScreen() {
       else await supabase.from("salary_table").insert(payload);
     }
     setSaving(false);
-    alert("저장되었습니다.");
+    showToast("저장되었습니다.");
     load();
     setUploaded(false);
   };
@@ -10879,12 +10879,12 @@ function SalaryTableScreen() {
             GRADES.forEach((g, i) => { obj["grade_" + g] = Number(String(r[i + 1] ?? "").replace(/[^0-9]/g, "")) || 0; });
             return obj;
           });
-          if (parsed.length === 0) { alert("읽을 수 있는 데이터가 없어요. 양식을 확인해주세요."); return; }
+          if (parsed.length === 0) { showToast("읽을 수 있는 데이터가 없어요. 양식을 확인해주세요.", "error"); return; }
           parsed.sort((a, b) => a.hobong - b.hobong);
           setRows(parsed);
           setUploaded(true);
         } catch (err) {
-          alert("파일을 읽는 중 문제가 생겼어요. 엑셀 양식을 확인해주세요.");
+          showToast("파일을 읽는 중 문제가 생겼어요. 엑셀 양식을 확인해주세요.");
         }
       };
       fr.readAsArrayBuffer(file);
@@ -11017,19 +11017,19 @@ function WorkTimeAdmin() {
   };
 
   const addItem = async () => {
-    if (!newItem.name.trim()) { alert("수당 이름을 입력하세요."); return; }
+    if (!newItem.name.trim()) { showToast("수당 이름을 입력하세요."); return; }
     const maxOrder = allow.length ? Math.max(...allow.map((x) => x.sort_order || 0)) : 0;
     const payload: any = { name: newItem.name.trim(), calc_type: newItem.calc_type, description: newItem.description || "", visible: true, sort_order: maxOrder + 1 };
     if (newItem.calc_type === "fixed") payload.amount = Number(newItem.amount) || 0;
     if (newItem.calc_type === "rate") payload.rate = (Number(newItem.rate) || 0) / 100;
     const { error } = await supabase.from("allowance_settings").insert(payload);
-    if (error) { alert("추가 실패: " + error.message); return; }
+    if (error) { showToast("추가 실패: " + error.message, "error"); return; }
     setNewItem({ name: "", calc_type: "manual", amount: "", rate: "", description: "" });
     setAdding(false);
     loadAll();
   };
   const delItem = async (a: any) => {
-    if (a.calc_type === "auto") { alert("자동계산 수당은 계산식이 코드에 있어서 삭제할 수 없어요."); return; }
+    if (a.calc_type === "auto") { showToast("자동계산 수당은 계산식이 코드에 있어서 삭제할 수 없어요.", "error"); return; }
     if (!window.confirm("'" + a.name + "' 수당을 삭제할까요?")) return;
     await supabase.from("allowance_settings").delete().eq("id", a.id);
     setAllow((prev) => prev.filter((x) => x.id !== a.id));
@@ -11523,7 +11523,7 @@ function PointRankingAdmin() {
   React.useEffect(() => { loadAwarded(); }, []);
 
   const handleAward = async () => {
-    if (rows.length === 0) { alert("1등이 없어요."); return; }
+    if (rows.length === 0) { showToast("1등이 없어요.", "error"); return; }
     const champ = rows[0];
     if (!window.confirm(`${range.ym} 1등 "${champ.name}" 조합원에게 상품 지급 완료 처리할까요?\n홈 화면에 축하 메시지가 하루 동안 표시됩니다.`)) return;
     setAwarding(true);
@@ -11534,8 +11534,8 @@ function PointRankingAdmin() {
       point: champ.total,
     });
     setAwarding(false);
-    if (error) { alert("처리 실패: " + error.message); return; }
-    alert("상품 지급 완료! 홈 화면에 축하 메시지가 표시됩니다.");
+    if (error) { showToast("처리 실패: " + error.message, "error"); return; }
+    showToast("상품 지급 완료! 홈 화면에 축하 메시지가 표시됩니다.");
     loadAwarded();
   };
 
@@ -11630,7 +11630,7 @@ function FieldRegister() {
   const handlePhotoPick = async (e: any) => {
     const files: File[] = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    if (photos.length + files.length > 6) { alert("사진은 최대 6장까지 첨부할 수 있어요"); return; }
+    if (photos.length + files.length > 6) { showToast("사진은 최대 6장까지 첨부할 수 있어요"); return; }
     setUploading(true);
     try {
       const added: any[] = [];
@@ -11638,13 +11638,13 @@ function FieldRegister() {
         const blob = await resizeImageToJpeg(f);
         const path = `activities/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
         const { error } = await supabase.storage.from("archive").upload(path, blob, { contentType: "image/jpeg" });
-        if (error) { alert("사진 업로드 실패: " + error.message); break; }
+        if (error) { showToast("사진 업로드 실패: " + error.message, "error"); break; }
         const { data } = supabase.storage.from("archive").getPublicUrl(path);
         added.push({ url: data.publicUrl, path });
       }
       setPhotos((prev) => [...prev, ...added]);
     } catch (err: any) {
-      alert("사진 처리 실패: " + (err?.message || err));
+      showToast("사진 처리 실패: " + (err?.message || err), "error");
     }
     setUploading(false);
     e.target.value = "";
@@ -11675,10 +11675,10 @@ function FieldRegister() {
   };
 
   const handleSave = async () => {
-    if (!title.trim()) { alert("활동 이름을 입력하세요"); return; }
+    if (!title.trim()) { showToast("활동 이름을 입력하세요"); return; }
     const pt = Number(point) || 0;
-    if (pt < 0) { alert("포인트는 0 이상으로 입력하세요"); return; }
-    if (pt > 0 && selected.length === 0) { alert("포인트를 지급하려면 참여자를 선택하세요"); return; }
+    if (pt < 0) { showToast("포인트는 0 이상으로 입력하세요"); return; }
+    if (pt > 0 && selected.length === 0) { showToast("포인트를 지급하려면 참여자를 선택하세요"); return; }
     setSaving(true);
     try {
       const { data: act, error } = await supabase
@@ -11686,7 +11686,7 @@ function FieldRegister() {
         .insert({ title: title.trim(), activity_date: date || null, point: pt, description: desc.trim() || null, photos: photos })
         .select()
         .single();
-      if (error || !act) { alert("활동 등록 실패"); setSaving(false); return; }
+      if (error || !act) { showToast("활동 등록 실패", "error"); setSaving(false); return; }
       if (selected.length > 0) {
         const partRows = selected.map((emp) => ({ activity_id: act.id, employee_number: emp }));
         await supabase.from("field_participants").insert(partRows);
@@ -11706,7 +11706,7 @@ function FieldRegister() {
       setTitle(""); setDate(""); setPoint("0"); setSelected([]); setDesc(""); setPhotos([]);
       setTimeout(() => setDoneMsg(""), 4000);
     } catch (e) {
-      alert("오류가 발생했어요");
+      showToast("오류가 발생했어요", "error");
     }
     setSaving(false);
   };
@@ -11900,24 +11900,24 @@ function UnionScheduleAdmin() {
   };
   React.useEffect(() => { load(); }, []);
   const handleAdd = async () => {
-    if (!title.trim()) { alert("일정 제목을 입력하세요"); return; }
-    if (!date) { alert("날짜를 선택하세요"); return; }
+    if (!title.trim()) { showToast("일정 제목을 입력하세요"); return; }
+    if (!date) { showToast("날짜를 선택하세요"); return; }
     setSaving(true);
-    if (!time.trim() && timeEnd.trim()) { alert("종료 시간만 입력할 수 없어요. 시작 시간을 먼저 입력하세요"); setSaving(false); return; }
+    if (!time.trim() && timeEnd.trim()) { showToast("종료 시간만 입력할 수 없어요. 시작 시간을 먼저 입력하세요", "error"); setSaving(false); return; }
     const tv = time.trim() ? (timeEnd.trim() ? `${time.trim()}~${timeEnd.trim()}` : time.trim()) : null;
     const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null, survey_on: surveyOn, end_date: endDate || null };
     const { error } = editId
       ? await supabase.from("union_schedule").update(payload).eq("id", editId)
       : await supabase.from("union_schedule").insert(payload);
     setSaving(false);
-    if (error) { alert((editId ? "수정" : "등록") + " 실패: " + error.message); return; }
+    if (error) { showToast((editId ? "수정" : "등록") + " 실패: " + error.message, "error"); return; }
     resetForm();
     load();
   };
   const handleDelete = async (s: any) => {
     if (!window.confirm(`'${s.title}' 일정을 삭제할까요?`)) return;
     const { error } = await supabase.from("union_schedule").delete().eq("id", s.id);
-    if (error) { alert("삭제 실패: " + error.message); return; }
+    if (error) { showToast("삭제 실패: " + error.message, "error"); return; }
     setList((prev) => prev.filter((x: any) => x.id !== s.id));
   };
   const t0 = new Date();
@@ -12013,7 +12013,7 @@ function FieldActivityList() {
   const edPhotoPick = async (e: any) => {
     const files: File[] = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    if (edPhotos.length + files.length > 6) { alert("사진은 최대 6장까지 첨부할 수 있어요"); return; }
+    if (edPhotos.length + files.length > 6) { showToast("사진은 최대 6장까지 첨부할 수 있어요"); return; }
     setEdUploading(true);
     try {
       const added: any[] = [];
@@ -12021,14 +12021,14 @@ function FieldActivityList() {
         const blob = await resizeImageToJpeg(f);
         const path = `activities/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
         const { error } = await supabase.storage.from("archive").upload(path, blob, { contentType: "image/jpeg" });
-        if (error) { alert("사진 업로드 실패: " + error.message); break; }
+        if (error) { showToast("사진 업로드 실패: " + error.message, "error"); break; }
         const { data } = supabase.storage.from("archive").getPublicUrl(path);
         added.push({ url: data.publicUrl, path });
         addedRef.current.push(path);
       }
       setEdPhotos((prev) => [...prev, ...added]);
     } catch (err: any) {
-      alert("사진 처리 실패: " + (err?.message || err));
+      showToast("사진 처리 실패: " + (err?.message || err), "error");
     }
     setEdUploading(false);
     e.target.value = "";
@@ -12039,12 +12039,12 @@ function FieldActivityList() {
     setEdPhotos((prev) => prev.filter((_, i) => i !== idx));
   };
   const saveEdit = async () => {
-    if (!edTitle.trim()) { alert("활동 이름을 입력하세요"); return; }
+    if (!edTitle.trim()) { showToast("활동 이름을 입력하세요"); return; }
     setEdSaving(true);
     const payload = { title: edTitle.trim(), activity_date: edDate || null, description: edDesc.trim() || null, photos: edPhotos };
     const { error } = await supabase.from("field_activities").update(payload).eq("id", editAct.id);
     setEdSaving(false);
-    if (error) { alert("수정 실패: " + error.message); return; }
+    if (error) { showToast("수정 실패: " + error.message, "error"); return; }
     if (removedRef.current.length > 0) {
       try { await supabase.storage.from("archive").remove(removedRef.current); } catch (e) { console.error("사진 정리 실패:", e); }
     }
@@ -12084,15 +12084,15 @@ function FieldActivityList() {
       if (paths.length > 0) await supabase.storage.from("archive").remove(paths);
     } catch (e) { console.error("활동 사진 삭제 실패:", e); }
     const { error: pErr } = await supabase.from("field_participants").delete().eq("activity_id", a.id);
-    if (pErr) { alert("참여자 기록 삭제 실패: " + pErr.message); return; }
+    if (pErr) { showToast("참여자 기록 삭제 실패: " + pErr.message, "error"); return; }
     const { error } = await supabase.from("field_activities").delete().eq("id", a.id);
-    if (error) { alert("삭제 실패: " + error.message); return; }
+    if (error) { showToast("삭제 실패: " + error.message, "error"); return; }
     setActs((prev) => prev.filter((x) => x.id !== a.id));
   };
   const handleToggleHidden = async (a: any) => {
     const next = !a.is_hidden;
     const { error } = await supabase.from("field_activities").update({ is_hidden: next }).eq("id", a.id);
-    if (error) { alert("변경 실패: " + error.message); return; }
+    if (error) { showToast("변경 실패: " + error.message, "error"); return; }
     setActs((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_hidden: next } : x)));
   };
   return (
@@ -13428,7 +13428,7 @@ useEffect(() => {
         <input value={canteenPrice} onChange={(e) => setCanteenPrice(e.target.value)} placeholder="4,000원" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", color: "#1F2937", marginBottom: 14, WebkitAppearance: "none", appearance: "none" }} />
         <button onClick={async () => {
           const { error } = await supabase.from("canteen_info").upsert({ station: canteenStation, time_breakfast: canteenTimeB, time_lunch: canteenTimeL, time_dinner: canteenTimeD, price: canteenPrice });
-          if (error) { alert("저장 실패: " + error.message); return; }
+          if (error) { showToast("저장 실패: " + error.message, "error"); return; }
           setCanteenInfoDone(true);
           setTimeout(() => setCanteenInfoDone(false), 2000);
         }} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
@@ -13613,7 +13613,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
           try {
             const { error } = await supabase.from("kyobun_dia").upsert(csvRows);
             if (error) throw new Error(error.message);
-            alert(csvRows.length + "개 저장 완료!");
+            showToast(csvRows.length + "개 저장 완료!");
             setCsvRows([]);
           } catch (err) { setDiaError("저장 실패: " + String(err)); }
           setDiaLoading(false);
@@ -13727,7 +13727,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
           }));
           const { error } = await supabase.from("kyobun_dia").upsert(rows);
           if (error) throw new Error(error.message);
-          alert(rows.length + "개 저장 완료!");
+          showToast(rows.length + "개 저장 완료!");
           setDiaList([]);
         } catch (err) { setDiaError("저장 실패: " + String(err)); }
         setDiaLoading(false);
@@ -14124,7 +14124,13 @@ function getPointKey(empId) {
   return `points_${String(empId)}`;
 }
 function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // 로컬(한국) 시간 기준 YYYY-MM-DD.
+  // toISOString()은 UTC라 새벽(0~9시)에 전날로 밀리는 문제가 있어 직접 조합.
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function loadPointData(empId) {
@@ -14930,7 +14936,7 @@ function WorkManageScreen() {
     const v = 휴무입력.trim();
     if (!v) return;
     if (휴무목록.some((x) => x.dia === v && x.소속 === 소속입력)) {
-      alert("이미 지정된 다이아입니다.");
+      showToast("이미 지정된 다이아입니다.");
       set휴무입력("");
       return;
     }
@@ -14940,7 +14946,7 @@ function WorkManageScreen() {
       .insert([{ dia: v, 소속: 소속입력 }]);
     set로딩(false);
     if (error) {
-      alert("저장 실패: " + error.message);
+      showToast("저장 실패: " + error.message, "error");
       return;
     }
     set휴무입력("");
@@ -14984,7 +14990,7 @@ function WorkManageScreen() {
   const 휴무삭제 = async (id: number) => {
     const { error } = await supabase.from("off_dias").delete().eq("id", id);
     if (error) {
-      alert("삭제 실패: " + error.message);
+      showToast("삭제 실패: " + error.message, "error");
       return;
     }
     불러오기();
@@ -15670,7 +15676,7 @@ if (data) {
   const addFavorite = async (member: any) => {
     if (!user?.employee_number) return;
     if (favorites.length >= 5) {
-      alert("즐겨찾기는 최대 5명까지 가능해요.");
+      showToast("즐겨찾기는 최대 5명까지 가능해요.");
       return;
     }
     const { data, error } = await supabase
@@ -15684,7 +15690,7 @@ if (data) {
     if (!error && data) {
       setFavorites((prev) => [...prev, { fav_id: data.id, ...member }]);
     } else if (error) {
-      alert("즐겨찾기 추가 실패: " + error.message);
+      showToast("즐겨찾기 추가 실패: " + error.message, "error");
     }
   };
 
@@ -15697,7 +15703,7 @@ if (data) {
     if (!error) {
       setFavorites((prev) => prev.filter((f) => f.fav_id !== favId));
     } else {
-      alert("즐겨찾기 삭제 실패: " + error.message);
+      showToast("즐겨찾기 삭제 실패: " + error.message, "error");
     }
   };
   const handleCrewSelect = async (crew: "A" | "B" | "C" | "D") => {
@@ -15949,7 +15955,7 @@ const getKyobunWork = (member: any, date: Date) => {
     if (!newMemoText.trim() || !user?.employee_number) return;
     const dayMemos = memos[dateStr] || [];
     if (dayMemos.length >= 5) {
-      alert("날짜당 최대 5개까지 입력 가능해요.");
+      showToast("날짜당 최대 5개까지 입력 가능해요.");
       return;
     }
     setSavingMemo(true);
@@ -16734,7 +16740,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   .from("members")
                   .update({ tongsang_base_date: ds, tongsang_base_dia: tsPickDia })
                   .eq("employee_number", user?.employee_number);
-                if (error) { alert("저장 실패: " + error.message); return; }
+                if (error) { showToast("저장 실패: " + error.message, "error"); return; }
                 if (refreshUser) await refreshUser();
               }}
               style={{ width: "100%", padding: 14, borderRadius: 12, border: "none", background: "linear-gradient(90deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
@@ -16764,7 +16770,7 @@ const getKyobunWork = (member: any, date: Date) => {
                 .from("members")
                 .update({ tongsang_base_date: null, tongsang_base_dia: null })
                 .eq("employee_number", user?.employee_number);
-              if (error) { alert("초기화 실패: " + error.message); return; }
+              if (error) { showToast("초기화 실패: " + error.message, "error"); return; }
               if (refreshUser) await refreshUser();
             }}
             style={{ background: "#EEF2FF", border: "none", color: "#6366F1", fontSize: 12, cursor: "pointer", padding: "3px 11px", borderRadius: 999, fontFamily: "inherit" }}
@@ -16919,7 +16925,7 @@ const getKyobunWork = (member: any, date: Date) => {
       setComparePicks((prev) => {
         const exists = prev.find((x: any) => String(x.employee_number) === String(m.employee_number));
         if (exists) return prev.filter((x: any) => String(x.employee_number) !== String(m.employee_number));
-        if (prev.length >= 4) { alert("최대 4명까지 비교할 수 있어요."); return prev; }
+        if (prev.length >= 4) { showToast("최대 4명까지 비교할 수 있어요."); return prev; }
         return [...prev, m];
       });
     };
@@ -17220,7 +17226,7 @@ const getKyobunWork = (member: any, date: Date) => {
       <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937", marginBottom: 16, textAlign: "center" }}>근무표 홈</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         {[
-          { label: "현장조치 매뉴얼", action: () => alert("현장조치 매뉴얼 (준비중)") },
+          { label: "현장조치 매뉴얼", action: () => showToast("현장조치 매뉴얼 (준비중)") },
           { label: "업무용 전화번호", action: () => setSubScreen("phones") },
           { label: "직원 연락처", action: () => setSubScreen("contacts") },
           { label: "기관사 교번 비교", action: () => setSubScreen("compare") },
@@ -17259,7 +17265,7 @@ const getKyobunWork = (member: any, date: Date) => {
         setActiveTab("통상");
         setSelectedMember(m);
       } else {
-        alert("해당 직원의 근무표 보기는 준비중입니다.");
+        showToast("해당 직원의 근무표 보기는 준비중입니다.");
       }
     };
     return (
@@ -18652,7 +18658,6 @@ function MySettingsScreen({
         return;
       }
       if (data) {
-        console.log("DB에서 가져온 최신 user:", data);
         if (data.work_type) setEditWorkType(data.work_type);
         if (data.work_group) setEditWorkGroup(data.work_group);
         if (data.grade) setEditGrade(data.grade);
@@ -19203,15 +19208,16 @@ function MySettingsScreen({
                     return;
                   }
                 } else {
-                  alert("연락처를 입력해주세요.");
+                  showToast("연락처를 입력해주세요.");
                   return;
                 }
               } else {
                 // 휴대폰 번호 형식 체크 (010-XXXX-XXXX)
                 const phoneCheck = editPhone.replace(/[^0-9]/g, "");
                 if (!/^01[0-9]{8,9}$/.test(phoneCheck)) {
-                  alert(
-                    "올바른 휴대폰 번호 형식이 아닙니다.\n예: 010-1234-5678"
+                  showToast(
+                    "올바른 휴대폰 번호 형식이 아닙니다. (예: 010-1234-5678)",
+                    "error"
                   );
                   return;
                 }
@@ -19224,7 +19230,7 @@ function MySettingsScreen({
                   .update({ phone: editPhone.trim() })
                   .eq("employee_number", user.employee_number);
                 if (error) {
-                  alert("저장 실패: " + error.message);
+                  showToast("저장 실패: " + error.message, "error");
                   return;
                 }
               }
@@ -20286,11 +20292,11 @@ function MySettingsScreen({
           <button
             onClick={async () => {
               if (!editWorkType) {
-                alert("근무유형을 선택해주세요.");
+                showToast("근무유형을 선택해주세요.");
                 return;
               }
               if ((editWorkType === "교대" || editWorkType === "교번") && !editWorkGroup) {
-                alert("소속(조)을 선택해주세요.");
+                showToast("소속(조)을 선택해주세요.");
                 return;
               }
               setSavedWorkData({
@@ -20302,16 +20308,6 @@ function MySettingsScreen({
                 joinYear: editJoinYear,
                 birthYear: editBirthYear,
                 birthConsent,
-              });
-              // Supabase에 진짜 저장 (로그 포함)
-              console.log("저장 시도:", {
-                user,
-                editWorkType,
-                editWorkGroup,
-                editGrade,
-                editPayStep,
-                editPayStepNextDate,
-                editJoinYear,
               });
               if (user?.employee_number) {
                 const { data, error } = await supabase
@@ -20332,15 +20328,13 @@ function MySettingsScreen({
                   })
                   .eq("employee_number", user.employee_number)
                   .select();
-                console.log("저장 결과:", { data, error });
                 if (error) {
-                  alert("저장 실패: " + error.message);
+                  showToast("저장 실패: " + error.message, "error");
                 } else {
                   await refreshUser();
                 }
               } else {
-                console.log("employee_number 없음 - 저장 안 함");
-                alert("로그인 정보 없음 - 저장 안 됨");
+                showToast("로그인 정보 없음 - 저장 안 됨");
               }
               setWorkSaved(true);
               setEditMode(false);
@@ -22775,7 +22769,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       .update({ status: "취소" })
       .eq("id", h.id);
     if (error) {
-      alert("취소 실패: " + error.message);
+      showToast("취소 실패: " + error.message, "error");
       return;
     }
     const cur = (remaining as any)[h.leave_type] || 0;
@@ -22790,7 +22784,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       .update({ status: "취소" })
       .eq("id", h.id);
     if (error) {
-      alert("삭제 실패: " + error.message);
+      showToast("삭제 실패: " + error.message, "error");
       return;
     }
     const cur = (remaining as any)[h.leave_type] || 0;
@@ -22802,23 +22796,23 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
   const useLeave = async (item) => {
     const days = parseFloat(useDays);
     if (!days || days <= 0) {
-      alert("사용 일수를 입력해주세요.");
+      showToast("사용 일수를 입력해주세요.");
       return;
     }
     if (item.id === "tempAnnual") {
       const annualLeft = (remaining as any).annual || 0;
       const promotedLeft = (remaining as any).promotedAnnual || 0;
       if (annualLeft > 0 || promotedLeft > 0) {
-        alert(`연차(${annualLeft}일)·촉진연차(${promotedLeft}일)를 먼저 모두 사용한 뒤에 가연차를 사용할 수 있습니다.`);
+        showToast(`연차(${annualLeft}일)·촉진연차(${promotedLeft}일)를 먼저 모두 사용한 뒤에 가연차를 사용할 수 있습니다.`);
         return;
       }
     }
     if (item.id !== "petition" && days > item.days) {
-      alert(`잔여일수(${item.days}일)보다 많이 사용할 수 없습니다.`);
+      showToast(`잔여일수(${item.days}일)보다 많이 사용할 수 없습니다.`, "error");
       return;
     }
     if (!user?.employee_number) {
-      alert("로그인 정보가 없습니다.");
+      showToast("로그인 정보가 없습니다.", "error");
       return;
     }
     // 1. 사용 이력 저장
@@ -22830,7 +22824,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       memo: useMemo || null,
     });
     if (histError) {
-      alert("이력 저장 실패: " + histError.message);
+      showToast("이력 저장 실패: " + histError.message, "error");
       return;
     }
     // 2. 잔여일수 차감
@@ -22843,7 +22837,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
     setUseDate(new Date().toISOString().slice(0, 10));
     setUseDays("1");
     setUseMemo("");
-    alert(`${item.label} ${days}일 사용 처리되었습니다.`);
+    showToast(`${item.label} ${days}일 사용 처리되었습니다.`);
     loadHistory();
   };
 
@@ -22851,7 +22845,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
   const saveRemaining = async (id, value) => {
     const num = parseFloat(value) || 0;
     if (num < 0) {
-      alert("0 이상의 숫자를 입력해주세요.");
+      showToast("0 이상의 숫자를 입력해주세요.");
       return;
     }
     // 화면 먼저 업데이트
@@ -22874,7 +22868,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
         .update({ [columnMap[id]]: num })
         .eq("employee_number", user.employee_number);
       if (error) {
-        alert("저장 실패: " + error.message);
+        showToast("저장 실패: " + error.message, "error");
         return;
       }
     }
@@ -23950,7 +23944,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   // 저장 (work_adjust - 가계부형 기록)
   const handleSave = async () => {
     if (!user?.employee_number) {
-      alert("로그인 정보가 없습니다.");
+      showToast("로그인 정보가 없습니다.", "error");
       return;
     }
     if (!formDate) {
@@ -24029,11 +24023,11 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   // 휴무충당가능 (holiday_fill_request)
   const handleRequestSubmit = async () => {
     if (!user?.employee_number) {
-      alert("로그인 정보가 없습니다.");
+      showToast("로그인 정보가 없습니다.", "error");
       return;
     }
     if (!formDate) {
-      alert("날짜를 선택해주세요.");
+      showToast("날짜를 선택해주세요.");
       return;
     }
 
@@ -24075,7 +24069,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
           .delete()
           .eq("id", id);
         if (error) {
-          alert("삭제 실패: " + error.message);
+          showToast("삭제 실패: " + error.message, "error");
           return;
         }
         setRecords(records.filter((r) => r.id !== id));
@@ -24096,7 +24090,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
           .delete()
           .eq("id", id);
         if (error) {
-          alert("취소 실패: " + error.message);
+          showToast("취소 실패: " + error.message, "error");
           return;
         }
         setRequests(requests.filter((r) => r.id !== id));
@@ -26182,7 +26176,7 @@ function LogbookScreen({ goBack }: { goBack: () => void }) {
 
   const handleSubmit = () => {
     if (!formDate || !formSection || !formIssue) {
-      alert("일자, 운전구간, 고장·문제는 필수 입력입니다");
+      showToast("일자, 운전구간, 고장·문제는 필수 입력입니다");
       return;
     }
     const newLog = {
@@ -26196,7 +26190,7 @@ function LogbookScreen({ goBack }: { goBack: () => void }) {
     setLogs([newLog, ...logs]);
     resetForm();
     setMode("list");
-    alert("승무일지가 저장되었습니다");
+    showToast("승무일지가 저장되었습니다");
   };
 
   const handleDelete = (id: number) => {
@@ -26766,21 +26760,21 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
     setEditId(s.id);
   };
   const saveEdit = async () => {
-    if (!ef.title.trim()) { alert("제목을 입력하세요"); return; }
-    if (!ef.date) { alert("날짜를 선택하세요"); return; }
+    if (!ef.title.trim()) { showToast("제목을 입력하세요"); return; }
+    if (!ef.date) { showToast("날짜를 선택하세요"); return; }
     setSaving(true);
     const tv = ef.time.trim() ? (ef.timeEnd.trim() ? `${ef.time.trim()}~${ef.timeEnd.trim()}` : ef.time.trim()) : null;
     const payload = { title: ef.title.trim(), event_date: ef.date, event_time: tv, location: ef.loc.trim() || null, survey_on: ef.survey, end_date: ef.endDate || null };
     const { error } = await supabase.from("union_schedule").update(payload).eq("id", editId);
     setSaving(false);
-    if (error) { alert("수정 실패: " + error.message); return; }
+    if (error) { showToast("수정 실패: " + error.message, "error"); return; }
     setList((prev: any[]) => prev.map((x: any) => x.id === editId ? { ...x, ...payload } : x).sort((a: any, b: any) => String(a.event_date).localeCompare(String(b.event_date))));
     setEditId(null);
   };
   const delSchedule = async (s: any) => {
     if (!window.confirm(`'${s.title}' 일정을 삭제할까요?`)) return;
     const { error } = await supabase.from("union_schedule").delete().eq("id", s.id);
-    if (error) { alert("삭제 실패: " + error.message); return; }
+    if (error) { showToast("삭제 실패: " + error.message, "error"); return; }
     setList((prev: any[]) => prev.filter((x: any) => x.id !== s.id));
   };
   const loadParts = async (ids: string[]) => {
@@ -26805,7 +26799,7 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
     })();
   }, []);
   const respond = async (scheduleId: string, response: string) => {
-    if (!user?.employee_number) { alert("로그인 정보가 없어요."); return; }
+    if (!user?.employee_number) { showToast("로그인 정보가 없어요.", "error"); return; }
     const next = myResp[scheduleId] === response ? null : response;
     if (next === null) {
       await supabase.from("event_participants").delete().eq("schedule_id", scheduleId).eq("employee_number", String(user.employee_number));
@@ -26963,7 +26957,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
   }, [sel]);
   const addComment = async () => {
         if (!newComment.trim() || !sel) return;
-            if (!myId) { alert("로그인 정보가 없어요."); return; }
+            if (!myId) { showToast("로그인 정보가 없어요.", "error"); return; }
     setSavingComment(true);
     await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim() });
     setNewComment("");
@@ -26976,7 +26970,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
     loadComments(sel.id);
   };
   const toggleLike = async (act: any) => {
-    if (!myId) { alert("로그인 정보가 없어요."); return; }
+    if (!myId) { showToast("로그인 정보가 없어요.", "error"); return; }
     if (act.liked) {
       await supabase.from("activity_likes").delete().eq("activity_id", act.id).eq("employee_number", myId);
     } else {
@@ -27792,11 +27786,11 @@ function EventForm({ event, eventTypes, onClose }) {
 
   const handleSave = async () => {
     if (!memberName.trim()) {
-      alert("조합원 이름을 입력해주세요.");
+      showToast("조합원 이름을 입력해주세요.");
       return;
     }
     if (!eventDate) {
-      alert("날짜를 선택해주세요.");
+      showToast("날짜를 선택해주세요.");
       return;
     }
     setSaving(true);
@@ -27833,7 +27827,7 @@ function EventForm({ event, eventTypes, onClose }) {
       onClose(true);
     } catch (err) {
       console.error("저장 실패:", err);
-      alert("저장에 실패했습니다. 다시 시도해주세요.");
+      showToast("저장에 실패했습니다. 다시 시도해주세요.", "error");
     } finally {
       setSaving(false);
     }
@@ -27994,11 +27988,11 @@ function EventsAdminPage({ onBack }) {
     try {
       const { error } = await supabase.from("events").delete().eq("id", id);
       if (error) throw error;
-      alert("삭제되었습니다.");
+      showToast("삭제되었습니다.");
       loadEvents();
     } catch (err) {
       console.error("삭제 실패:", err);
-      alert("삭제에 실패했습니다.");
+      showToast("삭제에 실패했습니다.", "error");
     }
   };
 
@@ -28012,7 +28006,7 @@ function EventsAdminPage({ onBack }) {
       loadEvents();
     } catch (err) {
       console.error("상태 변경 실패:", err);
-      alert("상태 변경에 실패했습니다.");
+      showToast("상태 변경에 실패했습니다.", "error");
     }
   };
 
@@ -28315,10 +28309,10 @@ function NoticeAdminPage({ onBack }) {
     try {
       const { error } = await supabase.from("notices").delete().eq("id", id);
       if (error) throw error;
-      alert("삭제되었습니다.");
+      showToast("삭제되었습니다.");
       loadList();
     } catch (err) {
-      alert("삭제 실패: " + err.message);
+      showToast("삭제 실패: " + err.message, "error");
     }
   };
 
@@ -28331,7 +28325,7 @@ function NoticeAdminPage({ onBack }) {
       if (error) throw error;
       loadList();
     } catch (err) {
-      alert("상태 변경 실패: " + err.message);
+      showToast("상태 변경 실패: " + err.message, "error");
     }
   };
 
@@ -28604,7 +28598,7 @@ function NoticeForm({ item, onClose }) {
     const path = `notices/${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from("archive").upload(path, file);
     if (error) {
-      alert("사진 업로드 실패: " + error.message);
+      showToast("사진 업로드 실패: " + error.message, "error");
       setImgUploading(false);
       return;
     }
@@ -28616,11 +28610,11 @@ function NoticeForm({ item, onClose }) {
 
   const doSave = async () => {
     if (!ttl.trim()) {
-      alert("제목을 입력해주세요.");
+      showToast("제목을 입력해주세요.");
       return;
     }
     if (!cnt.trim()) {
-      alert("내용을 입력해주세요.");
+      showToast("내용을 입력해주세요.");
       return;
     }
     setSvg(true);
@@ -28641,7 +28635,7 @@ function NoticeForm({ item, onClose }) {
           .update(payload)
           .eq("id", item.id);
         if (error) throw error;
-        alert("수정되었습니다.");
+        showToast("수정되었습니다.");
       } else {
        const { error } = await supabase.from("notices").insert([payload]);
         if (error) throw error;
@@ -28656,12 +28650,12 @@ function NoticeForm({ item, onClose }) {
             from: String(JSON.parse(localStorage.getItem("union_user") || "{}").employee_number || ""),
           }),
         }).catch(() => {});
-        alert("등록되었습니다.");
+        showToast("등록되었습니다.");
       }
       onClose(true);
     } catch (err) {
       console.error("저장 실패:", err);
-      alert("저장에 실패했습니다.\n" + err.message);
+      showToast("저장에 실패했습니다.\n" + err.message, "error");
     } finally {
       setSvg(false);
     }
@@ -29350,7 +29344,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         const { data: _ta } = await supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated"]).eq("work_date", _td);
         setHomeTodayAdjust(_ta && _ta.length > 0 ? _ta[0] : null);
       }
-      console.log("⏱️ 1.근무표+다이아:", Math.round(performance.now() - t0), "ms");
 
       const t1 = performance.now();
       const hYear = new Date().getFullYear();
@@ -29358,7 +29351,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const cachedHoli = localStorage.getItem(cacheKey);
       if (cachedHoli) {
         setHomeHolidays(JSON.parse(cachedHoli));
-        console.log("⏱️ 2.공휴일(캐시):", Math.round(performance.now() - t1), "ms");
       } else {
         fetch("/.netlify/functions/read-holidays?year=" + hYear)
           .then((r) => r.json())
@@ -29369,7 +29361,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
             }
           })
           .catch((e) => console.log("공휴일 불러오기 실패", e));
-        console.log("⏱️ 2.공휴일(백그라운드):", Math.round(performance.now() - t1), "ms");
       }
       const emp = user?.employee_number;
       const t2 = performance.now();
@@ -29397,7 +29388,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
          supabase.from("members").select("employee_number, work_group, start_position, schedule_total, bojeon_gasan"),  
          supabase.from("allowance_settings").select("name, visible"),
      ]);
-      console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       let homeNightCount = 0;
       const sb = sbRes.data;
       const wg = meRes.data?.work_group;
@@ -29425,7 +29415,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         }
         homeNightCount = Math.max(0, homeNightCount);
       }
-      console.log("⏱️ 야간 개수:", homeNightCount, "회");
       setHomeSalaryData({
         salaryTable: salaryRes.data || [],
         worktypeSettings: wtRes.data || [],
@@ -29526,13 +29515,13 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const enablePush = async () => {
     try {
       if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-        alert("이 기기는 푸시 알림을 지원하지 않아요.");
+        showToast("이 기기는 푸시 알림을 지원하지 않아요.");
         return false;
       }
       const reg = await navigator.serviceWorker.register("/sw.js");
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
-        alert("알림이 차단돼 있어요. 폰 설정에서 알림을 허용해주세요.");
+        showToast("알림이 차단돼 있어요. 폰 설정에서 알림을 허용해주세요.");
         return false;
       }
       const sub = await reg.pushManager.subscribe({
@@ -29552,7 +29541,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       return true;
     } catch (e: any) {
       console.log("푸시 구독 실패:", e);
-      alert("알림 설정 실패: " + (e?.message || e));
+      showToast("알림 설정 실패: " + (e?.message || e), "error");
       return false;
     }
   };
@@ -29582,17 +29571,14 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         .eq("employee_number", user.employee_number)
         .maybeSingle();
       if (error) {
-        console.log("refreshUser 실패:", error);
         return;
       }
       if (data) {
-        console.log("refreshUser 성공:", data);
         setUser(data);
         // localStorage도 같이 갱신
         localStorage.setItem("union_user", JSON.stringify(data));
       }
     } catch (e) {
-      console.log("refreshUser 예외:", e);
     }
   }, [user?.employee_number]);
  // 공지사항 불러오기 (notices 테이블)
@@ -30256,7 +30242,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           {(user as any)?.is_admin && (
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
               <button onClick={() => setScreen("noticeEdit")} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>✏️ 수정</button>
-              <button onClick={async () => { if (!window.confirm("이 공지를 삭제할까요? 되돌릴 수 없습니다.")) return; const { error } = await supabase.from("notices").delete().eq("id", (selectedNotice as any).id); if (error) { alert("삭제 실패: " + error.message); return; } loadNotices(); setScreen("noticeList"); }} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>🗑 삭제</button>
+              <button onClick={async () => { if (!window.confirm("이 공지를 삭제할까요? 되돌릴 수 없습니다.")) return; const { error } = await supabase.from("notices").delete().eq("id", (selectedNotice as any).id); if (error) { showToast("삭제 실패: " + error.message, "error"); return; } loadNotices(); setScreen("noticeList"); }} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #FECACA", background: "#FEF2F2", color: "#DC2626", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>🗑 삭제</button>
             </div>
           )}
         </div>
@@ -30370,7 +30356,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               }
             }
           } catch (e: any) {
-            alert("글 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            showToast("글 저장에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
             logError({
               message: "게시글 저장 실패: " + (e?.message || String(e)),
               stack: e?.stack,
@@ -30428,7 +30414,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               setScreen("inquiry");
             }
           } catch (e: any) {
-            alert("문의 등록에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            showToast("문의 등록에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
             logError({
               message: "문의 등록 실패: " + (e?.message || String(e)),
               stack: e?.stack,
