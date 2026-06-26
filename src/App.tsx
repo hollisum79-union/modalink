@@ -25890,9 +25890,12 @@ function NoticeList({ notices, onBack, onSelect }) {
                   fontSize: 14,
                   fontWeight: 600,
                   color: "#1F2937",
+                  lineHeight: 1.4,
+                  wordBreak: "break-word",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
                   overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
                 }}
               >
                 {n.pinned && "📌 "}{n.title}
@@ -27232,6 +27235,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
             <span
               style={{
                 flex: 1,
+                minWidth: 0,
                 fontSize: 13,
                 color: "#1F2937",
                 overflow: "hidden",
@@ -27241,6 +27245,19 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
             >
               {notice.title}
             </span>
+            {notice.image_url && (
+              <img
+                src={notice.image_url}
+                alt=""
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 6,
+                  objectFit: "cover",
+                  flexShrink: 0,
+                }}
+              />
+            )}
           </div>
         );
       })}
@@ -28576,12 +28593,12 @@ function NoticeForm({ item, onClose }) {
         </div>
         <div style={{ marginBottom: 20 }}>
           <label style={lbl}>제목 *</label>
-          <input
-            type="text"
+          <textarea
             value={ttl}
             onChange={(e) => setTtl(e.target.value)}
             placeholder="예: 5월 노사협의 결과 안내"
-            style={inp}
+            rows={2}
+            style={{ ...inp, resize: "vertical", fontFamily: "inherit", lineHeight: 1.45 }}
           />
         </div>
         <div style={{ marginBottom: 20 }}>
@@ -29939,7 +29956,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
             }}
           >
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", margin: 0 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", margin: 0, lineHeight: 1.4, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               {(selectedNotice as any)?.title || "공지"}
             </h2>
             {(selectedNotice as any)?.created_at && (
