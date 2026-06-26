@@ -14124,7 +14124,13 @@ function getPointKey(empId) {
   return `points_${String(empId)}`;
 }
 function getTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // 로컬(한국) 시간 기준 YYYY-MM-DD.
+  // toISOString()은 UTC라 새벽(0~9시)에 전날로 밀리는 문제가 있어 직접 조합.
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function loadPointData(empId) {
@@ -18652,7 +18658,6 @@ function MySettingsScreen({
         return;
       }
       if (data) {
-        console.log("DB에서 가져온 최신 user:", data);
         if (data.work_type) setEditWorkType(data.work_type);
         if (data.work_group) setEditWorkGroup(data.work_group);
         if (data.grade) setEditGrade(data.grade);
@@ -20304,16 +20309,6 @@ function MySettingsScreen({
                 birthYear: editBirthYear,
                 birthConsent,
               });
-              // Supabase에 진짜 저장 (로그 포함)
-              console.log("저장 시도:", {
-                user,
-                editWorkType,
-                editWorkGroup,
-                editGrade,
-                editPayStep,
-                editPayStepNextDate,
-                editJoinYear,
-              });
               if (user?.employee_number) {
                 const { data, error } = await supabase
                   .from("members")
@@ -20333,14 +20328,12 @@ function MySettingsScreen({
                   })
                   .eq("employee_number", user.employee_number)
                   .select();
-                console.log("저장 결과:", { data, error });
                 if (error) {
                   showToast("저장 실패: " + error.message, "error");
                 } else {
                   await refreshUser();
                 }
               } else {
-                console.log("employee_number 없음 - 저장 안 함");
                 showToast("로그인 정보 없음 - 저장 안 됨");
               }
               setWorkSaved(true);
@@ -29351,7 +29344,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         const { data: _ta } = await supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated"]).eq("work_date", _td);
         setHomeTodayAdjust(_ta && _ta.length > 0 ? _ta[0] : null);
       }
-      console.log("⏱️ 1.근무표+다이아:", Math.round(performance.now() - t0), "ms");
 
       const t1 = performance.now();
       const hYear = new Date().getFullYear();
@@ -29359,7 +29351,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const cachedHoli = localStorage.getItem(cacheKey);
       if (cachedHoli) {
         setHomeHolidays(JSON.parse(cachedHoli));
-        console.log("⏱️ 2.공휴일(캐시):", Math.round(performance.now() - t1), "ms");
       } else {
         fetch("/.netlify/functions/read-holidays?year=" + hYear)
           .then((r) => r.json())
@@ -29370,7 +29361,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
             }
           })
           .catch((e) => console.log("공휴일 불러오기 실패", e));
-        console.log("⏱️ 2.공휴일(백그라운드):", Math.round(performance.now() - t1), "ms");
       }
       const emp = user?.employee_number;
       const t2 = performance.now();
@@ -29398,7 +29388,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
          supabase.from("members").select("employee_number, work_group, start_position, schedule_total, bojeon_gasan"),  
          supabase.from("allowance_settings").select("name, visible"),
      ]);
-      console.log("⏱️ 3.급여 6개쿼리:", Math.round(performance.now() - t2), "ms");
       let homeNightCount = 0;
       const sb = sbRes.data;
       const wg = meRes.data?.work_group;
@@ -29426,7 +29415,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         }
         homeNightCount = Math.max(0, homeNightCount);
       }
-      console.log("⏱️ 야간 개수:", homeNightCount, "회");
       setHomeSalaryData({
         salaryTable: salaryRes.data || [],
         worktypeSettings: wtRes.data || [],
@@ -29583,17 +29571,14 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         .eq("employee_number", user.employee_number)
         .maybeSingle();
       if (error) {
-        console.log("refreshUser 실패:", error);
         return;
       }
       if (data) {
-        console.log("refreshUser 성공:", data);
         setUser(data);
         // localStorage도 같이 갱신
         localStorage.setItem("union_user", JSON.stringify(data));
       }
     } catch (e) {
-      console.log("refreshUser 예외:", e);
     }
   }, [user?.employee_number]);
  // 공지사항 불러오기 (notices 테이블)
