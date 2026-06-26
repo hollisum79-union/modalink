@@ -9677,17 +9677,28 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                       취소
                     </button>
                     <button
-                      onClick={() => {
-                        // 방출 - DB에서 복구 불능 삭제
-                        supabase
-                          .from("members")
-                          .delete()
-                          .eq("name", kickTarget.name)
-                          .then(() => {});
-                        setMembers((prev) =>
-                          prev.filter((m) => m.id !== kickTarget.id)
-                        );
-                        setKickTarget(null);
+                      onClick={async () => {
+                        // 방출 - DB에서 복구 불능 삭제 (★ id 기준: 동명이인 오삭제 방지)
+                        try {
+                          const { error } = await supabase
+                            .from("members")
+                            .delete()
+                            .eq("id", kickTarget.id);
+                          if (error) throw error;
+                          setMembers((prev) =>
+                            prev.filter((m) => m.id !== kickTarget.id)
+                          );
+                          setKickTarget(null);
+                        } catch (e: any) {
+                          alert("방출에 실패했습니다. 잠시 후 다시 시도해주세요.");
+                          logError({
+                            message: "조합원 방출 실패: " + (e?.message || String(e)),
+                            stack: e?.stack,
+                            screen: "조합원관리(방출)",
+                            userId: getUserId(user),
+                            userName: user?.name,
+                          });
+                        }
                       }}
                       style={{
                         flex: 1,
@@ -10144,12 +10155,22 @@ function MemberManageScreen() {
     }
   };
 
-  const toggleAdmin = (m) => {
-    supabase
-      .from("members")
-      .update({ is_admin: !m.is_admin })
-      .eq("id", m.id)
-      .then(() => loadMembers());
+  const toggleAdmin = async (m) => {
+    try {
+      const { error } = await supabase
+        .from("members")
+        .update({ is_admin: !m.is_admin })
+        .eq("id", m.id);
+      if (error) throw error;
+      loadMembers();
+    } catch (e: any) {
+      alert("권한 변경에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "관리자 권한 변경 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "조합원관리",
+      });
+    }
   };
   const handleResetPw = (m) => {
     if (
