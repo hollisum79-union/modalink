@@ -6,6 +6,33 @@ const supabaseUrl = "https://svbvawioldgundtpogkc.supabase.co";
 const supabaseKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2YnZhd2lvbGRndW5kdHBvZ2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTAzODQsImV4cCI6MjA5NDQ2NjM4NH0.7PrmWSX-BxZTy7IImfI_ujS07dmOlrklQUm3AM0B2II";
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// ── 에러 자동 기록 (error_logs 테이블로 전송) ──
+// 앱에서 예상 못한 에러가 나면 조용히 Supabase에 기록한다.
+// 조합원은 아무것도 안 해도 되고, 희태님은 SQL Editor에서 모아 본다.
+let _lastErrLog = 0;
+async function logError(info: any) {
+  try {
+    // 같은 에러가 쏟아질 때 1초에 1건만 (스팸/무한루프 방지)
+    const now = Date.now();
+    if (now - _lastErrLog < 1000) return;
+    _lastErrLog = now;
+    await supabase.from("error_logs").insert([
+      {
+        user_id: info.userId ?? null,
+        user_name: info.userName ?? null,
+        screen: info.screen ?? null,
+        message: String(info.message ?? "").slice(0, 2000),
+        stack: info.stack ? String(info.stack).slice(0, 4000) : null,
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+        page_url: typeof location !== "undefined" ? location.href : null,
+      },
+    ]);
+  } catch (e) {
+    // 로깅 자체가 실패해도 앱은 계속 동작 (조용히 무시)
+  }
+}
+
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
@@ -28852,6 +28879,40 @@ export default function App() {
     localStorage.setItem("fontScale", String(fontScale));
   }, [fontScale]);
   const [user, setUser] = useState(null);
+
+  // ── 전역 에러 감지기 ──
+  // 현재 화면/사용자 정보를 ref에 담아두고, 에러 발생 시 함께 기록.
+  const errCtxRef = React.useRef<any>({ screen: "login", user: null });
+  React.useEffect(() => {
+    errCtxRef.current = { screen, user };
+  });
+  React.useEffect(() => {
+    const onError = (e: ErrorEvent) => {
+      logError({
+        message: e.message || "window error",
+        stack: (e as any).error?.stack,
+        screen: errCtxRef.current.screen,
+        userId: getUserId(errCtxRef.current.user),
+        userName: errCtxRef.current.user?.name,
+      });
+    };
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const r: any = e.reason;
+      logError({
+        message: r?.message || String(r) || "unhandled rejection",
+        stack: r?.stack,
+        screen: errCtxRef.current.screen,
+        userId: getUserId(errCtxRef.current.user),
+        userName: errCtxRef.current.user?.name,
+      });
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
 const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [notices, setNotices] = useState([]);
   const [boardTab, setBoardTab] = useState("전체");
