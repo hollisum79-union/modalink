@@ -5737,6 +5737,7 @@ function VoteScreen({ onBack, user }) {
   });
   const [votes, setVotes] = useState([]);
   const [editVote, setEditVote] = useState(null);
+  const [voteSaving, setVoteSaving] = useState(false);
   const isAdmin = user?.is_admin;
    const [myVotedIds, setMyVotedIds] = useState([]);
   const loadMyVotes = () => {
@@ -5768,38 +5769,63 @@ const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
     loadVotes();
   }, []);
 
-  const handleSaveVote = () => {
-    if (!editVote.title.trim()) return;
-    supabase
-      .from("votes")
-      .update({
-        title: editVote.title,
-        description: editVote.description,
-        deadline: editVote.deadline || null,
-        status: editVote.status,
-      })
-      .eq("id", editVote.id)
-      .then(() => {
-        setEditVote(null);
-        loadVotes();
+  const handleSaveVote = async () => {
+    if (voteSaving) return; // 연타 방지
+    if (!editVote.title.trim()) {
+      alert("제목을 입력해주세요.");
+      return;
+    }
+    setVoteSaving(true);
+    try {
+      const { error } = await supabase
+        .from("votes")
+        .update({
+          title: editVote.title,
+          description: editVote.description,
+          deadline: editVote.deadline || null,
+          status: editVote.status,
+        })
+        .eq("id", editVote.id);
+      if (error) throw error;
+      setEditVote(null);
+      loadVotes();
+      alert("저장되었습니다.");
+    } catch (e: any) {
+      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "투표 저장 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    } finally {
+      setVoteSaving(false);
+    }
   };
 
-  const handleDeleteVote = (id) => {
-    supabase
-      .from("vote_results")
-      .delete()
-      .eq("vote_id", id)
-      .then(() => {
-        supabase
-          .from("votes")
-          .delete()
-          .eq("id", id)
-          .then(() => {
-            loadVotes();
-            loadMyVotes();
-          });
+  const handleDeleteVote = async (id) => {
+    try {
+      // 투표 결과 먼저 삭제 후 투표 본문 삭제
+      const { error: e1 } = await supabase
+        .from("vote_results")
+        .delete()
+        .eq("vote_id", id);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from("votes").delete().eq("id", id);
+      if (e2) throw e2;
+      loadVotes();
+      loadMyVotes();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "투표 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    }
   };
 
   if (selectedVote) {
@@ -6212,20 +6238,23 @@ const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
                 </button>
                 <button
                   onClick={handleSaveVote}
+                  disabled={voteSaving}
                   style={{
                     flex: 1,
                     padding: "12px",
                     borderRadius: 10,
                     border: "none",
-                    background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                    background: voteSaving
+                      ? "#A5B4FC"
+                      : "linear-gradient(135deg, #4F46E5, #6D28D9)",
                     color: "#fff",
                     fontSize: 14,
                     fontWeight: 700,
-                    cursor: "pointer",
+                    cursor: voteSaving ? "default" : "pointer",
                     fontFamily: "inherit",
                   }}
                 >
-                  저장
+                  {voteSaving ? "저장 중..." : "저장"}
                 </button>
               </div>
             </div>
