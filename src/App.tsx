@@ -4730,6 +4730,7 @@ function WelfareScreen({ onBack, user }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [welfareItems, setWelfareItems] = useState([]);
   const [welfareForm, setWelfareForm] = useState(null);
+  const [welfareSaving, setWelfareSaving] = useState(false);
   // ── 뒤로가기: 신청폼 → 상세 → 목록 ──
   useEffect(() => {
     (window as any).__backHandler = () => {
@@ -4774,43 +4775,63 @@ function WelfareScreen({ onBack, user }) {
     (it) => it.category === selectedCategory
   );
 
-  const handleSaveWelfare = () => {
-    if (!welfareForm.title.trim()) return;
-    const payload = {
-      category: welfareForm.category,
-      title: welfareForm.title,
-      description: welfareForm.description,
-      detail: welfareForm.detail,
-      sort_order: welfareForm.sort_order || 0,
-    };
-    if (welfareForm.id) {
-      supabase
-        .from("welfare")
-        .update(payload)
-        .eq("id", welfareForm.id)
-        .then(() => {
-          setWelfareForm(null);
-          loadWelfare();
-        });
-    } else {
-      supabase
-        .from("welfare")
-        .insert([payload])
-        .then(() => {
-          setWelfareForm(null);
-          loadWelfare();
-        });
+  const handleSaveWelfare = async () => {
+    if (welfareSaving) return; // 연타 방지
+    if (!welfareForm.title.trim()) {
+      alert("제목을 입력해주세요.");
+      return;
+    }
+    setWelfareSaving(true);
+    try {
+      const payload = {
+        category: welfareForm.category,
+        title: welfareForm.title,
+        description: welfareForm.description,
+        detail: welfareForm.detail,
+        sort_order: welfareForm.sort_order || 0,
+      };
+      if (welfareForm.id) {
+        const { error } = await supabase
+          .from("welfare")
+          .update(payload)
+          .eq("id", welfareForm.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("welfare").insert([payload]);
+        if (error) throw error;
+      }
+      setWelfareForm(null);
+      loadWelfare();
+      alert("저장되었습니다.");
+    } catch (e: any) {
+      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "복지 저장 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "복지관리",
+        userId: getUserId(user),
+        userName: user?.name,
+      });
+    } finally {
+      setWelfareSaving(false);
     }
   };
 
-  const handleDeleteWelfare = (id) => {
-    supabase
-      .from("welfare")
-      .delete()
-      .eq("id", id)
-      .then(() => {
-        loadWelfare();
+  const handleDeleteWelfare = async (id) => {
+    try {
+      const { error } = await supabase.from("welfare").delete().eq("id", id);
+      if (error) throw error;
+      loadWelfare();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "복지 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "복지관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    }
   };
 
   if (selectedItem) {
@@ -5195,20 +5216,23 @@ function WelfareScreen({ onBack, user }) {
               </button>
               <button
                 onClick={handleSaveWelfare}
+                disabled={welfareSaving}
                 style={{
                   flex: 1,
                   padding: "12px",
                   borderRadius: 10,
                   border: "none",
-                  background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                  background: welfareSaving
+                    ? "#A5B4FC"
+                    : "linear-gradient(135deg, #4F46E5, #6D28D9)",
                   color: "#fff",
                   fontSize: 14,
                   fontWeight: 700,
-                  cursor: "pointer",
+                  cursor: welfareSaving ? "default" : "pointer",
                   fontFamily: "inherit",
                 }}
               >
-                저장
+                {welfareSaving ? "저장 중..." : "저장"}
               </button>
             </div>
           </div>
