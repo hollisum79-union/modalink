@@ -907,6 +907,7 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
   const [imageUrl, setImageUrl] = useState(editPost?.image_url || "");
   const [imagePath, setImagePath] = useState(editPost?.image_path || "");
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const categories = [
     { name: "자유", color: "#4F46E5", bg: "#EEF0FF" },
     { name: "경조사", color: "#EF4444", bg: "#FEE2E2" },
@@ -932,9 +933,18 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
     setUploading(false);
   };
 
-    const handleSubmit = () => {
-    if (!title.trim() || (!content.trim() && !imageUrl)) return;
-    onSubmit({ id: editPost?.id, title, content, category, image_url: imageUrl, image_path: imagePath });
+    const handleSubmit = async () => {
+    if (submitting) return; // 연타 방지
+    if (!title.trim() || (!content.trim() && !imageUrl)) {
+      alert("제목과 내용을 입력해주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit({ id: editPost?.id, title, content, category, image_url: imageUrl, image_path: imagePath });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -975,19 +985,22 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
         </div>
         <button
           onClick={handleSubmit}
+          disabled={submitting || uploading}
           style={{
-            background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+            background: submitting || uploading
+              ? "#A5B4FC"
+              : "linear-gradient(135deg, #4F46E5, #6D28D9)",
             color: "#fff",
             border: "none",
             borderRadius: 10,
             padding: "8px 18px",
             fontSize: 14,
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: submitting || uploading ? "default" : "pointer",
             fontFamily: "inherit",
           }}
                 >
-          {editPost ? "수정 완료" : "등록"}
+          {submitting ? "등록 중..." : editPost ? "수정 완료" : "등록"}
         </button>
       </div>
       <div style={{ padding: "20px 16px" }}>
@@ -30236,50 +30249,59 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen(editingPost ? "boardDetail" : "board")}
         user={user}
         editPost={editingPost}
-        onSubmit={(post) => {
-          if (post.id) {
-            supabase
-              .from("posts")
-              .update({
+        onSubmit={async (post) => {
+          try {
+            if (post.id) {
+              const { data, error } = await supabase
+                .from("posts")
+                .update({
+                  title: post.title,
+                  content: post.content,
+                  category: post.category,
+                  image_url: post.image_url || null,
+                  image_path: post.image_path || null,
+                })
+                .eq("id", post.id)
+                .select();
+              if (error) throw error;
+              if (data && data[0]) {
+                setSelectedPost((prev: any) => ({ ...prev, ...data[0] }));
+              }
+              setEditingPost(null);
+              setScreen("boardDetail");
+            } else {
+              const newPost = {
                 title: post.title,
                 content: post.content,
                 category: post.category,
+                author: user?.name,
+                author_emp: user?.employee_number,
+                is_anonymous: false,
+                views: 0,
                 image_url: post.image_url || null,
                 image_path: post.image_path || null,
-              })
-              .eq("id", post.id)
-              .select()
-              .then(({ data }) => {
-                if (data && data[0]) {
-                  setSelectedPost((prev: any) => ({ ...prev, ...data[0] }));
-                }
-                setEditingPost(null);
+              };
+              const { data, error } = await supabase
+                .from("posts")
+                .insert([newPost])
+                .select();
+              if (error) throw error;
+              if (data && data[0]) {
+                setSelectedPost({ ...data[0], comments: [] });
                 setScreen("boardDetail");
-              });
-          } else {
-            const newPost = {
-              title: post.title,
-              content: post.content,
-              category: post.category,
-              author: user?.name,
-              author_emp: user?.employee_number,
-              is_anonymous: false,
-              views: 0,
-              image_url: post.image_url || null,
-              image_path: post.image_path || null,
-            };
-            supabase
-              .from("posts")
-              .insert([newPost])
-              .select()
-              .then(({ data }) => {
-                if (data && data[0]) {
-                  setSelectedPost({ ...data[0], comments: [] });
-                  setScreen("boardDetail");
-                } else {
-                  setScreen("board");
-                }
-              });
+              } else {
+                setScreen("board");
+              }
+            }
+          } catch (e: any) {
+            alert("글 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            logError({
+              message: "게시글 저장 실패: " + (e?.message || String(e)),
+              stack: e?.stack,
+              screen: "게시판글쓰기",
+              userId: getUserId(user),
+              userName: user?.name,
+            });
           }
         }}
       />
