@@ -6,6 +6,33 @@ const supabaseUrl = "https://svbvawioldgundtpogkc.supabase.co";
 const supabaseKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2YnZhd2lvbGRndW5kdHBvZ2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTAzODQsImV4cCI6MjA5NDQ2NjM4NH0.7PrmWSX-BxZTy7IImfI_ujS07dmOlrklQUm3AM0B2II";
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// ── 에러 자동 기록 (error_logs 테이블로 전송) ──
+// 앱에서 예상 못한 에러가 나면 조용히 Supabase에 기록한다.
+// 조합원은 아무것도 안 해도 되고, 희태님은 SQL Editor에서 모아 본다.
+let _lastErrLog = 0;
+async function logError(info: any) {
+  try {
+    // 같은 에러가 쏟아질 때 1초에 1건만 (스팸/무한루프 방지)
+    const now = Date.now();
+    if (now - _lastErrLog < 1000) return;
+    _lastErrLog = now;
+    await supabase.from("error_logs").insert([
+      {
+        user_id: info.userId ?? null,
+        user_name: info.userName ?? null,
+        screen: info.screen ?? null,
+        message: String(info.message ?? "").slice(0, 2000),
+        stack: info.stack ? String(info.stack).slice(0, 4000) : null,
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+        page_url: typeof location !== "undefined" ? location.href : null,
+      },
+    ]);
+  } catch (e) {
+    // 로깅 자체가 실패해도 앱은 계속 동작 (조용히 무시)
+  }
+}
+
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
@@ -880,6 +907,7 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
   const [imageUrl, setImageUrl] = useState(editPost?.image_url || "");
   const [imagePath, setImagePath] = useState(editPost?.image_path || "");
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const categories = [
     { name: "자유", color: "#4F46E5", bg: "#EEF0FF" },
     { name: "경조사", color: "#EF4444", bg: "#FEE2E2" },
@@ -905,9 +933,18 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
     setUploading(false);
   };
 
-    const handleSubmit = () => {
-    if (!title.trim() || (!content.trim() && !imageUrl)) return;
-    onSubmit({ id: editPost?.id, title, content, category, image_url: imageUrl, image_path: imagePath });
+    const handleSubmit = async () => {
+    if (submitting) return; // 연타 방지
+    if (!title.trim() || (!content.trim() && !imageUrl)) {
+      alert("제목과 내용을 입력해주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit({ id: editPost?.id, title, content, category, image_url: imageUrl, image_path: imagePath });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -948,19 +985,22 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
         </div>
         <button
           onClick={handleSubmit}
+          disabled={submitting || uploading}
           style={{
-            background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+            background: submitting || uploading
+              ? "#A5B4FC"
+              : "linear-gradient(135deg, #4F46E5, #6D28D9)",
             color: "#fff",
             border: "none",
             borderRadius: 10,
             padding: "8px 18px",
             fontSize: 14,
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: submitting || uploading ? "default" : "pointer",
             fontFamily: "inherit",
           }}
                 >
-          {editPost ? "수정 완료" : "등록"}
+          {submitting ? "등록 중..." : editPost ? "수정 완료" : "등록"}
         </button>
       </div>
       <div style={{ padding: "20px 16px" }}>
@@ -3814,10 +3854,20 @@ const dummyInquiries = [
 function InquiryWrite({ onBack, onSubmit, user }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (!title.trim() || !content.trim()) return;
-    onSubmit({ title, content });
+  const handleSubmit = async () => {
+    if (submitting) return; // 연타 방지
+    if (!title.trim() || !content.trim()) {
+      alert("제목과 내용을 입력해주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit({ title, content });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -3858,19 +3908,22 @@ function InquiryWrite({ onBack, onSubmit, user }) {
         </div>
         <button
           onClick={handleSubmit}
+          disabled={submitting}
           style={{
-            background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+            background: submitting
+              ? "#A5B4FC"
+              : "linear-gradient(135deg, #4F46E5, #6D28D9)",
             color: "#fff",
             border: "none",
             borderRadius: 10,
             padding: "8px 18px",
             fontSize: 14,
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: submitting ? "default" : "pointer",
             fontFamily: "inherit",
           }}
         >
-          등록
+          {submitting ? "등록 중..." : "등록"}
         </button>
       </div>
       <div style={{ padding: "20px 16px" }}>
@@ -4703,6 +4756,7 @@ function WelfareScreen({ onBack, user }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [welfareItems, setWelfareItems] = useState([]);
   const [welfareForm, setWelfareForm] = useState(null);
+  const [welfareSaving, setWelfareSaving] = useState(false);
   // ── 뒤로가기: 신청폼 → 상세 → 목록 ──
   useEffect(() => {
     (window as any).__backHandler = () => {
@@ -4747,43 +4801,63 @@ function WelfareScreen({ onBack, user }) {
     (it) => it.category === selectedCategory
   );
 
-  const handleSaveWelfare = () => {
-    if (!welfareForm.title.trim()) return;
-    const payload = {
-      category: welfareForm.category,
-      title: welfareForm.title,
-      description: welfareForm.description,
-      detail: welfareForm.detail,
-      sort_order: welfareForm.sort_order || 0,
-    };
-    if (welfareForm.id) {
-      supabase
-        .from("welfare")
-        .update(payload)
-        .eq("id", welfareForm.id)
-        .then(() => {
-          setWelfareForm(null);
-          loadWelfare();
-        });
-    } else {
-      supabase
-        .from("welfare")
-        .insert([payload])
-        .then(() => {
-          setWelfareForm(null);
-          loadWelfare();
-        });
+  const handleSaveWelfare = async () => {
+    if (welfareSaving) return; // 연타 방지
+    if (!welfareForm.title.trim()) {
+      alert("제목을 입력해주세요.");
+      return;
+    }
+    setWelfareSaving(true);
+    try {
+      const payload = {
+        category: welfareForm.category,
+        title: welfareForm.title,
+        description: welfareForm.description,
+        detail: welfareForm.detail,
+        sort_order: welfareForm.sort_order || 0,
+      };
+      if (welfareForm.id) {
+        const { error } = await supabase
+          .from("welfare")
+          .update(payload)
+          .eq("id", welfareForm.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("welfare").insert([payload]);
+        if (error) throw error;
+      }
+      setWelfareForm(null);
+      loadWelfare();
+      alert("저장되었습니다.");
+    } catch (e: any) {
+      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "복지 저장 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "복지관리",
+        userId: getUserId(user),
+        userName: user?.name,
+      });
+    } finally {
+      setWelfareSaving(false);
     }
   };
 
-  const handleDeleteWelfare = (id) => {
-    supabase
-      .from("welfare")
-      .delete()
-      .eq("id", id)
-      .then(() => {
-        loadWelfare();
+  const handleDeleteWelfare = async (id) => {
+    try {
+      const { error } = await supabase.from("welfare").delete().eq("id", id);
+      if (error) throw error;
+      loadWelfare();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "복지 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "복지관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    }
   };
 
   if (selectedItem) {
@@ -5168,20 +5242,23 @@ function WelfareScreen({ onBack, user }) {
               </button>
               <button
                 onClick={handleSaveWelfare}
+                disabled={welfareSaving}
                 style={{
                   flex: 1,
                   padding: "12px",
                   borderRadius: 10,
                   border: "none",
-                  background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                  background: welfareSaving
+                    ? "#A5B4FC"
+                    : "linear-gradient(135deg, #4F46E5, #6D28D9)",
                   color: "#fff",
                   fontSize: 14,
                   fontWeight: 700,
-                  cursor: "pointer",
+                  cursor: welfareSaving ? "default" : "pointer",
                   fontFamily: "inherit",
                 }}
               >
-                저장
+                {welfareSaving ? "저장 중..." : "저장"}
               </button>
             </div>
           </div>
@@ -5260,6 +5337,7 @@ function VoteDetail({ vote, onBack, user }) {
   const [results, setResults] = useState([]);
   const [myVote, setMyVote] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
 const [nameMap, setNameMap] = useState({});
   const loadResults = () => {
     supabase
@@ -5307,30 +5385,56 @@ const [nameMap, setNameMap] = useState({});
     setMyVote(idx);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (voteSubmitting) return; // 연타 방지
     if (myVote === null) return;
-    const choice = optionLabels[myVote];
-    supabase
-      .from("vote_results")
-      .insert([{ vote_id: vote.id, member_id: myId, choice: choice }])
-      .then(({ error }) => {
-        if (!error) {
-          setSubmitted(true);
-          loadResults();
-        }
+    setVoteSubmitting(true);
+    try {
+      const choice = optionLabels[myVote];
+      const { error } = await supabase
+        .from("vote_results")
+        .insert([{ vote_id: vote.id, member_id: myId, choice: choice }]);
+      if (error) throw error;
+      setSubmitted(true);
+      loadResults();
+    } catch (e: any) {
+      alert("투표 제출에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "투표 제출 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표참여",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    } finally {
+      setVoteSubmitting(false);
+    }
   };
-  const handleRevote = () => {
-    supabase
-      .from("vote_results")
-      .delete()
-      .eq("vote_id", vote.id)
-      .eq("member_id", myId)
-      .then(() => {
-        setSubmitted(false);
-        setMyVote(null);
-        loadResults();
+  const handleRevote = async () => {
+    if (voteSubmitting) return;
+    setVoteSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("vote_results")
+        .delete()
+        .eq("vote_id", vote.id)
+        .eq("member_id", myId);
+      if (error) throw error;
+      setSubmitted(false);
+      setMyVote(null);
+      loadResults();
+    } catch (e: any) {
+      alert("재투표 처리에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "재투표 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표참여",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    } finally {
+      setVoteSubmitting(false);
+    }
   };
 
   const showResult = vote.status === "종료";
@@ -5570,24 +5674,24 @@ const [nameMap, setNameMap] = useState({});
         {!submitted && vote.status === "진행중" && user && (
           <button
             onClick={handleSubmit}
-            disabled={myVote === null}
+            disabled={myVote === null || voteSubmitting}
             style={{
               width: "100%",
               padding: "15px",
               background:
-                myVote === null
+                myVote === null || voteSubmitting
                   ? "#E5E7EB"
                   : "linear-gradient(135deg, #4F46E5, #6D28D9)",
-              color: myVote === null ? "#9CA3AF" : "#fff",
+              color: myVote === null || voteSubmitting ? "#9CA3AF" : "#fff",
               border: "none",
               borderRadius: 14,
               fontSize: 16,
               fontWeight: 700,
-              cursor: myVote === null ? "not-allowed" : "pointer",
+              cursor: myVote === null || voteSubmitting ? "not-allowed" : "pointer",
               fontFamily: "inherit",
             }}
           >
-            {vote.type} 참여하기
+            {voteSubmitting ? "제출 중..." : `${vote.type} 참여하기`}
           </button>
         )}
         {submitted && (
@@ -5686,6 +5790,7 @@ function VoteScreen({ onBack, user }) {
   });
   const [votes, setVotes] = useState([]);
   const [editVote, setEditVote] = useState(null);
+  const [voteSaving, setVoteSaving] = useState(false);
   const isAdmin = user?.is_admin;
    const [myVotedIds, setMyVotedIds] = useState([]);
   const loadMyVotes = () => {
@@ -5717,38 +5822,63 @@ const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
     loadVotes();
   }, []);
 
-  const handleSaveVote = () => {
-    if (!editVote.title.trim()) return;
-    supabase
-      .from("votes")
-      .update({
-        title: editVote.title,
-        description: editVote.description,
-        deadline: editVote.deadline || null,
-        status: editVote.status,
-      })
-      .eq("id", editVote.id)
-      .then(() => {
-        setEditVote(null);
-        loadVotes();
+  const handleSaveVote = async () => {
+    if (voteSaving) return; // 연타 방지
+    if (!editVote.title.trim()) {
+      alert("제목을 입력해주세요.");
+      return;
+    }
+    setVoteSaving(true);
+    try {
+      const { error } = await supabase
+        .from("votes")
+        .update({
+          title: editVote.title,
+          description: editVote.description,
+          deadline: editVote.deadline || null,
+          status: editVote.status,
+        })
+        .eq("id", editVote.id);
+      if (error) throw error;
+      setEditVote(null);
+      loadVotes();
+      alert("저장되었습니다.");
+    } catch (e: any) {
+      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "투표 저장 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    } finally {
+      setVoteSaving(false);
+    }
   };
 
-  const handleDeleteVote = (id) => {
-    supabase
-      .from("vote_results")
-      .delete()
-      .eq("vote_id", id)
-      .then(() => {
-        supabase
-          .from("votes")
-          .delete()
-          .eq("id", id)
-          .then(() => {
-            loadVotes();
-            loadMyVotes();
-          });
+  const handleDeleteVote = async (id) => {
+    try {
+      // 투표 결과 먼저 삭제 후 투표 본문 삭제
+      const { error: e1 } = await supabase
+        .from("vote_results")
+        .delete()
+        .eq("vote_id", id);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from("votes").delete().eq("id", id);
+      if (e2) throw e2;
+      loadVotes();
+      loadMyVotes();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "투표 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "투표관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    }
   };
 
   if (selectedVote) {
@@ -6161,20 +6291,23 @@ const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
                 </button>
                 <button
                   onClick={handleSaveVote}
+                  disabled={voteSaving}
                   style={{
                     flex: 1,
                     padding: "12px",
                     borderRadius: 10,
                     border: "none",
-                    background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                    background: voteSaving
+                      ? "#A5B4FC"
+                      : "linear-gradient(135deg, #4F46E5, #6D28D9)",
                     color: "#fff",
                     fontSize: 14,
                     fontWeight: 700,
-                    cursor: "pointer",
+                    cursor: voteSaving ? "default" : "pointer",
                     fontFamily: "inherit",
                   }}
                 >
-                  저장
+                  {voteSaving ? "저장 중..." : "저장"}
                 </button>
               </div>
             </div>
@@ -8506,6 +8639,7 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
   // ── 조직도(간부) 기능 ──
   const [officers, setOfficers] = useState([]);
   const [officerForm, setOfficerForm] = useState(null);
+  const [officerSaving, setOfficerSaving] = useState(false);
   const isAdmin = user?.is_admin;
 
   const officerColor = (role) => {
@@ -8529,43 +8663,64 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
     loadOfficers();
   }, []);
 
-  const handleSaveOfficer = () => {
-    if (!officerForm.role.trim() || !officerForm.name.trim()) return;
-    const payload = {
-      org_group: officerForm.org_group,
-      role: officerForm.role,
-      name: officerForm.name,
-      description: officerForm.description,
-      sort_order: officerForm.sort_order || 0,
-    };
-    if (officerForm.id) {
-      supabase
-        .from("officers")
-        .update(payload)
-        .eq("id", officerForm.id)
-        .then(() => {
-          setOfficerForm(null);
-          loadOfficers();
-        });
-    } else {
-      supabase
-        .from("officers")
-        .insert([payload])
-        .then(() => {
-          setOfficerForm(null);
-          loadOfficers();
-        });
+  const handleSaveOfficer = async () => {
+    if (officerSaving) return; // 연타 방지
+    if (!officerForm.role.trim() || !officerForm.name.trim()) {
+      alert("직책과 이름을 입력해주세요.");
+      return;
+    }
+    setOfficerSaving(true);
+    try {
+      const payload = {
+        org_group: officerForm.org_group,
+        role: officerForm.role,
+        name: officerForm.name,
+        description: officerForm.description,
+        sort_order: officerForm.sort_order || 0,
+      };
+      if (officerForm.id) {
+        const { error } = await supabase
+          .from("officers")
+          .update(payload)
+          .eq("id", officerForm.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("officers").insert([payload]);
+        if (error) throw error;
+      }
+      setOfficerForm(null);
+      loadOfficers();
+      alert("저장되었습니다.");
+    } catch (e: any) {
+      alert("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "임원진 저장 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "임원진관리",
+        userId: getUserId(user),
+        userName: user?.name,
+      });
+    } finally {
+      setOfficerSaving(false);
     }
   };
 
-  const handleDeleteOfficer = (id) => {
-    supabase
-      .from("officers")
-      .delete()
-      .eq("id", id)
-      .then(() => {
-        loadOfficers();
+  const handleDeleteOfficer = async (id) => {
+    if (!window.confirm("이 임원진을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    try {
+      const { error } = await supabase.from("officers").delete().eq("id", id);
+      if (error) throw error;
+      loadOfficers();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "임원진 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "임원진관리",
+        userId: getUserId(user),
+        userName: user?.name,
       });
+    }
   };
 
   const jihoeOfficers = officers.filter((o) => o.org_group === "지회");
@@ -9421,20 +9576,23 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
                     </button>
                     <button
                       onClick={handleSaveOfficer}
+                      disabled={officerSaving}
                       style={{
                         flex: 1,
                         padding: "12px",
                         borderRadius: 10,
                         border: "none",
-                        background: "linear-gradient(135deg, #4F46E5, #6D28D9)",
+                        background: officerSaving
+                          ? "#A5B4FC"
+                          : "linear-gradient(135deg, #4F46E5, #6D28D9)",
                         color: "#fff",
                         fontSize: 14,
                         fontWeight: 700,
-                        cursor: "pointer",
+                        cursor: officerSaving ? "default" : "pointer",
                         fontFamily: "inherit",
                       }}
                     >
-                      저장
+                      {officerSaving ? "저장 중..." : "저장"}
                     </button>
                   </div>
                 </div>
@@ -9970,15 +10128,20 @@ function MemberManageScreen() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const handleDelete = (m) => {
-    supabase
-      .from("members")
-      .delete()
-      .eq("id", m.id)
-      .then(() => {
-        setDeleteTarget(null);
-        loadMembers();
+  const handleDelete = async (m) => {
+    try {
+      const { error } = await supabase.from("members").delete().eq("id", m.id);
+      if (error) throw error;
+      setDeleteTarget(null);
+      loadMembers();
+    } catch (e: any) {
+      alert("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      logError({
+        message: "조합원 삭제 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "조합원관리",
       });
+    }
   };
 
   const toggleAdmin = (m) => {
@@ -28852,6 +29015,40 @@ export default function App() {
     localStorage.setItem("fontScale", String(fontScale));
   }, [fontScale]);
   const [user, setUser] = useState(null);
+
+  // ── 전역 에러 감지기 ──
+  // 현재 화면/사용자 정보를 ref에 담아두고, 에러 발생 시 함께 기록.
+  const errCtxRef = React.useRef<any>({ screen: "login", user: null });
+  React.useEffect(() => {
+    errCtxRef.current = { screen, user };
+  });
+  React.useEffect(() => {
+    const onError = (e: ErrorEvent) => {
+      logError({
+        message: e.message || "window error",
+        stack: (e as any).error?.stack,
+        screen: errCtxRef.current.screen,
+        userId: getUserId(errCtxRef.current.user),
+        userName: errCtxRef.current.user?.name,
+      });
+    };
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const r: any = e.reason;
+      logError({
+        message: r?.message || String(r) || "unhandled rejection",
+        stack: r?.stack,
+        screen: errCtxRef.current.screen,
+        userId: getUserId(errCtxRef.current.user),
+        userName: errCtxRef.current.user?.name,
+      });
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
 const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [notices, setNotices] = useState([]);
   const [boardTab, setBoardTab] = useState("전체");
@@ -30097,50 +30294,59 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen(editingPost ? "boardDetail" : "board")}
         user={user}
         editPost={editingPost}
-        onSubmit={(post) => {
-          if (post.id) {
-            supabase
-              .from("posts")
-              .update({
+        onSubmit={async (post) => {
+          try {
+            if (post.id) {
+              const { data, error } = await supabase
+                .from("posts")
+                .update({
+                  title: post.title,
+                  content: post.content,
+                  category: post.category,
+                  image_url: post.image_url || null,
+                  image_path: post.image_path || null,
+                })
+                .eq("id", post.id)
+                .select();
+              if (error) throw error;
+              if (data && data[0]) {
+                setSelectedPost((prev: any) => ({ ...prev, ...data[0] }));
+              }
+              setEditingPost(null);
+              setScreen("boardDetail");
+            } else {
+              const newPost = {
                 title: post.title,
                 content: post.content,
                 category: post.category,
+                author: user?.name,
+                author_emp: user?.employee_number,
+                is_anonymous: false,
+                views: 0,
                 image_url: post.image_url || null,
                 image_path: post.image_path || null,
-              })
-              .eq("id", post.id)
-              .select()
-              .then(({ data }) => {
-                if (data && data[0]) {
-                  setSelectedPost((prev: any) => ({ ...prev, ...data[0] }));
-                }
-                setEditingPost(null);
+              };
+              const { data, error } = await supabase
+                .from("posts")
+                .insert([newPost])
+                .select();
+              if (error) throw error;
+              if (data && data[0]) {
+                setSelectedPost({ ...data[0], comments: [] });
                 setScreen("boardDetail");
-              });
-          } else {
-            const newPost = {
-              title: post.title,
-              content: post.content,
-              category: post.category,
-              author: user?.name,
-              author_emp: user?.employee_number,
-              is_anonymous: false,
-              views: 0,
-              image_url: post.image_url || null,
-              image_path: post.image_path || null,
-            };
-            supabase
-              .from("posts")
-              .insert([newPost])
-              .select()
-              .then(({ data }) => {
-                if (data && data[0]) {
-                  setSelectedPost({ ...data[0], comments: [] });
-                  setScreen("boardDetail");
-                } else {
-                  setScreen("board");
-                }
-              });
+              } else {
+                setScreen("board");
+              }
+            }
+          } catch (e: any) {
+            alert("글 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            logError({
+              message: "게시글 저장 실패: " + (e?.message || String(e)),
+              stack: e?.stack,
+              screen: "게시판글쓰기",
+              userId: getUserId(user),
+              userName: user?.name,
+            });
           }
         }}
       />
@@ -30170,26 +30376,36 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       <InquiryWrite
         onBack={() => setScreen("inquiry")}
         user={user}
-        onSubmit={(inq) => {
-          const newInq = {
-            author: user?.name,
-            author_emp_id: String(user?.emp_id || user?.id || "guest"),
-            title: inq.title,
-            content: inq.content,
-            status: "대기중",
-          };
-          supabase
-            .from("inquiries")
-            .insert([newInq])
-            .select()
-            .then(({ data }) => {
-              if (data && data[0]) {
-                setSelectedInquiry(data[0]);
-                setScreen("inquiryDetail");
-              } else {
-                setScreen("inquiry");
-              }
+        onSubmit={async (inq) => {
+          try {
+            const newInq = {
+              author: user?.name,
+              author_emp_id: String(user?.emp_id || user?.id || "guest"),
+              title: inq.title,
+              content: inq.content,
+              status: "대기중",
+            };
+            const { data, error } = await supabase
+              .from("inquiries")
+              .insert([newInq])
+              .select();
+            if (error) throw error;
+            if (data && data[0]) {
+              setSelectedInquiry(data[0]);
+              setScreen("inquiryDetail");
+            } else {
+              setScreen("inquiry");
+            }
+          } catch (e: any) {
+            alert("문의 등록에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            logError({
+              message: "문의 등록 실패: " + (e?.message || String(e)),
+              stack: e?.stack,
+              screen: "문의작성",
+              userId: getUserId(user),
+              userName: user?.name,
             });
+          }
         }}
       />
     );
