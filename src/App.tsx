@@ -133,6 +133,45 @@ function calcTongsangWork(member: any, date: Date, holidays: string[] = []) {
   const idx = (((baseIdx + steps) % 4) + 4) % 4;
   return { dia: 51 + idx, type: "주간" };
 }
+
+// ── 월급날 계산 ──
+// 매월 20일 지급. 단 20일이 휴일(토·일·공휴일)이면 직전 평일로 앞당김
+// (20일 휴일→19일, 19일도 휴일→18일 ...).
+function getPayday(year: number, month0: number, holidays: string[] = []): Date {
+  const isHol = (d: Date) => {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return true;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return (holidays || []).includes(`${y}-${m}-${dd}`);
+  };
+  const d = new Date(year, month0, 20);
+  d.setHours(0, 0, 0, 0);
+  while (isHol(d)) d.setDate(d.getDate() - 1);
+  return d;
+}
+
+// ── 급여 표시 기준월 계산 ──
+// 오늘이 이번 달 월급날을 '지났으면'(당일 제외) 다음 달 급여로 전환한다.
+// 실적 기준월 = 급여월의 전달(1일~말일). 반환 month는 0-based.
+function getPayContext(today: Date, holidays: string[] = []) {
+  const t = new Date(today);
+  t.setHours(0, 0, 0, 0);
+  const thisPayday = getPayday(t.getFullYear(), t.getMonth(), holidays);
+  const passed = t.getTime() > thisPayday.getTime();
+  let payY = t.getFullYear();
+  let payM = t.getMonth();
+  if (passed) {
+    payM += 1;
+    if (payM > 11) { payM = 0; payY += 1; }
+  }
+  let perfY = payY;
+  let perfM = payM - 1;
+  if (perfM < 0) { perfM = 11; perfY -= 1; }
+  return { passed, payday: thisPayday, payYear: payY, payMonth: payM, perfYear: perfY, perfMonth: perfM };
+}
+
 function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTable: any[], holidays: string[]) {
   if (!diaNo || !diaTable || diaTable.length === 0) return { workHours: 0, nightHours: 0 };
   const date = new Date(dateStr);
