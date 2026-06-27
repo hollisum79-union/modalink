@@ -133,6 +133,56 @@ function calcTongsangWork(member: any, date: Date, holidays: string[] = []) {
   const idx = (((baseIdx + steps) % 4) + 4) % 4;
   return { dia: 51 + idx, type: "주간" };
 }
+
+// ── 월급날 계산 ──
+// 매월 20일 지급. 단 20일이 휴일(토·일·공휴일)이면 직전 평일로 앞당김
+// (20일 휴일→19일, 19일도 휴일→18일 ...).
+function getCachedHolidays(year: number): string[] {
+  // 홈 화면이 localStorage("holidays_연도")에 캐시해둔 공휴일을 동기적으로 읽는다.
+  try {
+    const raw = localStorage.getItem("holidays_" + year);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return [];
+}
+function getPayday(year: number, month0: number, holidays: string[] = []): Date {
+  const isHol = (d: Date) => {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return true;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return (holidays || []).includes(`${y}-${m}-${dd}`);
+  };
+  const d = new Date(year, month0, 20);
+  d.setHours(0, 0, 0, 0);
+  while (isHol(d)) d.setDate(d.getDate() - 1);
+  return d;
+}
+
+// ── 급여 표시 기준월 계산 ──
+// 오늘이 이번 달 월급날을 '지났으면'(당일 제외) 다음 달 급여로 전환한다.
+// 실적 기준월 = 급여월의 전달(1일~말일). 반환 month는 0-based.
+// holidays를 안 넘기면 localStorage 캐시에서 자동으로 읽는다.
+function getPayContext(today: Date, holidays?: string[]) {
+  const t = new Date(today);
+  t.setHours(0, 0, 0, 0);
+  const hol = holidays && holidays.length > 0 ? holidays : getCachedHolidays(t.getFullYear());
+  const thisPayday = getPayday(t.getFullYear(), t.getMonth(), hol);
+  const passed = t.getTime() > thisPayday.getTime();
+  let payY = t.getFullYear();
+  let payM = t.getMonth();
+  if (passed) {
+    payM += 1;
+    if (payM > 11) { payM = 0; payY += 1; }
+  }
+  let perfY = payY;
+  let perfM = payM - 1;
+  if (perfM < 0) { perfM = 11; perfY -= 1; }
+  return { passed, payday: thisPayday, payYear: payY, payMonth: payM, perfYear: perfY, perfMonth: perfM };
+}
+
+
 function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTable: any[], holidays: string[]) {
   if (!diaNo || !diaTable || diaTable.length === 0) return { workHours: 0, nightHours: 0 };
   const date = new Date(dateStr);
@@ -287,8 +337,7 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   let kyobunNightHours = 0;
   if (isKyobun && rotationData.length > 0 && diaTable.length > 0) {
     const n = new Date();
-    const lp = new Date(new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 86400000);
-    const yy = lp.getFullYear(); const mn = lp.getMonth();
+    const { perfYear: yy, perfMonth: mn } = getPayContext(n, holidays);
     const dcount = new Date(yy, mn + 1, 0).getDate();
     const dutyDates = new Set(
       (dutyRecords || [])
@@ -21123,8 +21172,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const now = new Date();
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastPrev = new Date(firstThis.getTime() - 86400000);
-      const py = lastPrev.getFullYear();
-      const pm = lastPrev.getMonth();
+      const py = getPayContext(now, holidays).perfYear;
+      const pm = getPayContext(now, holidays).perfMonth;
       const mm = String(pm + 1).padStart(2, "0");
       const endDay = new Date(py, pm + 1, 0).getDate();
       const ty = now.getFullYear();
@@ -21251,8 +21300,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const now = new Date();
     const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastPrev = new Date(firstThis.getTime() - 86400000);
-    const py = lastPrev.getFullYear();
-    const pm = lastPrev.getMonth();
+    const py = getPayContext(now, holidays).perfYear;
+    const pm = getPayContext(now, holidays).perfMonth;
     const days = new Date(py, pm + 1, 0).getDate();
     let count = 0;
     for (let d = 1; d <= days; d++) {
@@ -21366,8 +21415,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const n = new Date();
     const ft = new Date(n.getFullYear(), n.getMonth(), 1);
     const lp = new Date(ft.getTime() - 86400000);
-    const yy = lp.getFullYear();
-    const mn = lp.getMonth();
+    const yy = getPayContext(n, holidays).perfYear;
+    const mn = getPayContext(n, holidays).perfMonth;
     const dd = new Date(yy, mn + 1, 0).getDate();
     const dutyDates = new Set(
       (dutyRecords || [])
@@ -21399,8 +21448,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     if (!isKyobun || rotationData.length === 0 || diaTable.length === 0) return 0;
     const n = new Date();
     const lp = new Date(new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 86400000);
-    const yy = lp.getFullYear();
-    const mn = lp.getMonth();
+    const yy = getPayContext(n, holidays).perfYear;
+    const mn = getPayContext(n, holidays).perfMonth;
     const dd = new Date(yy, mn + 1, 0).getDate();
     const dutyDates = new Set((dutyRecords || []).filter((r: any) => r.work_shift === "야간").map((r: any) => r.work_date));
     let cnt = 0;
@@ -21800,7 +21849,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           <div style={{ fontSize: 12, color: "#92400E", lineHeight: 1.7 }}>
             ⚠️ 소득세는 부양가족 수, 비과세 항목에 따라 실제와 다를 수 있습니다.
             <br />
-            연장근로수당은 8시간 이하 1.5배, 8시간 초과분은 2배 적용됩니다.
+            시간외수당은 8시간 이하 1.5배, 8시간 초과분은 2배 적용됩니다.
           </div>
         </div>
         <button
@@ -22321,7 +22370,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                             <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
-                    연장근로수당
+                    시간외수당
                   </div>
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
                     근무조정에 기록한 지원근무로 자동 계산
@@ -22338,7 +22387,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   </>
                 ) : (
                   <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
-                    이번 달 연장근로 기록이 없어요.
+                    이번 달 시간외근로 기록이 없어요.
                   </div>
                 )}
               </div>
@@ -22346,17 +22395,17 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
-                    대무충당수당
+                    휴무충당
 
                   </div>
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                    근무조정에 기록한 대무충당으로 자동 계산
+                    근무조정에 기록한 휴무충당으로 자동 계산
                   </div>
                 </div>
                 {hfAutoCount > 0 ? (
                   <>
                     <div style={{ background: "#FEF2F2", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
-                      이번 달 대무충당 {hfAutoCount}회 · 인정 {hfTotalWork.toFixed(2)}시간 (야간 {hfTotalNight.toFixed(2)}시간 포함)
+                      이번 달 휴무충당 {hfAutoCount}회 · 인정 {hfTotalWork.toFixed(2)}시간 (야간 {hfTotalNight.toFixed(2)}시간 포함)
                     </div>
                     <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#DC2626", textAlign: "right" }}>
                       {holidayFillPay.toLocaleString("ko-KR")}원
@@ -22364,7 +22413,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   </>
                 ) : (
                   <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
-                    이번 달 대무충당 기록이 없어요.
+                    이번 달 휴무충당 기록이 없어요.
                   </div>
                 )}
               </div>
@@ -22389,7 +22438,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   }}
                 >
                   <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 13 }}>
-                    예상 급여 명세서
+                    {getPayContext(new Date(), holidays).payMonth + 1}월 예상 급여 명세서
                   </div>
                   <div
                     style={{
@@ -22437,7 +22486,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     ...(overtimePay > 0
                       ? [
                           {
-                            label: `연장근로수당 (${overtimeHour}시간 ${overtimeMin}분)`,
+                            label: `시간외수당 (${overtimeHour}시간 ${overtimeMin}분)`,
                             amount: overtimePay,
                           },
                         ]
@@ -22445,7 +22494,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     ...(holidayFillPay > 0
                       ? [
                           {
-                            label: `휴무충당 (${hfCount}회)`,
+                            label: `휴무충당 (${hfRecords.length}회)`,
                             amount: holidayFillPay,
                           },
                         ]
@@ -22453,7 +22502,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     ...(supportPay > 0
                       ? [
                           {
-                            label: `연장근로수당 (지원근무)`,
+                            label: `시간외수당 (지원근무)`,
                             amount: supportPay,
                           },
                         ]
@@ -29367,9 +29416,10 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const now = new Date();
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastPrev = new Date(firstThis.getTime() - 86400000);
-      const py = lastPrev.getFullYear();
-      const mm = String(lastPrev.getMonth() + 1).padStart(2, "0");
-      const endDay = new Date(py, lastPrev.getMonth() + 1, 0).getDate();
+      const py = getPayContext(now, homeHolidays).perfYear;
+      const pm = getPayContext(now, homeHolidays).perfMonth;
+      const mm = String(pm + 1).padStart(2, "0");
+      const endDay = new Date(py, pm + 1, 0).getDate();
       const ty = now.getFullYear();
       const tm = String(now.getMonth() + 1).padStart(2, "0");
       const tEnd = new Date(ty, now.getMonth() + 1, 0).getDate();
@@ -31162,7 +31212,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             }}
           >
             <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 1 }}>
-              이번 달
+              {getPayContext(new Date(), homeHolidays).payMonth + 1}월
             </div>
             <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 6 }}>
               예상 실수령액
