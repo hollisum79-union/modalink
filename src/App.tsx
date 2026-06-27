@@ -22438,7 +22438,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   }}
                 >
                   <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 13 }}>
-                    예상 급여 명세서
+                    {getPayContext(new Date(), holidays).payMonth + 1}월 예상 급여 명세서
                   </div>
                   <div
                     style={{
@@ -31212,7 +31212,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             }}
           >
             <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 1 }}>
-              이번 달
+              {getPayContext(new Date(), homeHolidays).payMonth + 1}월
             </div>
             <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 6 }}>
               예상 실수령액
