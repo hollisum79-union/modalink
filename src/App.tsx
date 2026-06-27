@@ -21849,7 +21849,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           <div style={{ fontSize: 12, color: "#92400E", lineHeight: 1.7 }}>
             ⚠️ 소득세는 부양가족 수, 비과세 항목에 따라 실제와 다를 수 있습니다.
             <br />
-            연장근로수당은 8시간 이하 1.5배, 8시간 초과분은 2배 적용됩니다.
+            시간외수당은 8시간 이하 1.5배, 8시간 초과분은 2배 적용됩니다.
           </div>
         </div>
         <button
@@ -22370,7 +22370,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                             <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
-                    연장근로수당
+                    시간외수당
                   </div>
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
                     근무조정에 기록한 지원근무로 자동 계산
@@ -22387,7 +22387,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   </>
                 ) : (
                   <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
-                    이번 달 연장근로 기록이 없어요.
+                    이번 달 시간외근로 기록이 없어요.
                   </div>
                 )}
               </div>
@@ -22395,17 +22395,17 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
               <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16, marginTop: 16 }}>
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>
-                    대무충당수당
+                    휴무충당
 
                   </div>
                   <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-                    근무조정에 기록한 대무충당으로 자동 계산
+                    근무조정에 기록한 휴무충당으로 자동 계산
                   </div>
                 </div>
                 {hfAutoCount > 0 ? (
                   <>
                     <div style={{ background: "#FEF2F2", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
-                      이번 달 대무충당 {hfAutoCount}회 · 인정 {hfTotalWork.toFixed(2)}시간 (야간 {hfTotalNight.toFixed(2)}시간 포함)
+                      이번 달 휴무충당 {hfAutoCount}회 · 인정 {hfTotalWork.toFixed(2)}시간 (야간 {hfTotalNight.toFixed(2)}시간 포함)
                     </div>
                     <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#DC2626", textAlign: "right" }}>
                       {holidayFillPay.toLocaleString("ko-KR")}원
@@ -22413,7 +22413,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   </>
                 ) : (
                   <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
-                    이번 달 대무충당 기록이 없어요.
+                    이번 달 휴무충당 기록이 없어요.
                   </div>
                 )}
               </div>
@@ -22486,7 +22486,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     ...(overtimePay > 0
                       ? [
                           {
-                            label: `연장근로수당 (${overtimeHour}시간 ${overtimeMin}분)`,
+                            label: `시간외수당 (${overtimeHour}시간 ${overtimeMin}분)`,
                             amount: overtimePay,
                           },
                         ]
@@ -22494,7 +22494,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     ...(holidayFillPay > 0
                       ? [
                           {
-                            label: `휴무충당 (${hfCount}회)`,
+                            label: `휴무충당 (${hfRecords.length}회)`,
                             amount: holidayFillPay,
                           },
                         ]
@@ -22502,7 +22502,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     ...(supportPay > 0
                       ? [
                           {
-                            label: `연장근로수당 (지원근무)`,
+                            label: `시간외수당 (지원근무)`,
                             amount: supportPay,
                           },
                         ]
