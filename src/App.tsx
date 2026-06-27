@@ -137,6 +137,14 @@ function calcTongsangWork(member: any, date: Date, holidays: string[] = []) {
 // ── 월급날 계산 ──
 // 매월 20일 지급. 단 20일이 휴일(토·일·공휴일)이면 직전 평일로 앞당김
 // (20일 휴일→19일, 19일도 휴일→18일 ...).
+function getCachedHolidays(year: number): string[] {
+  // 홈 화면이 localStorage("holidays_연도")에 캐시해둔 공휴일을 동기적으로 읽는다.
+  try {
+    const raw = localStorage.getItem("holidays_" + year);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return [];
+}
 function getPayday(year: number, month0: number, holidays: string[] = []): Date {
   const isHol = (d: Date) => {
     const day = d.getDay();
@@ -155,10 +163,12 @@ function getPayday(year: number, month0: number, holidays: string[] = []): Date 
 // ── 급여 표시 기준월 계산 ──
 // 오늘이 이번 달 월급날을 '지났으면'(당일 제외) 다음 달 급여로 전환한다.
 // 실적 기준월 = 급여월의 전달(1일~말일). 반환 month는 0-based.
-function getPayContext(today: Date, holidays: string[] = []) {
+// holidays를 안 넘기면 localStorage 캐시에서 자동으로 읽는다.
+function getPayContext(today: Date, holidays?: string[]) {
   const t = new Date(today);
   t.setHours(0, 0, 0, 0);
-  const thisPayday = getPayday(t.getFullYear(), t.getMonth(), holidays);
+  const hol = holidays && holidays.length > 0 ? holidays : getCachedHolidays(t.getFullYear());
+  const thisPayday = getPayday(t.getFullYear(), t.getMonth(), hol);
   const passed = t.getTime() > thisPayday.getTime();
   let payY = t.getFullYear();
   let payM = t.getMonth();
@@ -171,6 +181,7 @@ function getPayContext(today: Date, holidays: string[] = []) {
   if (perfM < 0) { perfM = 11; perfY -= 1; }
   return { passed, payday: thisPayday, payYear: payY, payMonth: payM, perfYear: perfY, perfMonth: perfM };
 }
+
 
 function calcHolidayFillHours(diaNo: any, shift: string, dateStr: string, diaTable: any[], holidays: string[]) {
   if (!diaNo || !diaTable || diaTable.length === 0) return { workHours: 0, nightHours: 0 };
@@ -326,8 +337,7 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   let kyobunNightHours = 0;
   if (isKyobun && rotationData.length > 0 && diaTable.length > 0) {
     const n = new Date();
-    const lp = new Date(new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 86400000);
-    const yy = lp.getFullYear(); const mn = lp.getMonth();
+    const { perfYear: yy, perfMonth: mn } = getPayContext(n, holidays);
     const dcount = new Date(yy, mn + 1, 0).getDate();
     const dutyDates = new Set(
       (dutyRecords || [])
@@ -21162,8 +21172,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const now = new Date();
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastPrev = new Date(firstThis.getTime() - 86400000);
-      const py = lastPrev.getFullYear();
-      const pm = lastPrev.getMonth();
+      const py = getPayContext(now, holidays).perfYear;
+      const pm = getPayContext(now, holidays).perfMonth;
       const mm = String(pm + 1).padStart(2, "0");
       const endDay = new Date(py, pm + 1, 0).getDate();
       const ty = now.getFullYear();
@@ -21290,8 +21300,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const now = new Date();
     const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastPrev = new Date(firstThis.getTime() - 86400000);
-    const py = lastPrev.getFullYear();
-    const pm = lastPrev.getMonth();
+    const py = getPayContext(now, holidays).perfYear;
+    const pm = getPayContext(now, holidays).perfMonth;
     const days = new Date(py, pm + 1, 0).getDate();
     let count = 0;
     for (let d = 1; d <= days; d++) {
@@ -21405,8 +21415,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const n = new Date();
     const ft = new Date(n.getFullYear(), n.getMonth(), 1);
     const lp = new Date(ft.getTime() - 86400000);
-    const yy = lp.getFullYear();
-    const mn = lp.getMonth();
+    const yy = getPayContext(n, holidays).perfYear;
+    const mn = getPayContext(n, holidays).perfMonth;
     const dd = new Date(yy, mn + 1, 0).getDate();
     const dutyDates = new Set(
       (dutyRecords || [])
@@ -21438,8 +21448,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     if (!isKyobun || rotationData.length === 0 || diaTable.length === 0) return 0;
     const n = new Date();
     const lp = new Date(new Date(n.getFullYear(), n.getMonth(), 1).getTime() - 86400000);
-    const yy = lp.getFullYear();
-    const mn = lp.getMonth();
+    const yy = getPayContext(n, holidays).perfYear;
+    const mn = getPayContext(n, holidays).perfMonth;
     const dd = new Date(yy, mn + 1, 0).getDate();
     const dutyDates = new Set((dutyRecords || []).filter((r: any) => r.work_shift === "야간").map((r: any) => r.work_date));
     let cnt = 0;
@@ -29406,9 +29416,10 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const now = new Date();
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastPrev = new Date(firstThis.getTime() - 86400000);
-      const py = lastPrev.getFullYear();
-      const mm = String(lastPrev.getMonth() + 1).padStart(2, "0");
-      const endDay = new Date(py, lastPrev.getMonth() + 1, 0).getDate();
+      const py = getPayContext(now, homeHolidays).perfYear;
+      const pm = getPayContext(now, homeHolidays).perfMonth;
+      const mm = String(pm + 1).padStart(2, "0");
+      const endDay = new Date(py, pm + 1, 0).getDate();
       const ty = now.getFullYear();
       const tm = String(now.getMonth() + 1).padStart(2, "0");
       const tEnd = new Date(ty, now.getMonth() + 1, 0).getDate();
