@@ -12678,6 +12678,12 @@ function RouteInputScreen() {
                   const grouped: any[] = [];
                   let ptr = 0;
                   groups.forEach((g: string) => {
+                    if (g.includes("편승")) {
+                      // 편승: 열번 칸="편승", 구간 칸=역 부분만(예: 편승장대→장대), 시각 없음
+                      const sec = g.replace(/편승/g, "").replace(/[()]/g, "").trim();
+                      grouped.push({ train_no: "편승", section: sec, start_time: "", end_time: "" });
+                      return;
+                    }
                     const idxs = parseRouteAbbr(g);
                     const need = Math.max(idxs.length - 1, 1);
                     const slice = seq.slice(ptr, ptr + need);
