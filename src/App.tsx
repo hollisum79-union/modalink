@@ -12658,10 +12658,35 @@ function RouteInputScreen() {
               const txt = (d.text || "").replace(/```json|```/g, "").trim();
               const parsed = JSON.parse(txt);
               if (parsed.runs && parsed.runs.length > 0) {
-                setRuns(parsed.runs.map((x: any) => ({ train_no: String(x.train_no || ""), section: x.section || "", start_time: String(x.start_time || ""), end_time: String(x.end_time || "") })));
+                let newRuns = parsed.runs.map((x: any) => ({ train_no: String(x.train_no || ""), section: x.section || "", start_time: String(x.start_time || ""), end_time: String(x.end_time || "") }));
+                // 근무형태 약어가 입력돼 있으면 풀어서 구간 자동 채우기
+                let secCount = -1;
+                if (workForm && workForm.trim()) {
+                  const groups = workForm.split(",").map((g: string) => g.trim()).filter((g: string) => g);
+                  const secs: string[] = [];
+                  groups.forEach((g: string) => {
+                    const idxs = parseRouteAbbr(g);
+                    for (let k = 0; k < idxs.length - 1; k++) {
+                      const a = ROUTE_STATIONS[idxs[k]] ? ROUTE_STATIONS[idxs[k]].abbr : "";
+                      const b = ROUTE_STATIONS[idxs[k + 1]] ? ROUTE_STATIONS[idxs[k + 1]].abbr : "";
+                      secs.push(a + b);
+                    }
+                  });
+                  secCount = secs.length;
+                  if (secs.length > 0) newRuns = newRuns.map((r: any, i: number) => ({ ...r, section: secs[i] || r.section }));
+                }
+                setRuns(newRuns);
+                if (secCount >= 0 && secCount !== newRuns.length) {
+                  showToast(`열번 ${newRuns.length}개·약어 구간 ${secCount}개 — 개수가 달라요. 구간을 확인하세요`, "error");
+                } else if (secCount > 0) {
+                  showToast("AI가 읽고 약어로 구간까지 채웠어요. 시각·구간을 확인하세요", "success");
+                } else {
+                  showToast("AI가 읽었어요. 구간·시각을 꼭 확인하세요", "success");
+                }
+              } else {
+                showToast("열번을 읽지 못했어요. 사진을 다시 확인하세요", "error");
               }
               if (parsed.dia && parsed.dia.dia_no) setDiaNo(String(parsed.dia.dia_no));
-              showToast("AI가 읽었어요. 구간·시각을 꼭 확인하세요", "success");
             } catch (err) { setRouteError("읽기 실패: " + String(err)); }
             setRouteLoading(false);
           }} style={{ width: "100%", marginTop: 8, padding: 12, background: routeLoading ? "#9CA3AF" : "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
@@ -12669,7 +12694,7 @@ function RouteInputScreen() {
           </button>
         )}
         {routeError && (<div style={{ color: "#DC2626", fontSize: 12, marginTop: 8 }}>{routeError}</div>)}
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.5 }}>⚠️ AI가 읽은 값은 틀릴 수 있어요. 특히 <b>출발·도착 시각</b>을 확인하고, <b>구간</b>은 직접 입력하세요.</div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.5 }}>💡 위 <b>근무형태 약어</b>를 먼저 입력하면 구간도 자동으로 채워져요. ⚠️ AI 값은 틀릴 수 있으니 <b>출발·도착 시각</b>을 꼭 확인하세요.</div>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>열번별 행로</div>
       <div style={{ ...grid, fontSize: 10, color: "#9CA3AF", marginBottom: 4, padding: "0 2px" }}>
