@@ -408,9 +408,7 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
     if (!sm) return;
     supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
   });
-  const within8s = Math.min(supportOtHours, 8);
-  const over8s = Math.max(supportOtHours - 8, 0);
-  const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
+  const supportPay = Math.round(hourlyWage * supportOtHours * 1.5);
 
     const grossBase = (basicSalary ?? 0) + totalAllowance;
   const totalGross = grossBase + nightPay + holidayFillPay + supportPay;
@@ -12403,6 +12401,9 @@ function RouteDiagram({ runs }: { runs: any[] }) {
 function RouteInputScreen() {
   const [diaNo, setDiaNo] = useState("");
   const [cat, setCat] = useState("평일");
+  const [routePhoto, setRoutePhoto] = useState<string>("");
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState("");
   const [workForm, setWorkForm] = useState("");
   const [diaInfo, setDiaInfo] = useState<any>(null);
   const [savedList, setSavedList] = useState<any[]>([]);
@@ -12630,6 +12631,45 @@ function RouteInputScreen() {
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>근무형태 (약어, 통으로)</div>
         <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
         <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>편승도우미 등에서 열번 검색 시 보여줄 근무형태예요. (그림은 아래 열번별 행로로 그려져요)</div>
+      </div>
+      <div style={{ marginBottom: 16, padding: 12, background: "#F8FAFF", borderRadius: 12, border: "1px solid #E0E7FF" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 8 }}>📷 사진으로 자동 입력</div>
+        <label style={{ display: "block", padding: 12, border: "2px dashed #C7D2FE", borderRadius: 10, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 13, fontWeight: 600 }}>
+          {routePhoto ? "사진 다시 선택" : "근무행로 사진 선택"}
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = () => { setRoutePhoto(String(reader.result)); setRouteError(""); };
+            reader.readAsDataURL(f);
+          }} />
+        </label>
+        {routePhoto && (<img src={routePhoto} alt="미리보기" style={{ width: "100%", borderRadius: 8, marginTop: 8 }} />)}
+        {routePhoto && (
+          <button disabled={routeLoading} onClick={async () => {
+            setRouteLoading(true); setRouteError("");
+            try {
+              const comma = routePhoto.indexOf(",");
+              const meta = routePhoto.slice(5, routePhoto.indexOf(";"));
+              const b64 = routePhoto.slice(comma + 1);
+              const r = await fetch("/.netlify/functions/read-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
+              const d = await r.json();
+              if (d.error) throw new Error(d.error);
+              const txt = (d.text || "").replace(/```json|```/g, "").trim();
+              const parsed = JSON.parse(txt);
+              if (parsed.runs && parsed.runs.length > 0) {
+                setRuns(parsed.runs.map((x: any) => ({ train_no: String(x.train_no || ""), section: x.section || "", start_time: String(x.start_time || ""), end_time: String(x.end_time || "") })));
+              }
+              if (parsed.dia && parsed.dia.dia_no) setDiaNo(String(parsed.dia.dia_no));
+              showToast("AI가 읽었어요. 구간·시각을 꼭 확인하세요", "success");
+            } catch (err) { setRouteError("읽기 실패: " + String(err)); }
+            setRouteLoading(false);
+          }} style={{ width: "100%", marginTop: 8, padding: 12, background: routeLoading ? "#9CA3AF" : "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            {routeLoading ? "AI가 읽는 중…" : "🔍 AI로 읽기"}
+          </button>
+        )}
+        {routeError && (<div style={{ color: "#DC2626", fontSize: 12, marginTop: 8 }}>{routeError}</div>)}
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.5 }}>⚠️ AI가 읽은 값은 틀릴 수 있어요. 특히 <b>출발·도착 시각</b>을 확인하고, <b>구간</b>은 직접 입력하세요.</div>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>열번별 행로</div>
       <div style={{ ...grid, fontSize: 10, color: "#9CA3AF", marginBottom: 4, padding: "0 2px" }}>
@@ -21520,9 +21560,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     if (!sm) return;
     supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
   });
-  const within8s = Math.min(supportOtHours, 8);
-  const over8s = Math.max(supportOtHours - 8, 0);
-   const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
+   const supportPay = Math.round(hourlyWage * supportOtHours * 1.5);
 
     const grossBase = (basicSalary ?? 0) + totalAllowance;
   const totalGross = grossBase + nightPay + overtimePay + holidayFillPay + supportPay;
@@ -21849,7 +21887,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           <div style={{ fontSize: 12, color: "#92400E", lineHeight: 1.7 }}>
             ⚠️ 소득세는 부양가족 수, 비과세 항목에 따라 실제와 다를 수 있습니다.
             <br />
-            시간외수당은 8시간 이하 1.5배, 8시간 초과분은 2배 적용됩니다.
+            시간외수당은 1.5배 적용됩니다.
           </div>
         </div>
         <button
@@ -22379,7 +22417,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 {supportOtHours > 0 ? (
                   <>
                     <div style={{ background: "#ECFEFF", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
-                      이번 달 지원근무 연장 {supportOtHours.toFixed(2)}시간 (8시간 이하 1.5배 · 초과분 2배)
+                      이번 달 지원근무 연장 {supportOtHours.toFixed(2)}시간 (1.5배 적용)
                     </div>
                     <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#0891B2", textAlign: "right" }}>
                       {supportPay.toLocaleString("ko-KR")}원
