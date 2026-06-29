@@ -408,9 +408,7 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
     if (!sm) return;
     supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
   });
-  const within8s = Math.min(supportOtHours, 8);
-  const over8s = Math.max(supportOtHours - 8, 0);
-  const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
+  const supportPay = Math.round(hourlyWage * supportOtHours * 1.5);
 
     const grossBase = (basicSalary ?? 0) + totalAllowance;
   const totalGross = grossBase + nightPay + holidayFillPay + supportPay;
@@ -21520,9 +21518,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     if (!sm) return;
     supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
   });
-  const within8s = Math.min(supportOtHours, 8);
-  const over8s = Math.max(supportOtHours - 8, 0);
-   const supportPay = Math.round(hourlyWage * (within8s * 1.5 + over8s * 2.0));
+   const supportPay = Math.round(hourlyWage * supportOtHours * 1.5);
 
     const grossBase = (basicSalary ?? 0) + totalAllowance;
   const totalGross = grossBase + nightPay + overtimePay + holidayFillPay + supportPay;
@@ -21849,7 +21845,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
           <div style={{ fontSize: 12, color: "#92400E", lineHeight: 1.7 }}>
             ⚠️ 소득세는 부양가족 수, 비과세 항목에 따라 실제와 다를 수 있습니다.
             <br />
-            시간외수당은 8시간 이하 1.5배, 8시간 초과분은 2배 적용됩니다.
+            시간외수당은 1.5배 적용됩니다.
           </div>
         </div>
         <button
@@ -22379,7 +22375,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 {supportOtHours > 0 ? (
                   <>
                     <div style={{ background: "#ECFEFF", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
-                      이번 달 지원근무 연장 {supportOtHours.toFixed(2)}시간 (8시간 이하 1.5배 · 초과분 2배)
+                      이번 달 지원근무 연장 {supportOtHours.toFixed(2)}시간 (1.5배 적용)
                     </div>
                     <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#0891B2", textAlign: "right" }}>
                       {supportPay.toLocaleString("ko-KR")}원
