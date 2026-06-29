@@ -12451,7 +12451,7 @@ function RouteInputScreen() {
   };
   React.useEffect(() => { loadList(); }, []);
   const pick = async (d: string, c: string) => {
-    setDiaNo(d); setCat(c);
+    setDiaNo(d); setCat(c); setSavedCat(c);
     setRoutePhoto(""); setRouteError("");
     const { data } = await supabase.from("dia_route").select("*").eq("dia_no", d).eq("category", c).order("seq", { ascending: true });
     const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", d).eq("category", c).maybeSingle();
@@ -12603,7 +12603,7 @@ function RouteInputScreen() {
               const cnt = savedList.filter((s) => s.category === c).length;
               const on = savedCat === c;
               return (
-                <button key={c} onClick={() => setSavedCat(c)} style={{ border: on ? "none" : "1px solid #E5E7EB", borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: on ? "#4F46E5" : "#fff", color: on ? "#fff" : "#6B7280" }}>{c}{cnt > 0 ? ` (${cnt})` : ""}</button>
+                <button key={c} onClick={() => { setSavedCat(c); setCat(c); }} style={{ border: on ? "none" : "1px solid #E5E7EB", borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: on ? "#4F46E5" : "#fff", color: on ? "#fff" : "#6B7280" }}>{c}{cnt > 0 ? ` (${cnt})` : ""}</button>
               );
             })}
           </div>
@@ -12624,7 +12624,7 @@ function RouteInputScreen() {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>구분</div>
-          <select value={cat} onChange={(e) => setCat(e.target.value)} style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }}>
+          <select value={cat} onChange={(e) => { setCat(e.target.value); setSavedCat(e.target.value); }} style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }}>
             {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
@@ -16435,7 +16435,7 @@ const getKyobunWork = (member: any, date: Date) => {
             <button
               onClick={() => { setEditingDate(null); setNewMemoText(""); setEditingMemoId(null); }}
               style={{
-                position: "absolute", top: 22, right: 18, width: 30, height: 30, borderRadius: "50%",
+                position: "absolute", top: "calc(env(safe-area-inset-top, 12px) + 18px)", right: 18, width: 30, height: 30, borderRadius: "50%",
                 background: "rgba(255,255,255,0.18)", color: "#fff", border: "none", fontSize: 15,
                 cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
               }}
