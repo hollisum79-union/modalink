@@ -12658,35 +12658,54 @@ function RouteInputScreen() {
               const txt = (d.text || "").replace(/```json|```/g, "").trim();
               const parsed = JSON.parse(txt);
               if (parsed.runs && parsed.runs.length > 0) {
-                let newRuns = parsed.runs.map((x: any) => ({ train_no: String(x.train_no || ""), section: x.section || "", start_time: String(x.start_time || ""), end_time: String(x.end_time || "") }));
-                // 근무형태 약어가 입력돼 있으면 풀어서 구간 자동 채우기
-                let secCount = -1;
+                const fmtColon = (s: string) => {
+                  const d = String(s).replace(/\D/g, "");
+                  if (d.length === 6) return d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4, 6);
+                  if (d.length === 5) return "0" + d.slice(0, 1) + ":" + d.slice(1, 3) + ":" + d.slice(3, 5);
+                  return String(s).trim();
+                };
+                const num = (s: string) => Number(String(s).replace(/\D/g, ""));
+                // 1) 열번별로 읽고, 이른 시각=출발 / 늦은 시각=도착으로 정렬
+                const seq = parsed.runs.map((x: any) => {
+                  let st = String(x.start_time || ""), et = String(x.end_time || "");
+                  if (num(st) && num(et) && num(st) > num(et)) { const t = st; st = et; et = t; }
+                  return { train_no: String(x.train_no || ""), start_time: st, end_time: et };
+                });
+                // 2) 근무형태 약어 그룹별로 묶기 (버전 B: 열번·시각 콤마, 구간=그룹 약어 통째)
+                let mismatch = false;
                 if (workForm && workForm.trim()) {
                   const groups = workForm.split(",").map((g: string) => g.trim()).filter((g: string) => g);
-                  const secs: string[] = [];
+                  const grouped: any[] = [];
+                  let ptr = 0;
                   groups.forEach((g: string) => {
                     const idxs = parseRouteAbbr(g);
-                    for (let k = 0; k < idxs.length - 1; k++) {
-                      const a = ROUTE_STATIONS[idxs[k]] ? ROUTE_STATIONS[idxs[k]].abbr : "";
-                      const b = ROUTE_STATIONS[idxs[k + 1]] ? ROUTE_STATIONS[idxs[k + 1]].abbr : "";
-                      secs.push(a + b);
-                    }
+                    const need = Math.max(idxs.length - 1, 1);
+                    const slice = seq.slice(ptr, ptr + need);
+                    ptr += need;
+                    if (slice.length === 0) return;
+                    grouped.push({
+                      train_no: slice.map((r: any) => r.train_no).join(","),
+                      section: g,
+                      start_time: slice.map((r: any) => fmtColon(r.start_time)).join(","),
+                      end_time: slice.map((r: any) => fmtColon(r.end_time)).join(","),
+                    });
                   });
-                  secCount = secs.length;
-                  if (secs.length > 0) newRuns = newRuns.map((r: any, i: number) => ({ ...r, section: secs[i] || r.section }));
-                }
-                setRuns(newRuns);
-                if (secCount >= 0 && secCount !== newRuns.length) {
-                  showToast(`열번 ${newRuns.length}개·약어 구간 ${secCount}개 — 개수가 달라요. 구간을 확인하세요`, "error");
-                } else if (secCount > 0) {
-                  showToast("AI가 읽고 약어로 구간까지 채웠어요. 시각·구간을 확인하세요", "success");
+                  if (ptr !== seq.length) mismatch = true;
+                  setRuns(grouped.length > 0 ? grouped : seq.map((r: any) => ({ train_no: r.train_no, section: "", start_time: fmtColon(r.start_time), end_time: fmtColon(r.end_time) })));
                 } else {
-                  showToast("AI가 읽었어요. 구간·시각을 꼭 확인하세요", "success");
+                  setRuns(seq.map((r: any) => ({ train_no: r.train_no, section: "", start_time: fmtColon(r.start_time), end_time: fmtColon(r.end_time) })));
+                }
+                if (parsed.dia && parsed.dia.dia_no) setDiaNo(String(parsed.dia.dia_no));
+                if (mismatch) {
+                  showToast("열번 수와 약어 구간 수가 안 맞아요. 확인하세요", "error");
+                } else if (workForm && workForm.trim()) {
+                  showToast("AI가 읽고 약어 그룹으로 묶었어요. 시각을 확인하세요", "success");
+                } else {
+                  showToast("AI가 읽었어요. 약어를 넣으면 그룹으로 묶여요", "success");
                 }
               } else {
                 showToast("열번을 읽지 못했어요. 사진을 다시 확인하세요", "error");
               }
-              if (parsed.dia && parsed.dia.dia_no) setDiaNo(String(parsed.dia.dia_no));
             } catch (err) { setRouteError("읽기 실패: " + String(err)); }
             setRouteLoading(false);
           }} style={{ width: "100%", marginTop: 8, padding: 12, background: routeLoading ? "#9CA3AF" : "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
