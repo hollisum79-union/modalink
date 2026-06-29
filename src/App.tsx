@@ -12430,6 +12430,7 @@ function RouteInputScreen() {
 
   const loadExisting = async () => {
     if (!diaNo.trim()) return;
+    setRoutePhoto(""); setRouteError("");
     const { data } = await supabase.from("dia_route").select("*").eq("dia_no", diaNo.trim()).eq("category", cat).order("seq", { ascending: true });
     const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", diaNo.trim()).eq("category", cat).maybeSingle();
     setWorkForm(wf && wf.work_form ? wf.work_form : "");
@@ -12451,6 +12452,7 @@ function RouteInputScreen() {
   React.useEffect(() => { loadList(); }, []);
   const pick = async (d: string, c: string) => {
     setDiaNo(d); setCat(c);
+    setRoutePhoto(""); setRouteError("");
     const { data } = await supabase.from("dia_route").select("*").eq("dia_no", d).eq("category", c).order("seq", { ascending: true });
     const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", d).eq("category", c).maybeSingle();
     setWorkForm(wf && wf.work_form ? wf.work_form : "");
