@@ -22660,32 +22660,51 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   </div>
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "10px",
+                      background: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
+                      borderRadius: 14,
+                      padding: "16px 20px",
+                      textAlign: "center",
                       marginBottom: 4,
-                      background: "#F5F3FF",
-                      borderRadius: 8,
                     }}
                   >
-                    <span
+                    <div
                       style={{
-                        fontSize: 14,
-                        fontWeight: 700,
-                        color: "#4F46E5",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        marginBottom: 6,
                       }}
                     >
-                      세전 합계
-                    </span>
-                    <span
+                      <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>
+                        세전 총지급액
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: "#DCFCE7",
+                          color: "#15803D",
+                          padding: "2px 9px",
+                          borderRadius: 20,
+                        }}
+                      >
+                        확정
+                      </span>
+                    </div>
+                    <div
                       style={{
-                        fontSize: 14,
+                        color: "#fff",
+                        fontSize: 28,
                         fontWeight: 800,
-                        color: "#4F46E5",
+                        letterSpacing: -1,
                       }}
                     >
                       {formatWon(totalGross)}
-                    </span>
+                    </div>
+                    <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 11, marginTop: 3 }}>
+                      다이아·교번 기준 계산
+                    </div>
                   </div>
 
                   <div
@@ -22769,9 +22788,24 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                         fontSize: 14,
                         fontWeight: 700,
                         color: "#EF4444",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
                       }}
                     >
                       공제 합계
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          background: "#FEF3C7",
+                          color: "#B45309",
+                          padding: "2px 8px",
+                          borderRadius: 20,
+                        }}
+                      >
+                        추정
+                      </span>
                     </span>
                     <span
                       style={{
@@ -22787,32 +22821,49 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                   <div
                     style={{
                       marginTop: 16,
-                      background:
-                        "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
+                      background: "#fff",
+                      border: "1px solid #E5E7EB",
                       borderRadius: 14,
-                      padding: "16px 20px",
-                      textAlign: "center",
+                      padding: "14px 18px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
                     }}
                   >
-                    <div
+                    <span
                       style={{
-                        color: "rgba(255,255,255,0.8)",
-                        fontSize: 13,
-                        marginBottom: 6,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: "#1F2937",
                       }}
                     >
                       예상 실수령액
-                    </div>
-                    <div
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          background: "#FEF3C7",
+                          color: "#B45309",
+                          padding: "2px 8px",
+                          borderRadius: 20,
+                        }}
+                      >
+                        추정
+                      </span>
+                    </span>
+                    <span
                       style={{
-                        color: "#fff",
-                        fontSize: 30,
+                        fontSize: 19,
                         fontWeight: 800,
-                        letterSpacing: -1,
+                        color: "#1F2937",
+                        letterSpacing: -0.5,
                       }}
                     >
                       {formatWon(netPay)}
-                    </div>
+                    </span>
                   </div>
 
                   <div
