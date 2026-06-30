@@ -13490,10 +13490,15 @@ useEffect(() => {
                     />
                   </button>
                 </div>
-                <input
+                <textarea
                   value={noticeTitle}
-                  onChange={(e) => setNoticeTitle(e.target.value)}
-                  placeholder="제목을 입력하세요"
+                  onChange={(e) => {
+                    setNoticeTitle(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
+                  placeholder="제목을 입력하세요 (줄바꿈 가능)"
+                  rows={1}
                   style={{
                     width: "100%",
                     padding: "13px 0",
@@ -13506,6 +13511,9 @@ useEffect(() => {
                     fontFamily: "inherit",
                     color: "#1F2937",
                     marginBottom: 16,
+                    resize: "none",
+                    lineHeight: 1.4,
+                    overflow: "hidden",
                   }}
                 />
                 <textarea
@@ -26219,6 +26227,7 @@ function NoticeList({ notices, onBack, onSelect }) {
                   color: "#1F2937",
                   lineHeight: 1.4,
                   wordBreak: "break-word",
+                  whiteSpace: "pre-line",
                   display: "-webkit-box",
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: "vertical",
