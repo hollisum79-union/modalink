@@ -31371,13 +31371,15 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               cursor: "pointer",
             }}
           >
-            <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 1 }}>
-              {getPayContext(new Date(), homeHolidays).payMonth + 1}월
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <span style={{ fontSize: 10, color: "#9CA3AF" }}>
+                {getPayContext(new Date(), homeHolidays).payMonth + 1}월 예상 급여
+              </span>
+              <span style={{ fontSize: 9, fontWeight: 700, background: "#EEF0FF", color: "#4F46E5", padding: "2px 7px", borderRadius: 20 }}>
+                세전
+              </span>
             </div>
-            <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 6 }}>
-              예상 급여 (세전)
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "#1F2937" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#4F46E5", letterSpacing: -0.5 }}>
               {(() => {
                 const d = homeSalaryData;
                 if (!d || !d.memberInfo) return "—";
@@ -31405,11 +31407,16 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 });
                 if (!result) return "—";
                 return result.totalGross.toLocaleString("ko-KR");
-              })()}<span style={{ fontSize: 11, fontWeight: 400 }}>원</span>
+              })()}<span style={{ fontSize: 11, fontWeight: 400, color: "#8B82D6" }}>원</span>
             </div>
-            {payCompare && payCompare.prev != null && (
-              <div style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: payCompare.curr - payCompare.prev >= 0 ? "#16A34A" : "#DC2626" }}>
-                전월 대비 {payCompare.curr - payCompare.prev >= 0 ? "▲" : "▼"}{Math.abs(payCompare.curr - payCompare.prev).toLocaleString("ko-KR")}원
+            {payCompare && payCompare.prev != null ? (
+              <div style={{ fontSize: 11, fontWeight: 700, marginTop: 5, color: payCompare.curr - payCompare.prev >= 0 ? "#16A34A" : "#DC2626" }}>
+                {payCompare.curr - payCompare.prev >= 0 ? "▲" : "▼"} {Math.abs(payCompare.curr - payCompare.prev).toLocaleString("ko-KR")}원
+                <span style={{ fontSize: 9, fontWeight: 400, color: "#9CA3AF", marginLeft: 3 }}>전월 대비</span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 9, fontWeight: 400, color: "#D1D5DB", marginTop: 7 }}>
+                다음 달부터 전월 대비 표시
               </div>
             )}
             
