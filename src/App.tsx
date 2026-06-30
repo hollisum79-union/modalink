@@ -13490,10 +13490,15 @@ useEffect(() => {
                     />
                   </button>
                 </div>
-                <input
+                <textarea
                   value={noticeTitle}
-                  onChange={(e) => setNoticeTitle(e.target.value)}
-                  placeholder="제목을 입력하세요"
+                  onChange={(e) => {
+                    setNoticeTitle(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
+                  placeholder="제목을 입력하세요 (줄바꿈 가능)"
+                  rows={1}
                   style={{
                     width: "100%",
                     padding: "13px 0",
@@ -13506,6 +13511,9 @@ useEffect(() => {
                     fontFamily: "inherit",
                     color: "#1F2937",
                     marginBottom: 16,
+                    resize: "none",
+                    lineHeight: 1.4,
+                    overflow: "hidden",
                   }}
                 />
                 <textarea
@@ -26196,6 +26204,7 @@ function NoticeList({ notices, onBack, onSelect }) {
               borderBottom:
                 i < filtered.length - 1 ? "1px solid #F3F4F6" : "none",
               cursor: "pointer",
+              opacity: n.is_active === false ? 0.5 : 1,
             }}
           >
             <span
@@ -26219,6 +26228,7 @@ function NoticeList({ notices, onBack, onSelect }) {
                   color: "#1F2937",
                   lineHeight: 1.4,
                   wordBreak: "break-word",
+                  whiteSpace: "pre-line",
                   display: "-webkit-box",
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: "vertical",
@@ -26228,7 +26238,7 @@ function NoticeList({ notices, onBack, onSelect }) {
                 {n.pinned && "📌 "}{n.title}
               </div>
               <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>
-                {n.date}
+                {n.date}{n.is_active === false ? " · 지난 공지" : ""}
               </div>
             </div>
             <span style={{ color: "#D1D5DB", fontSize: 18, flexShrink: 0 }}>
@@ -29726,7 +29736,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     const { data } = await supabase
       .from("notices")
       .select("*")
-            .eq("is_active", true)
       .order("pinned", { ascending: false })
       .order("created_at", { ascending: false });
     setNotices(data || []);
@@ -30186,16 +30195,26 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     }
   }, [user, screen]);
 
-  const displayNotices = notices.map((n) => ({
-    ...n,
-    tag: n.tag,
-    tagColor: n.tag === "긴급" ? "#EF4444" : "#4F46E5",
-    tagBg: n.tag === "긴급" ? "#FEE2E2" : "#EEF0FF",
-    date: n.created_at?.slice(0, 10),
-  }));
+  const displayNotices = notices
+    .map((n) => ({
+      ...n,
+      tag: n.tag,
+      tagColor: n.tag === "긴급" ? "#EF4444" : "#4F46E5",
+      tagBg: n.tag === "긴급" ? "#FEE2E2" : "#EEF0FF",
+      date: n.created_at?.slice(0, 10),
+    }))
+    // 숨김 공지(is_active === false)는 목록 아래쪽으로 보냄
+    .sort((a, b) => {
+      const av = a.is_active === false ? 1 : 0;
+      const bv = b.is_active === false ? 1 : 0;
+      return av - bv;
+    });
 
-  const urgentNotice = displayNotices.find((n) => n.tag === "긴급");
-  const carouselNotices = [...displayNotices]
+  // 홈·캐러셀에는 '표시중'인 공지만 (숨김 제외)
+  const activeNotices = displayNotices.filter((n) => n.is_active !== false);
+
+  const urgentNotice = activeNotices.find((n) => n.tag === "긴급");
+  const carouselNotices = [...activeNotices]
     .sort((a, b) => {
       if (a.tag === "긴급" && b.tag !== "긴급") return -1;
       if (a.tag !== "긴급" && b.tag === "긴급") return 1;
@@ -32055,7 +32074,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               더보기 ›
             </span>
           </div>
-          {displayNotices.slice(0, 3).map((n, i) => (
+          {activeNotices.slice(0, 3).map((n, i) => (
             <div
               key={n.id}
               onClick={() => {
