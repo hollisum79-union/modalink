@@ -29508,7 +29508,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     supabase
       .from("monthly_pay")
       .upsert(
-        { employee_number: user.employee_number, year_month: ym, net_pay: result.netPay },
+        { employee_number: user.employee_number, year_month: ym, net_pay: result.netPay, gross_pay: result.totalGross },
         { onConflict: "employee_number,year_month" }
       )
       .then(() => {
@@ -29516,12 +29516,12 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         const pym = `${lp.getFullYear()}-${String(lp.getMonth() + 1).padStart(2, "0")}`;
         supabase
           .from("monthly_pay")
-          .select("net_pay")
+          .select("net_pay, gross_pay")
           .eq("employee_number", user.employee_number)
           .eq("year_month", pym)
           .maybeSingle()
           .then(({ data }) => {
-            setPayCompare({ curr: result.netPay, prev: data ? data.net_pay : null });
+            setPayCompare({ curr: result.totalGross, prev: data ? data.gross_pay : null });
           });
       });
   }, [homeSalaryData, homeDia, homeHolidays, homeRotation, user]);
@@ -31375,7 +31375,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               {getPayContext(new Date(), homeHolidays).payMonth + 1}월
             </div>
             <div style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 6 }}>
-              예상 실수령액
+              예상 급여 (세전)
             </div>
             <div style={{ fontSize: 14, fontWeight: 900, color: "#1F2937" }}>
               {(() => {
@@ -31404,7 +31404,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   hiddenItems: s.hidden_items || [],
                 });
                 if (!result) return "—";
-                return result.netPay.toLocaleString("ko-KR");
+                return result.totalGross.toLocaleString("ko-KR");
               })()}<span style={{ fontSize: 11, fontWeight: 400 }}>원</span>
             </div>
             {payCompare && payCompare.prev != null && (
