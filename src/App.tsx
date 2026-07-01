@@ -22702,9 +22702,6 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     >
                       {formatWon(totalGross)}
                     </div>
-                    <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 11, marginTop: 3 }}>
-                      다이아·교번 기준 계산
-                    </div>
                   </div>
 
                   <div
@@ -29541,7 +29538,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       if (user?.employee_number) {
         const _n = new Date();
         const _td = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}-${String(_n.getDate()).padStart(2, "0")}`;
-        const { data: _ta } = await supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated"]).eq("work_date", _td);
+        const { data: _ta } = await supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated", "support"]).eq("work_date", _td);
         setHomeTodayAdjust(_ta && _ta.length > 0 ? _ta[0] : null);
       }
 
