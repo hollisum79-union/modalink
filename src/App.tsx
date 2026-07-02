@@ -1556,7 +1556,7 @@ function HaebangRaceGame({ onBack, user }: any) {
   const ghostBtn:any = {width:"100%",padding:11,fontSize:14,fontWeight:600,borderRadius:14,background:"transparent",color:"#b9b6d8",border:"1px solid #4a4570",marginTop:8,cursor:"pointer"};
 
   return (
-    <div style={{maxWidth:480,margin:"0 auto",fontFamily:"sans-serif",padding:16,minHeight:"100vh",background:"#0a0820"}}>
+    <div style={{maxWidth:480,margin:"0 auto",fontFamily:"sans-serif",padding:16,paddingTop:"calc(env(safe-area-inset-top, 0px) + 16px)",minHeight:"100vh",background:"#0a0820"}}>
       <style>{"@keyframes hbgblink{0%,100%{opacity:1}50%{opacity:0.28}} .hbg-blink{animation:hbgblink 0.7s infinite;} @keyframes hbgpop{0%{transform:scale(1);opacity:1}35%{transform:scale(1.3)}55%{transform:scale(1.3);background:rgba(226,75,74,0.6);border-color:#fff}100%{transform:scale(0.15);opacity:0}} .roster-item.pop{animation:hbgpop 0.43s ease-out forwards;}"}</style>
       <button onClick={onBack} style={{background:"transparent",border:"none",color:"#b9b6d8",fontSize:15,cursor:"pointer",marginBottom:8}}>← 나가기</button>
 
@@ -11854,6 +11854,28 @@ function FieldRanking() {
   const [rows, setRows] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [openEmp, setOpenEmp] = React.useState<string | null>(null);
+  const [actParts, setActParts] = React.useState<any>({});
+  const [selAct, setSelAct] = React.useState<any>(null);
+  const buildRoster = (a: any) => {
+    const names = actParts[a.id] || [];
+    let txt = "📋 " + a.title + "\n📅 " + (a.activity_date || "") + " · 참여 " + names.length + "명\n\n";
+    txt += names.map((nm: string, k: number) => (k + 1) + ". " + nm).join("\n");
+    return txt;
+  };
+  const copyRoster = (a: any) => {
+    const txt = buildRoster(a);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(txt).then(() => showToast("명단을 복사했어요")).catch(() => showToast("복사 실패", "error"));
+    }
+  };
+  const shareRoster = async (a: any) => {
+    const txt = buildRoster(a);
+    if ((navigator as any).share) {
+      try { await (navigator as any).share({ text: txt }); } catch (e) {}
+    } else {
+      copyRoster(a);
+    }
+  };
 
   React.useEffect(() => {
     (async () => {
@@ -11881,6 +11903,13 @@ function FieldRanking() {
         byEmp[k].total += a ? (a.point || 0) : 0;
         if (a) byEmp[k].list.push(a);
       });
+      const byAct: any = {};
+      (parts || []).forEach((p: any) => {
+        const aid = p.activity_id;
+        if (!byAct[aid]) byAct[aid] = [];
+        byAct[aid].push(nameMap[String(p.employee_number)] || "(미등록)");
+      });
+      setActParts(byAct);
       const ranked = Object.entries(byEmp)
         .map(([emp, v]: any) => ({ emp, name: nameMap[emp] || "(미등록)", count: v.count, total: v.total, list: v.list.sort((x: any, y: any) => String(y.activity_date || "").localeCompare(String(x.activity_date || ""))) }))
         .sort((a, b) => b.total - a.total);
@@ -11915,12 +11944,33 @@ function FieldRanking() {
                       <span style={{ flex: 1, fontSize: 13, color: "#374151" }}>{a.title}</span>
                       <span style={{ fontSize: 11, color: "#9CA3AF", marginRight: 8 }}>{a.activity_date || ""}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: "#4F46E5" }}>+{a.point}P</span>
+                      <span onClick={(e) => { e.stopPropagation(); setSelAct(a); }} style={{ fontSize: 11, fontWeight: 700, color: "#4F46E5", background: "#EEF0FF", padding: "4px 9px", borderRadius: 8, marginLeft: 8, cursor: "pointer" }}>👥 명단</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
           ))}
+        </div>
+      )}
+      {selAct && (
+        <div onClick={() => setSelAct(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 22, maxWidth: 420, width: "100%", maxHeight: "80vh", overflow: "auto" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.4, marginBottom: 4, color: "#1F2937" }}>{selAct.title}</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>{selAct.activity_date || ""} · 참여 {(actParts[selAct.id] || []).length}명</div>
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
+              {(actParts[selAct.id] || []).length === 0 ? (
+                <div style={{ fontSize: 13, color: "#9CA3AF" }}>참여자 정보가 없어요</div>
+              ) : (actParts[selAct.id] || []).map((nm: string, k: number) => (
+                <div key={k} style={{ fontSize: 14, color: "#374151", padding: "5px 0" }}>{k + 1}. {nm}</div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => copyRoster(selAct)} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📋 명단 복사</button>
+              <button onClick={() => shareRoster(selAct)} style={{ flex: 1, padding: 13, borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📤 공유하기</button>
+            </div>
+            <button onClick={() => setSelAct(null)} style={{ width: "100%", marginTop: 10, padding: 11, borderRadius: 12, border: "none", background: "transparent", color: "#9CA3AF", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+          </div>
         </div>
       )}
     </div>
