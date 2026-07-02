@@ -16727,15 +16727,15 @@ const getKyobunWork = (member: any, date: Date) => {
           }}
         >
           {/* 이전달 */}
-          <div style={{ minWidth: "100%", flexShrink: 0, height: "100%" }}>
+          <div style={{ minWidth: "100%", maxWidth: "100%", flexShrink: 0, height: "100%", overflow: "hidden" }}>
             {renderCalendarPanel(prev.y, prev.m, crew)}
           </div>
           {/* 현재달 */}
-          <div style={{ minWidth: "100%", flexShrink: 0, height: "100%" }}>
+          <div style={{ minWidth: "100%", maxWidth: "100%", flexShrink: 0, height: "100%", overflow: "hidden" }}>
             {renderCalendarPanel(currentYear, currentMonth, crew)}
           </div>
           {/* 다음달 */}
-          <div style={{ minWidth: "100%", flexShrink: 0, height: "100%" }}>
+          <div style={{ minWidth: "100%", maxWidth: "100%", flexShrink: 0, height: "100%", overflow: "hidden" }}>
             {renderCalendarPanel(next.y, next.m, crew)}
           </div>
         </div>
