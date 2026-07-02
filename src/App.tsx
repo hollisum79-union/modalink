@@ -16198,7 +16198,7 @@ const getKyobunWork = (member: any, date: Date) => {
             style={{
               flex: 1,
               display: "grid",
-              gridTemplateColumns: "repeat(7,1fr)",
+              gridTemplateColumns: "repeat(7,minmax(0,1fr))",
               borderBottom: "1px solid #F3F4F6",
             }}
           >
@@ -16688,7 +16688,7 @@ const getKyobunWork = (member: any, date: Date) => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(7,1fr)",
+            gridTemplateColumns: "repeat(7,minmax(0,1fr))",
             background: "#F5F3FF",
           }}
         >
@@ -16922,13 +16922,13 @@ const getKyobunWork = (member: any, date: Date) => {
             기준 재설정
           </button>}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid #F3F4F6" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", borderBottom: "1px solid #F3F4F6" }}>
           {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
             <div key={d} style={{ textAlign: "center", padding: "8px 0", fontSize: 12, fontWeight: 700, color: i === 0 ? "#EF4444" : i === 6 ? "#3B82F6" : "#6B7280" }}>{d}</div>
           ))}
         </div>
         {weeks.map((week, wi) => (
-          <div key={wi} style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "1px solid #F3F4F6" }}>
+          <div key={wi} style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", borderBottom: "1px solid #F3F4F6" }}>
             {week.map((day, di) => {
               if (!day) return <div key={di} style={{ background: "#FAFAFA", borderRight: "1px solid #F3F4F6" }} />;
               const date = new Date(currentYear, currentMonth - 1, day);
@@ -17902,7 +17902,7 @@ const getKyobunWork = (member: any, date: Date) => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(7,1fr)",
+            gridTemplateColumns: "repeat(7,minmax(0,1fr))",
             background: "#F5F3FF",
           }}
         >
@@ -17927,7 +17927,7 @@ const getKyobunWork = (member: any, date: Date) => {
             style={{
               flex: 1,
               display: "grid",
-              gridTemplateColumns: "repeat(7,1fr)",
+              gridTemplateColumns: "repeat(7,minmax(0,1fr))",
               borderBottom: "1px solid #F3F4F6",
             }}
           >
