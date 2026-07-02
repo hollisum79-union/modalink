@@ -7450,6 +7450,7 @@ const [showAddCat, setShowAddCat] = useState(false);
   const [upCat, setUpCat] = useState("agreement");
   const [upDesc, setUpDesc] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [aiReading, setAiReading] = useState(false);
 
   // 파일 업로드 처리
   const handleUpload = async () => {
@@ -8204,6 +8205,33 @@ const [showAddCat, setShowAddCat] = useState(false);
                 if (f && !upName.trim()) {
                   setUpName(f.name.replace(/\.[^/.]+$/, ""));
                 }
+                if (f) {
+                  setAiReading(true);
+                  const reader = new FileReader();
+                  reader.onload = async () => {
+                    try {
+                      const base64 = String(reader.result).split(",")[1];
+                      const resp = await fetch("/.netlify/functions/read-doc", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ pdf: base64 }),
+                      });
+                      const data = await resp.json();
+                      let raw = data.text || "";
+                      const s = raw.indexOf("{");
+                      const en = raw.lastIndexOf("}");
+                      if (s >= 0 && en >= 0) raw = raw.slice(s, en + 1);
+                      const parsed = JSON.parse(raw);
+                      if (parsed.title) setUpName(parsed.title);
+                      const desc = [parsed.description, parsed.keywords].filter(Boolean).join(" / ");
+                      if (desc) setUpDesc(desc);
+                    } catch (err) {
+                      // AI 읽기가 실패해도 직접 입력하면 되니 조용히 넘어감
+                    }
+                    setAiReading(false);
+                  };
+                  reader.readAsDataURL(f);
+                }
               }}
               style={{ width: "100%", marginBottom: 14, fontSize: 13 }}
             />
@@ -8251,7 +8279,7 @@ const [showAddCat, setShowAddCat] = useState(false);
             </select>
 
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-              설명 (선택)
+              설명 (선택){aiReading ? " · 🤖 AI가 문서 읽는 중..." : ""}
             </div>
             <input
               value={upDesc}
@@ -11854,28 +11882,6 @@ function FieldRanking() {
   const [rows, setRows] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [openEmp, setOpenEmp] = React.useState<string | null>(null);
-  const [actParts, setActParts] = React.useState<any>({});
-  const [selAct, setSelAct] = React.useState<any>(null);
-  const buildRoster = (a: any) => {
-    const names = actParts[a.id] || [];
-    let txt = "📋 " + a.title + "\n📅 " + (a.activity_date || "") + " · 참여 " + names.length + "명\n\n";
-    txt += names.map((nm: string, k: number) => (k + 1) + ". " + nm).join("\n");
-    return txt;
-  };
-  const copyRoster = (a: any) => {
-    const txt = buildRoster(a);
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(txt).then(() => showToast("명단을 복사했어요")).catch(() => showToast("복사 실패", "error"));
-    }
-  };
-  const shareRoster = async (a: any) => {
-    const txt = buildRoster(a);
-    if ((navigator as any).share) {
-      try { await (navigator as any).share({ text: txt }); } catch (e) {}
-    } else {
-      copyRoster(a);
-    }
-  };
 
   React.useEffect(() => {
     (async () => {
@@ -11903,13 +11909,6 @@ function FieldRanking() {
         byEmp[k].total += a ? (a.point || 0) : 0;
         if (a) byEmp[k].list.push(a);
       });
-      const byAct: any = {};
-      (parts || []).forEach((p: any) => {
-        const aid = p.activity_id;
-        if (!byAct[aid]) byAct[aid] = [];
-        byAct[aid].push(nameMap[String(p.employee_number)] || "(미등록)");
-      });
-      setActParts(byAct);
       const ranked = Object.entries(byEmp)
         .map(([emp, v]: any) => ({ emp, name: nameMap[emp] || "(미등록)", count: v.count, total: v.total, list: v.list.sort((x: any, y: any) => String(y.activity_date || "").localeCompare(String(x.activity_date || ""))) }))
         .sort((a, b) => b.total - a.total);
@@ -11944,33 +11943,12 @@ function FieldRanking() {
                       <span style={{ flex: 1, fontSize: 13, color: "#374151" }}>{a.title}</span>
                       <span style={{ fontSize: 11, color: "#9CA3AF", marginRight: 8 }}>{a.activity_date || ""}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: "#4F46E5" }}>+{a.point}P</span>
-                      <span onClick={(e) => { e.stopPropagation(); setSelAct(a); }} style={{ fontSize: 11, fontWeight: 700, color: "#4F46E5", background: "#EEF0FF", padding: "4px 9px", borderRadius: 8, marginLeft: 8, cursor: "pointer" }}>👥 명단</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
           ))}
-        </div>
-      )}
-      {selAct && (
-        <div onClick={() => setSelAct(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 22, maxWidth: 420, width: "100%", maxHeight: "80vh", overflow: "auto" }}>
-            <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.4, marginBottom: 4, color: "#1F2937" }}>{selAct.title}</div>
-            <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>{selAct.activity_date || ""} · 참여 {(actParts[selAct.id] || []).length}명</div>
-            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
-              {(actParts[selAct.id] || []).length === 0 ? (
-                <div style={{ fontSize: 13, color: "#9CA3AF" }}>참여자 정보가 없어요</div>
-              ) : (actParts[selAct.id] || []).map((nm: string, k: number) => (
-                <div key={k} style={{ fontSize: 14, color: "#374151", padding: "5px 0" }}>{k + 1}. {nm}</div>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => copyRoster(selAct)} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📋 명단 복사</button>
-              <button onClick={() => shareRoster(selAct)} style={{ flex: 1, padding: 13, borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📤 공유하기</button>
-            </div>
-            <button onClick={() => setSelAct(null)} style={{ width: "100%", marginTop: 10, padding: 11, borderRadius: 12, border: "none", background: "transparent", color: "#9CA3AF", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
-          </div>
         </div>
       )}
     </div>
@@ -12091,6 +12069,28 @@ function UnionScheduleAdmin() {
 }
 function FieldActivityList() {
   const [acts, setActs] = React.useState<any[]>([]);
+  const [actNames, setActNames] = React.useState<any>({});
+  const [rosterAct, setRosterAct] = React.useState<any>(null);
+  const buildRoster = (a: any) => {
+    const names = actNames[a.id] || [];
+    let txt = "📋 " + a.title + "\n📅 " + (a.activity_date || "") + " · 참여 " + names.length + "명\n\n";
+    txt += names.map((nm: string, k: number) => (k + 1) + ". " + nm).join("\n");
+    return txt;
+  };
+  const copyRoster = (a: any) => {
+    const txt = buildRoster(a);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(txt).then(() => showToast("명단을 복사했어요")).catch(() => showToast("복사 실패", "error"));
+    }
+  };
+  const shareRoster = async (a: any) => {
+    const txt = buildRoster(a);
+    if ((navigator as any).share) {
+      try { await (navigator as any).share({ text: txt }); } catch (e) {}
+    } else {
+      copyRoster(a);
+    }
+  };
   const [loading, setLoading] = React.useState(true);
   const [editAct, setEditAct] = React.useState<any>(null);
   const [edTitle, setEdTitle] = React.useState("");
@@ -12165,9 +12165,19 @@ function FieldActivityList() {
       if (ids.length > 0) {
         const { data: parts } = await supabase
           .from("field_participants")
-          .select("activity_id")
+          .select("activity_id, employee_number")
           .in("activity_id", ids);
-        (parts || []).forEach((p: any) => { cnt[p.activity_id] = (cnt[p.activity_id] || 0) + 1; });
+        const { data: mem } = await supabase.from("members").select("employee_number, name");
+        const nameMap: any = {};
+        (mem || []).forEach((m: any) => { nameMap[String(m.employee_number)] = m.name; });
+        const byAct: any = {};
+        (parts || []).forEach((p: any) => {
+          const aid = p.activity_id;
+          if (!byAct[aid]) byAct[aid] = [];
+          byAct[aid].push(nameMap[String(p.employee_number)] || "(미등록)");
+          cnt[aid] = (cnt[aid] || 0) + 1;
+        });
+        setActNames(byAct);
       }
       setActs((list || []).map((a: any) => ({ ...a, count: cnt[a.id] || 0 })));
       setLoading(false);
@@ -12239,7 +12249,11 @@ function FieldActivityList() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
                 <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
-                  {a.activity_date || "날짜 없음"} · 참여 {a.count}명{a.point > 0 ? ` · ${a.point}P` : ""}
+                  {a.activity_date || "날짜 없음"} · {a.count > 0 ? (
+                    <span onClick={(e) => { e.stopPropagation(); setRosterAct(a); }} style={{ color: "#4F46E5", fontWeight: 700, cursor: "pointer" }}>👥 참여 {a.count}명</span>
+                  ) : (
+                    <span style={{ color: "#C0C4CC" }}>참여 0명</span>
+                  )}{a.point > 0 ? ` · ${a.point}P` : ""}
                 </div>
               </div>
               <button onClick={() => handleToggleHidden(a)} style={{ padding: "7px 12px", borderRadius: 9, background: a.is_hidden ? "#FEF3C7" : "#ECFDF5", color: a.is_hidden ? "#92400E" : "#059669", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>
@@ -12256,6 +12270,26 @@ function FieldActivityList() {
         </div>
       )}
       </>)}
+      {rosterAct && (
+        <div onClick={() => setRosterAct(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 22, maxWidth: 420, width: "100%", maxHeight: "80vh", overflow: "auto" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.4, marginBottom: 4, color: "#1F2937" }}>{rosterAct.title}</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>{rosterAct.activity_date || ""} · 참여 {(actNames[rosterAct.id] || []).length}명</div>
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
+              {(actNames[rosterAct.id] || []).length === 0 ? (
+                <div style={{ fontSize: 13, color: "#9CA3AF" }}>참여자 정보가 없어요</div>
+              ) : (actNames[rosterAct.id] || []).map((nm: string, k: number) => (
+                <div key={k} style={{ fontSize: 14, color: "#374151", padding: "5px 0" }}>{k + 1}. {nm}</div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => copyRoster(rosterAct)} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📋 명단 복사</button>
+              <button onClick={() => shareRoster(rosterAct)} style={{ flex: 1, padding: 13, borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>📤 공유하기</button>
+            </div>
+            <button onClick={() => setRosterAct(null)} style={{ width: "100%", marginTop: 10, padding: 11, borderRadius: 12, border: "none", background: "transparent", color: "#9CA3AF", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
