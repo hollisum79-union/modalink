@@ -8,20 +8,21 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: "" };
   }
   try {
-    // ① 화면에서 PDF 파일을 받아요 (식단표는 image였지만, 여기선 pdf)
+    // 화면에서 PDF 파일을 받아요
     const { pdf } = JSON.parse(event.body);
 
-    // ② AI에게 시킬 말: 이 문서를 읽고 제목/설명/검색어를 뽑아달라
+    // AI에게 시킬 말: 파일명 말고 "문서 안 내용"만 읽어서 설명·검색어를 만들라
     const prompt =
-      "이것은 노동조합에서 조합원에게 공유하는 자료(PDF 문서)입니다. " +
-      "문서를 읽고, 자료실에 등록할 때 쓸 정보를 만들어 주세요. " +
-      "반드시 아래 JSON 형식으로만 답하세요. 설명이나 다른 말은 절대 쓰지 마세요.\n" +
-      '- title: 문서 제목을 20자 이내로 간결하게\n' +
-      '- description: 이 문서가 어떤 내용인지 한두 문장(50자 이내)으로 요약\n' +
-      '- keywords: 나중에 검색할 때 쓸 핵심 단어 3~5개를 쉼표로 구분\n' +
-      '{"title":"","description":"","keywords":""}';
+      "첨부한 PDF 문서의 '실제 내용'을 읽고, 자료실 검색에 쓸 정보를 만들어 주세요.\n" +
+      "매우 중요한 규칙:\n" +
+      "1) 파일 이름이 아니라 문서 안에 적힌 실제 내용(항목, 안건, 결정사항, 숫자, 날짜 등)을 근거로 만드세요.\n" +
+      "2) 제목은 만들지 마세요.\n" +
+      "3) description은 이 문서가 무엇을 담고 있는지 실제 내용을 바탕으로 한두 문장(60자 이내)으로 요약하세요.\n" +
+      "4) keywords는 문서 안에 실제로 등장하는 핵심 단어·항목명 4~6개를 쉼표로 구분해 넣으세요.\n" +
+      "5) 반드시 아래 JSON 형식으로만 답하고, 다른 말은 절대 쓰지 마세요.\n" +
+      '{"description":"","keywords":""}';
 
-    // ③ AI(Claude)에게 PDF와 지시를 보내요 (열쇠는 창고에서 꺼내 씀)
+    // AI(Claude)에게 PDF와 지시를 보내요 (열쇠는 창고에서 꺼내 씀)
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -47,7 +48,7 @@ exports.handler = async (event) => {
       }),
     });
 
-    // ④ AI 답을 화면에 돌려줘요
+    // AI 답을 화면에 돌려줘요
     const data = await resp.json();
     const text = (data.content || [])
       .filter((b) => b.type === "text")
