@@ -7450,6 +7450,7 @@ const [showAddCat, setShowAddCat] = useState(false);
   const [upCat, setUpCat] = useState("agreement");
   const [upDesc, setUpDesc] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [aiReading, setAiReading] = useState(false);
 
   // 파일 업로드 처리
   const handleUpload = async () => {
@@ -8204,6 +8205,33 @@ const [showAddCat, setShowAddCat] = useState(false);
                 if (f && !upName.trim()) {
                   setUpName(f.name.replace(/\.[^/.]+$/, ""));
                 }
+                if (f) {
+                  setAiReading(true);
+                  const reader = new FileReader();
+                  reader.onload = async () => {
+                    try {
+                      const base64 = String(reader.result).split(",")[1];
+                      const resp = await fetch("/.netlify/functions/read-doc", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ pdf: base64 }),
+                      });
+                      const data = await resp.json();
+                      let raw = data.text || "";
+                      const s = raw.indexOf("{");
+                      const en = raw.lastIndexOf("}");
+                      if (s >= 0 && en >= 0) raw = raw.slice(s, en + 1);
+                      const parsed = JSON.parse(raw);
+                      if (parsed.title) setUpName(parsed.title);
+                      const desc = [parsed.description, parsed.keywords].filter(Boolean).join(" / ");
+                      if (desc) setUpDesc(desc);
+                    } catch (err) {
+                      // AI 읽기가 실패해도 직접 입력하면 되니 조용히 넘어감
+                    }
+                    setAiReading(false);
+                  };
+                  reader.readAsDataURL(f);
+                }
               }}
               style={{ width: "100%", marginBottom: 14, fontSize: 13 }}
             />
@@ -8251,7 +8279,7 @@ const [showAddCat, setShowAddCat] = useState(false);
             </select>
 
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-              설명 (선택)
+              설명 (선택){aiReading ? " · 🤖 AI가 문서 읽는 중..." : ""}
             </div>
             <input
               value={upDesc}
