@@ -8222,7 +8222,6 @@ const [showAddCat, setShowAddCat] = useState(false);
                       const en = raw.lastIndexOf("}");
                       if (s >= 0 && en >= 0) raw = raw.slice(s, en + 1);
                       const parsed = JSON.parse(raw);
-                      if (parsed.title) setUpName(parsed.title);
                       const desc = [parsed.description, parsed.keywords].filter(Boolean).join(" / ");
                       if (desc) setUpDesc(desc);
                     } catch (err) {
