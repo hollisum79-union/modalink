@@ -16237,7 +16237,9 @@ const getKyobunWork = (member: any, date: Date) => {
                     }
                   }}
                   style={{
-                                        padding: "6px 4px",
+                    padding: "6px 4px",
+                    minWidth: 0,
+                    overflow: "hidden",
                     background: isEditing ? "#EEF2FF" : "#fff",
                     borderRight: "1px solid #F3F4F6",
                     cursor: "pointer",
