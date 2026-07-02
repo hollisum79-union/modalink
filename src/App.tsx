@@ -16355,20 +16355,15 @@ const getKyobunWork = (member: any, date: Date) => {
                     );
                   })()}
                   {dayMemos.length > 0 && (
-                    <div style={{ textAlign: "center", marginTop: 3 }}>
-                      {dayMemos.slice(0, 3).map((_, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            width: 4,
-                            height: 4,
-                            borderRadius: "50%",
-                            background: "#6366F1",
-                            display: "inline-block",
-                            margin: "0 1px",
-                          }}
-                        />
+                    <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {dayMemos.slice(0, 2).map((m: any, i: number) => (
+                        <div key={i} style={{ background: "#F3F4F6", borderRadius: 5, padding: "2px 3px", fontSize: 9, color: "#4B5563", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          📝 {String(m.content || "").split("\n")[0]}
+                        </div>
                       ))}
+                      {dayMemos.length > 2 && (
+                        <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", lineHeight: 1.2 }}>+{dayMemos.length - 2}</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -16996,10 +16991,15 @@ const getKyobunWork = (member: any, date: Date) => {
                     </div>
                   )}
                   {dayMemos.length > 0 && (
-                    <div style={{ textAlign: "center", marginTop: 3 }}>
-                      {dayMemos.slice(0, 3).map((_, i) => (
-                        <span key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: "#6366F1", display: "inline-block", margin: "0 1px" }} />
+                    <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {dayMemos.slice(0, 2).map((m: any, i: number) => (
+                        <div key={i} style={{ background: "#F3F4F6", borderRadius: 5, padding: "2px 3px", fontSize: 9, color: "#4B5563", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          📝 {String(m.content || "").split("\n")[0]}
+                        </div>
                       ))}
+                      {dayMemos.length > 2 && (
+                        <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", lineHeight: 1.2 }}>+{dayMemos.length - 2}</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -18121,20 +18121,15 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                     );
                   })()}  
                                 {dayMemos.length > 0 && String(selectedMember?.employee_number) === String(user?.employee_number) && (
-                    <div style={{ textAlign: "center", marginTop: 3 }}>
-                      {dayMemos.slice(0, 3).map((_, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            width: 4,
-                            height: 4,
-                            borderRadius: "50%",
-                            background: "#6366F1",
-                            display: "inline-block",
-                            margin: "0 1px",
-                          }}
-                        />
+                    <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {dayMemos.slice(0, 2).map((m: any, i: number) => (
+                        <div key={i} style={{ background: "#F3F4F6", borderRadius: 5, padding: "2px 3px", fontSize: 9, color: "#4B5563", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          📝 {String(m.content || "").split("\n")[0]}
+                        </div>
                       ))}
+                      {dayMemos.length > 2 && (
+                        <div style={{ fontSize: 8, color: "#9CA3AF", textAlign: "center", lineHeight: 1.2 }}>+{dayMemos.length - 2}</div>
+                      )}
                     </div>
                   )}
                 </div>
