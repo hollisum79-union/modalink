@@ -28768,6 +28768,35 @@ function NoticeAdminPage({ onBack }) {
   );
 }
 // ============================================================
+// 공지 상세 - 연결된 자료 열기 버튼
+// ============================================================
+function NoticeAttachment({ fileId }: { fileId: string }) {
+  const [file, setFile] = React.useState<any>(null);
+  React.useEffect(() => {
+    supabase.from("archive_files").select("*").eq("id", fileId).maybeSingle()
+      .then(({ data }) => setFile(data));
+  }, [fileId]);
+  if (!file) return null;
+  const openFile = () => {
+    if (file.url) { window.open(file.url, "_blank"); return; }
+    if (file.path) {
+      const { data } = supabase.storage.from("archive").getPublicUrl(file.path);
+      if (data?.publicUrl) window.open(data.publicUrl, "_blank");
+    }
+  };
+  return (
+    <div onClick={openFile} style={{ display: "flex", alignItems: "center", gap: 10, background: "#F5F3FF", border: "1px solid #E5E0FF", borderRadius: 12, padding: "12px 14px", marginTop: 16, cursor: "pointer" }}>
+      <span style={{ fontSize: 18 }}>📎</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, color: "#8B82D6", marginBottom: 2 }}>관련 자료</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#4F46E5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</div>
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "#4F46E5", padding: "6px 12px", borderRadius: 8, flexShrink: 0 }}>열기</span>
+    </div>
+  );
+}
+
+// ============================================================
 // 입력 폼: 공지 추가/수정 (notices 테이블)
 // ============================================================
 function NoticeForm({ item, onClose }) {
@@ -28783,6 +28812,15 @@ function NoticeForm({ item, onClose }) {
   const [imgPath, setImgPath] = useState(item?.image_path || "");
   const [pin, setPin] = useState(item?.pinned || false);
   const [imgUploading, setImgUploading] = useState(false);
+  const [archiveFileId, setArchiveFileId] = useState(item?.archive_file_id || "");
+  const [archiveFiles, setArchiveFiles] = useState<any[]>([]);
+  React.useEffect(() => {
+    supabase
+      .from("archive_files")
+      .select("id, name, category_label")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => { if (data) setArchiveFiles(data); });
+  }, []);
 
   const pickImage = async (e) => {
     const file = e.target.files?.[0];
@@ -28822,6 +28860,7 @@ function NoticeForm({ item, onClose }) {
         image_url: imgUrl || null,
                 image_path: imgPath || null,
         pinned: pin,
+        archive_file_id: archiveFileId || null,
       };
       if (isEdit) {
         const { error } = await supabase
@@ -28992,6 +29031,24 @@ function NoticeForm({ item, onClose }) {
             rows={6}
             style={{ ...inp, resize: "vertical", fontFamily: "inherit" }}
           />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={lbl}>관련 자료 (선택)</label>
+          <select
+            value={archiveFileId}
+            onChange={(e) => setArchiveFileId(e.target.value)}
+            style={{ ...inp, fontFamily: "inherit" }}
+          >
+            <option value="">연결 안 함</option>
+            {archiveFiles.map((f) => (
+              <option key={f.id} value={String(f.id)}>
+                {f.category_label ? `[${f.category_label}] ` : ""}{f.name}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+            연결하면 공지 아래에 "📎 자료 열기" 버튼이 생겨요.
+          </div>
         </div>
         <div style={{ marginBottom: 20 }}>
           <label style={lbl}>사진 (선택)</label>
@@ -30442,6 +30499,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   );
                 })}
                         </div>
+              {(selectedNotice as any)?.archive_file_id && (
+                <NoticeAttachment fileId={String((selectedNotice as any).archive_file_id)} />
+              )}
           </div>
           {(user as any)?.is_admin && (
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
