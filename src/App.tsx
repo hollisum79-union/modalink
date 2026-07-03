@@ -11949,7 +11949,24 @@ function UnionScheduleAdmin() {
   const [saving, setSaving] = React.useState(false);
   const [editId, setEditId] = React.useState<any>(null);
   const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const, maxWidth: "100%" };
-  const resetForm = () => { setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc(""); setSurveyOn(false); setEndDate(""); setEditId(null); };
+  const [content, setContent] = React.useState("");
+  const [poster, setPoster] = React.useState<string>("");
+  const [posterUp, setPosterUp] = React.useState(false);
+  const posterPick = async (e: any) => {
+    const f = (e.target.files || [])[0];
+    if (!f) return;
+    setPosterUp(true);
+    try {
+      const blob = await resizeImageToJpeg(f);
+      const path = `union_schedule/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+      const { error } = await supabase.storage.from("archive").upload(path, blob, { contentType: "image/jpeg" });
+      if (error) { showToast("포스터 업로드 실패: " + error.message, "error"); }
+      else { const { data } = supabase.storage.from("archive").getPublicUrl(path); setPoster(data.publicUrl); }
+    } catch (err: any) { showToast("포스터 처리 실패: " + (err?.message || err), "error"); }
+    setPosterUp(false);
+    e.target.value = "";
+  };
+  const resetForm = () => { setTitle(""); setDate(""); setTime(""); setTimeEnd(""); setLoc(""); setSurveyOn(false); setEndDate(""); setEditId(null); setContent(""); setPoster(""); };
   const load = async () => {
     const { data, error } = await supabase.from("union_schedule").select("*").order("event_date", { ascending: false });
     if (error) { console.error("일정 로드 실패:", error); return; }
@@ -11962,7 +11979,7 @@ function UnionScheduleAdmin() {
     setSaving(true);
     if (!time.trim() && timeEnd.trim()) { showToast("종료 시간만 입력할 수 없어요. 시작 시간을 먼저 입력하세요", "error"); setSaving(false); return; }
     const tv = time.trim() ? (timeEnd.trim() ? `${time.trim()}~${timeEnd.trim()}` : time.trim()) : null;
-    const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null, survey_on: surveyOn, end_date: endDate || null };
+    const payload = { title: title.trim(), event_date: date, event_time: tv, location: loc.trim() || null, survey_on: surveyOn, end_date: endDate || null, content: content.trim() || null, poster: poster || null };
     const { error } = editId
       ? await supabase.from("union_schedule").update(payload).eq("id", editId)
       : await supabase.from("union_schedule").insert(payload);
@@ -12004,6 +12021,23 @@ function UnionScheduleAdmin() {
         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>종료를 비우면 "08:00", 채우면 "08:00~10:00"으로 표시됩니다</div>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>장소 (선택)</div>
                 <input value={loc} onChange={(e) => setLoc(e.target.value)} placeholder="예: 지회 사무실" style={{ ...inputStyle, marginBottom: 14 }} />
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>내용 (선택)</div>
+        <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="일정 안내 내용을 입력하세요 (집결 시간, 준비물 등)" style={{ ...inputStyle, marginBottom: 14, minHeight: 88, resize: "vertical", lineHeight: 1.5 }} />
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5 }}>포스터 사진 (선택)</div>
+        {poster ? (
+          <div style={{ position: "relative", marginBottom: 6 }}>
+            <img src={poster} alt="포스터" style={{ width: "100%", borderRadius: 12, display: "block", border: "1px solid #EEE" }} />
+            <div onClick={() => setPoster("")} style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, cursor: "pointer" }}>×</div>
+          </div>
+        ) : (
+          <label style={{ display: "block", border: "1.5px dashed #C7CBD3", borderRadius: 12, background: "#fff", padding: "20px 12px", textAlign: "center", cursor: "pointer", marginBottom: 6 }}>
+            <div style={{ fontSize: 24 }}>🖼️</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#4B5563", marginTop: 6 }}>{posterUp ? "업로드 중..." : "포스터 이미지 첨부"}</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>탭해서 사진 선택 · 1장</div>
+            <input type="file" accept="image/*" onChange={posterPick} style={{ display: "none" }} />
+          </label>
+        )}
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 14 }}>집회·행사 포스터를 올리면 조합원 상세화면에 크게 표시돼요</div>
         <div onClick={() => setSurveyOn((v) => !v)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 12px", border: "1px solid #E5E7EB", borderRadius: 10, marginBottom: 14, cursor: "pointer" }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>참여 조사 받기</div>
@@ -12039,7 +12073,7 @@ function UnionScheduleAdmin() {
                                  {s.event_date}{s.end_date && s.end_date !== s.event_date ? ` ~ ${s.end_date}` : ""}{s.event_time ? ` · ${s.event_time}` : ""}{s.location ? ` · ${s.location}` : ""}
                   </div>
                 </div>
-                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); setLoc(s.location || ""); setSurveyOn(!!s.survey_on); setEndDate(s.end_date || ""); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
+                <button onClick={() => { setEditId(s.id); setTitle(s.title); setDate(s.event_date); const tp = String(s.event_time || "").split("~"); setTime(tp[0] || ""); setTimeEnd(tp[1] || ""); setLoc(s.location || ""); setSurveyOn(!!s.survey_on); setEndDate(s.end_date || ""); setContent(s.content || ""); setPoster(s.poster || ""); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ padding: "7px 12px", borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>수정</button>
                 <button onClick={() => handleDelete(s)} style={{ padding: "7px 12px", borderRadius: 9, background: "#FFEFEF", color: "#E5484D", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>삭제</button>
               </div>
             );
