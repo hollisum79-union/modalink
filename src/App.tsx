@@ -8952,69 +8952,6 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
             </div>
           </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            marginBottom: 20,
-          }}
-        >
-          <EmblemImg
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              border: "3px solid rgba(255,255,255,0.5)",
-              objectFit: "cover",
-              background: "#fff",
-              flexShrink: 0,
-            }}
-          />
-          <div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)" }}>
-              서울교통공사노동조합
-            </div>
-            <div
-              style={{
-                fontSize: 20,
-                fontWeight: 900,
-                color: "#fff",
-                letterSpacing: -0.5,
-              }}
-            >
-              대공원승무지회
-            </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "rgba(255,255,255,0.8)",
-                marginTop: 4,
-              }}
-            >
-              우리 모두의 한 걸음 · 노동조건 변화의 시작
-            </div>
-          </div>
-        </div>
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            background: "rgba(255,255,255,0.15)",
-            borderRadius: 20,
-            padding: "8px 16px",
-          }}
-        >
-          <Icon
-            path="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-            color="#fff"
-            size={16}
-          />
-          <span style={{ fontSize: 13, color: "#fff" }}>
-            현재 조합원 수 <strong>{memberCount}명</strong>
-          </span>
-        </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           {[
             { key: "intro", label: "조직도" },
@@ -9044,6 +8981,14 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
       </div>
 
       <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: 14, marginBottom: 12, display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+          <EmblemImg style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", background: "#fff", flexShrink: 0, border: "1px solid #EEF0FF" }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>대공원승무지회</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>우리 모두의 한 걸음 · 노동조건 변화의 시작</div>
+            <div style={{ fontSize: 12, color: "#4F46E5", fontWeight: 700, marginTop: 4 }}>👥 조합원 {memberCount}명</div>
+          </div>
+        </div>
         {tab === "intro" ? (
           <>
             <div
