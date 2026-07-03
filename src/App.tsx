@@ -27088,6 +27088,7 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
   const [partsByEvent, setPartsByEvent] = React.useState<Record<string, { 참석: string[]; 미정: string[]; 불참: string[] }>>({});
   const [myResp, setMyResp] = React.useState<Record<string, string>>({});
   const [openRoster, setOpenRoster] = React.useState<string | null>(null);
+  const [openDetail, setOpenDetail] = React.useState<string | null>(null);
   const [editId, setEditId] = React.useState<string | null>(null);
   const [ef, setEf] = React.useState<any>({ title: "", date: "", endDate: "", time: "", timeEnd: "", loc: "", survey: false });
   const [saving, setSaving] = React.useState(false);
@@ -27168,6 +27169,7 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
     const responded = tally.참석.length + tally.미정.length + tally.불참.length;
     const noResp = Math.max(0, 152 - responded);
     const mine = myResp[s.id];
+    const hasDetail = !!(s.content || s.poster);
     const segBtn = (val: string, emoji: string, onColor: string, onBg: string) => (
       <button onClick={() => respond(s.id, val)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: mine === val ? `1.5px solid ${onColor}` : "1.5px solid #E5E7EB", background: mine === val ? onBg : "#fff", fontSize: 13, fontWeight: 700, color: mine === val ? onColor : "#6B7280", cursor: "pointer", fontFamily: "inherit" }}>{emoji} {val}</button>
     );
@@ -27190,6 +27192,24 @@ function UnionScheduleScreen({ onBack, user }: { onBack: () => void; user?: any 
             </div>
           </div>
         </div>
+        {hasDetail && (
+          <div>
+            <div onClick={() => setOpenDetail(openDetail === s.id ? null : s.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6", fontSize: 13, fontWeight: 700, color: "#4F46E5", cursor: "pointer" }}>
+              <span>📄 자세히 보기</span>
+              <span>{openDetail === s.id ? "▴" : "▾"}</span>
+            </div>
+            {openDetail === s.id && (
+              <div style={{ marginTop: 12 }}>
+                {s.content && (
+                  <div style={{ fontSize: 14, lineHeight: 1.7, color: "#374151", whiteSpace: "pre-line" }}>{s.content}</div>
+                )}
+                {s.poster && (
+                  <img src={s.poster} alt="포스터" style={{ width: "100%", borderRadius: 12, marginTop: s.content ? 12 : 0, display: "block", border: "1px solid #EEE" }} />
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {showSurvey && (
           <div style={{ marginTop: 14 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
