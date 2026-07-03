@@ -8952,69 +8952,6 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
             </div>
           </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            marginBottom: 20,
-          }}
-        >
-          <EmblemImg
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              border: "3px solid rgba(255,255,255,0.5)",
-              objectFit: "cover",
-              background: "#fff",
-              flexShrink: 0,
-            }}
-          />
-          <div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)" }}>
-              서울교통공사노동조합
-            </div>
-            <div
-              style={{
-                fontSize: 20,
-                fontWeight: 900,
-                color: "#fff",
-                letterSpacing: -0.5,
-              }}
-            >
-              대공원승무지회
-            </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "rgba(255,255,255,0.8)",
-                marginTop: 4,
-              }}
-            >
-              우리 모두의 한 걸음 · 노동조건 변화의 시작
-            </div>
-          </div>
-        </div>
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            background: "rgba(255,255,255,0.15)",
-            borderRadius: 20,
-            padding: "8px 16px",
-          }}
-        >
-          <Icon
-            path="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-            color="#fff"
-            size={16}
-          />
-          <span style={{ fontSize: 13, color: "#fff" }}>
-            현재 조합원 수 <strong>{memberCount}명</strong>
-          </span>
-        </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           {[
             { key: "intro", label: "조직도" },
@@ -9044,6 +8981,14 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
       </div>
 
       <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: 14, marginBottom: 12, display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+          <EmblemImg style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", background: "#fff", flexShrink: 0, border: "1px solid #EEF0FF" }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>대공원승무지회</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>우리 모두의 한 걸음 · 노동조건 변화의 시작</div>
+            <div style={{ fontSize: 12, color: "#4F46E5", fontWeight: 700, marginTop: 4 }}>👥 조합원 {memberCount}명</div>
+          </div>
+        </div>
         {tab === "intro" ? (
           <>
             <div
@@ -12131,6 +12076,10 @@ function FieldActivityList() {
   const [loading, setLoading] = React.useState(true);
   const [editAct, setEditAct] = React.useState<any>(null);
   const [edTitle, setEdTitle] = React.useState("");
+  const [edMembers, setEdMembers] = React.useState<any[]>([]);
+  const [edParts, setEdParts] = React.useState<string[]>([]);
+  const [edOrigParts, setEdOrigParts] = React.useState<string[]>([]);
+  const [edPartSearch, setEdPartSearch] = React.useState("");
   const [edDate, setEdDate] = React.useState("");
   const [edDesc, setEdDesc] = React.useState("");
   const [edPhotos, setEdPhotos] = React.useState<any[]>([]);
@@ -12139,10 +12088,18 @@ function FieldActivityList() {
   const removedRef = React.useRef<string[]>([]);
   const addedRef = React.useRef<string[]>([]);
   const edInput = { width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" as const, WebkitAppearance: "none" as const, appearance: "none" as const, maxWidth: "100%" };
-  const startEdit = (a: any) => {
+  const startEdit = async (a: any) => {
     setEditAct(a); setEdTitle(a.title || ""); setEdDate(a.activity_date || ""); setEdDesc(a.description || "");
     setEdPhotos(Array.isArray(a.photos) ? a.photos : []);
     removedRef.current = []; addedRef.current = [];
+    setEdPartSearch("");
+    // 조합원 목록 + 이 활동의 현재 참여자 불러오기
+    const { data: mem } = await supabase.from("members").select("employee_number, name");
+    setEdMembers(mem || []);
+    const { data: parts } = await supabase.from("field_participants").select("employee_number").eq("activity_id", a.id);
+    const cur = (parts || []).map((p: any) => String(p.employee_number));
+    setEdParts(cur);
+    setEdOrigParts(cur);
   };
   const edPhotoPick = async (e: any) => {
     const files: File[] = Array.from(e.target.files || []);
@@ -12182,7 +12139,23 @@ function FieldActivityList() {
     if (removedRef.current.length > 0) {
       try { await supabase.storage.from("archive").remove(removedRef.current); } catch (e) { console.error("사진 정리 실패:", e); }
     }
-    setActs((prev) => prev.map((x: any) => (x.id === editAct.id ? { ...x, ...payload } : x)));
+    // 참여자·포인트: 바뀐 사람만 반영 (그대로인 사람은 안 건드림 → 중복 방지)
+    const pt = Number(editAct.point) || 0;
+    const added = edParts.filter((e) => !edOrigParts.includes(e));
+    const removed = edOrigParts.filter((e) => !edParts.includes(e));
+    if (added.length > 0) {
+      await supabase.from("field_participants").insert(added.map((emp) => ({ activity_id: editAct.id, employee_number: emp })));
+      if (pt > 0) {
+        await supabase.from("user_points").insert(added.map((emp) => ({ employee_number: emp, action: "활동 참여", point: pt, ref: edTitle.trim() })));
+      }
+    }
+    for (const emp of removed) {
+      await supabase.from("field_participants").delete().eq("activity_id", editAct.id).eq("employee_number", emp);
+      if (pt > 0) {
+        await supabase.from("user_points").delete().eq("employee_number", emp).eq("action", "활동 참여").eq("ref", editAct.title);
+      }
+    }
+    setActs((prev) => prev.map((x: any) => (x.id === editAct.id ? { ...x, ...payload, count: edParts.length } : x)));
     setEditAct(null);
   };
   const cancelEdit = async () => {
@@ -12266,7 +12239,25 @@ function FieldActivityList() {
             {edUploading ? "업로드 중..." : "📷 사진 추가"}
             <input type="file" accept="image/*" multiple onChange={edPhotoPick} disabled={edUploading} style={{ display: "none" }} />
           </label>
-          <div style={{ fontSize: 11, color: "#9CA3AF", margin: "10px 0 14px" }}>포인트·참여자는 수정할 수 없어요 (잘못 지급한 경우 삭제 후 재등록)</div>
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 5, marginTop: 4 }}>참여자 ({edParts.length}명) · 체크하면 포인트도 함께 반영돼요</div>
+          <input value={edPartSearch} onChange={(e) => setEdPartSearch(e.target.value)} placeholder="이름·사번 검색" style={{ ...edInput, marginBottom: 8 }} />
+          <div style={{ maxHeight: 200, overflow: "auto", border: "1px solid #F3F4F6", borderRadius: 10, padding: "4px 10px", marginBottom: 14 }}>
+            {edMembers
+              .filter((m: any) => { const q = edPartSearch.trim(); if (!q) return true; return (m.name || "").includes(q) || String(m.employee_number || "").includes(q); })
+              .sort((a: any, b: any) => (a.name || "").localeCompare(b.name || "", "ko"))
+              .map((m: any) => {
+                const emp = String(m.employee_number);
+                const on = edParts.includes(emp);
+                return (
+                  <div key={emp} onClick={() => setEdParts((prev) => prev.includes(emp) ? prev.filter((x) => x !== emp) : [...prev, emp])} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}>
+                    <span style={{ width: 18, height: 18, borderRadius: 5, border: on ? "none" : "1.5px solid #C7D2FE", background: on ? "#4F46E5" : "#fff", color: "#fff", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{on ? "✓" : ""}</span>
+                    <span style={{ flex: 1, fontSize: 14, color: "#1F2937" }}>{m.name}</span>
+                    <span style={{ fontSize: 12, color: "#9CA3AF" }}>{emp}</span>
+                  </div>
+                );
+              })}
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 14px" }}>체크 추가 = 명단·포인트 추가 / 체크 해제 = 명단·포인트 회수 (바뀐 사람만 반영)</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={saveEdit} disabled={edSaving || edUploading} style={{ flex: 1, padding: "12px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
               {edSaving ? "저장 중..." : "수정 저장"}
