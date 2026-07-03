@@ -7289,12 +7289,13 @@ function ArchiveScreen({ onBack, user }) {
 const [showAddCat, setShowAddCat] = useState(false);
   const [renameFile, setRenameFile] = useState(null);
   const [renameValue, setRenameValue] = useState("");
+  const [editingFile, setEditingFile] = useState<any>(null);
   const [renameDesc, setRenameDesc] = useState("");
   const [moveFile, setMoveFile] = useState(null);
   // ── 뒤로가기: 팝업 닫기 → 카테고리 목록 ──
   useEffect(() => {
     (window as any).__backHandler = () => {
-      if (showUpload) { setShowUpload(false); return true; }
+      if (showUpload) { setShowUpload(false); setEditingFile(null); return true; }
       if (showAddCat) { setShowAddCat(false); return true; }
       if (renameFile) { setRenameFile(null); return true; }
       if (moveFile) { setMoveFile(null); return true; }
@@ -7454,33 +7455,64 @@ const [showAddCat, setShowAddCat] = useState(false);
 
   // 파일 업로드 처리
   const handleUpload = async () => {
-    if (!upFile) { showToast("PDF 파일을 선택해주세요."); return; }
+    // 수정 중이면 파일 없이도 OK(기존 파일 유지). 새로 올리기면 파일 필수.
+    if (!editingFile && !upFile) { showToast("PDF 파일을 선택해주세요."); return; }
     if (!upName.trim()) { showToast("자료 제목을 입력해주세요."); return; }
     setUploading(true);
     try {
-      const safeName = Date.now() + "_" + upFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
-      const path = upCat + "/" + safeName;
-      const { error: upErr } = await supabase.storage.from("archive").upload(path, upFile);
-      if (upErr) throw upErr;
       const catLabel = allCats.find((c) => c.id === upCat)?.label || "";
-      const sizeMB = (upFile.size / 1024 / 1024).toFixed(1) + "MB";
-            const { data: inserted, error: dbErr } = await supabase.from("archive_files").insert({
-        name: upName.trim(),
-        category_id: upCat,
-        category_label: catLabel,
-        path: path,
-        size: sizeMB,
-        description: upDesc.trim() || null,
-      }).select();
-      if (dbErr) throw dbErr;
-      showToast("자료가 등록되었습니다.");
-      if (inserted && inserted[0]) {
-        setDbFiles((prev) => [inserted[0], ...prev]);
+
+      if (editingFile) {
+        // === 수정 모드 ===
+        const fields: any = {
+          name: upName.trim(),
+          category_id: upCat,
+          category_label: catLabel,
+          description: upDesc.trim() || null,
+        };
+        // 새 파일을 골랐으면 → 새로 올리고 옛 파일은 지움(교체)
+        if (upFile) {
+          const safeName = Date.now() + "_" + upFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
+          const newPath = upCat + "/" + safeName;
+          const { error: upErr } = await supabase.storage.from("archive").upload(newPath, upFile);
+          if (upErr) throw upErr;
+          fields.path = newPath;
+          fields.size = (upFile.size / 1024 / 1024).toFixed(1) + "MB";
+          if (editingFile.path) {
+            try { await supabase.storage.from("archive").remove([editingFile.path]); } catch (e) {}
+          }
+        }
+        const { error: dbErr } = await supabase.from("archive_files").update(fields).eq("id", editingFile.id);
+        if (dbErr) throw dbErr;
+        setDbFiles((prev) => prev.map((f) => (f.id === editingFile.id ? { ...f, ...fields } : f)));
+        showToast("자료가 수정되었습니다.");
+      } else {
+        // === 새로 올리기 ===
+        const safeName = Date.now() + "_" + upFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
+        const path = upCat + "/" + safeName;
+        const { error: upErr } = await supabase.storage.from("archive").upload(path, upFile);
+        if (upErr) throw upErr;
+        const sizeMB = (upFile.size / 1024 / 1024).toFixed(1) + "MB";
+        const { data: inserted, error: dbErr } = await supabase.from("archive_files").insert({
+          name: upName.trim(),
+          category_id: upCat,
+          category_label: catLabel,
+          path: path,
+          size: sizeMB,
+          description: upDesc.trim() || null,
+        }).select();
+        if (dbErr) throw dbErr;
+        if (inserted && inserted[0]) {
+          setDbFiles((prev) => [inserted[0], ...prev]);
+        }
+        showToast("자료가 등록되었습니다.");
       }
+
       setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
+      setEditingFile(null);
       setShowUpload(false);
-   } catch (err) {
-      showToast("업로드 실패: " + err.message, "error");
+    } catch (err) {
+      showToast("저장 실패: " + err.message, "error");
     } finally {
       setUploading(false);
     }
@@ -7622,7 +7654,7 @@ const [showAddCat, setShowAddCat] = useState(false);
         </div>
 {isAdmin && !selectedCat && (
           <button
-            onClick={() => setShowUpload(true)}
+            onClick={() => { setEditingFile(null); setUpName(""); setUpCat("agreement"); setUpDesc(""); setUpFile(null); setShowUpload(true); }}
             style={{
               width: "100%",
               marginBottom: 12,
@@ -7726,6 +7758,9 @@ const [showAddCat, setShowAddCat] = useState(false);
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, marginBottom: 8 }}>🔖 빠른 검색</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {["취업규칙", "보수규정"].map((kw, i) => (
+                <button key={"fix" + i} onClick={() => { setSearchQuery(kw); setSelectedCat(null); }} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "#4F46E5", border: "1px solid #4F46E5", borderRadius: 999, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}>📌 {kw}</button>
+              ))}
               {allFiles.slice(0, 8).map((f, i) => (
                 <button key={i} onClick={() => { setSearchQuery(f.name); setSelectedCat(null); }} style={{ fontSize: 12, fontWeight: 600, color: "#4F46E5", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 999, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}>{f.name}</button>
               ))}
@@ -8105,9 +8140,12 @@ const [showAddCat, setShowAddCat] = useState(false);
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setRenameFile(file);
-                        setRenameValue(file.name);
-                        setRenameDesc(file.description || "");
+                        setEditingFile(file);
+                        setUpName(file.name);
+                        setUpCat(file.category_id || "agreement");
+                        setUpDesc(file.description || "");
+                        setUpFile(null);
+                        setShowUpload(true);
                       }}
                       style={{
                         background: "#FEF3C7",
@@ -8167,7 +8205,7 @@ const [showAddCat, setShowAddCat] = useState(false);
 
       {showUpload && (
         <div
-          onClick={() => !uploading && setShowUpload(false)}
+          onClick={() => { if (!uploading) { setShowUpload(false); setEditingFile(null); } }}
           style={{
             position: "fixed",
             inset: 0,
@@ -8190,11 +8228,11 @@ const [showAddCat, setShowAddCat] = useState(false);
             }}
           >
             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: "#1F2937" }}>
-              자료 올리기 📄
+              {editingFile ? "자료 수정 ✏️" : "자료 올리기 📄"}
             </div>
 
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-              PDF 파일
+              PDF 파일{editingFile ? " · 새로 고를 때만 교체 (안 고르면 기존 유지)" : ""}
             </div>
             <input
               type="file"
@@ -8297,7 +8335,7 @@ const [showAddCat, setShowAddCat] = useState(false);
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                onClick={() => setShowUpload(false)}
+                onClick={() => { setShowUpload(false); setEditingFile(null); }}
                 disabled={uploading}
                 style={{
                   flex: 1,
@@ -8328,7 +8366,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                   cursor: "pointer",
                 }}
               >
-                {uploading ? "올리는 중..." : "올리기"}
+                {uploading ? (editingFile ? "수정 중..." : "올리는 중...") : (editingFile ? "수정 완료" : "올리기")}
               </button>
             </div>
           </div>
