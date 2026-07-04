@@ -13030,11 +13030,12 @@ function RouteInputScreen() {
               </button>
               <button onClick={() => runAiExtract(false)} disabled={aiExtracting} style={{ flex: "0 0 auto", padding: "11px 14px", background: "#fff", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>전체 다시</button>
             </div>
+            <div style={{ fontSize: 11, color: "#B45309", background: "#FEF3C7", borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.5 }}>⚠️ AI는 아직 오류가 많아요. 아래 목록을 열어 <b>직접 입력</b>하는 걸 추천해요. (AI는 계속 개선 중이에요)</div>
             {aiExtracting ? <div style={{ fontSize: 12, color: "#4338CA", background: "#EEF2FF", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>AI가 읽는 중... {aiProgress.done} / {aiProgress.total}</div> : null}
 
             <button onClick={() => setAiOpen((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: "10px 12px", fontSize: 12.5, fontWeight: 700, color: "#374151", cursor: "pointer", marginBottom: aiOpen ? 8 : 10 }}>
-              <span>검토·수정 목록 ({aiRows.filter((r: any) => r.work_form && r.work_form.trim()).length}개 채워짐)</span>
-              <span style={{ color: "#9CA3AF" }}>{aiOpen ? "접기 ▲" : "펼치기 ▼"}</span>
+              <span>✏️ 직접 입력 / 검토 ({aiRows.filter((r: any) => r.work_form && r.work_form.trim()).length}개 채워짐)</span>
+              <span style={{ color: "#9CA3AF" }}>{aiOpen ? "접기 ▲" : "열어서 입력 ▼"}</span>
             </button>
 
             {aiOpen ? (
