@@ -15622,6 +15622,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [workForms, setWorkForms] = React.useState<any>({});
   const [popupRoute, setPopupRoute] = React.useState<any>(null);
+  const [popupDiaImg, setPopupDiaImg] = React.useState<string>("");
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
@@ -16277,6 +16278,19 @@ const getKyobunWork = (member: any, date: Date) => {
     return () => { cancel = true; };
   }, [editingDate, selectedMember, activeTab]);
 
+  React.useEffect(() => {
+    if (!editingDate || activeTab !== "교번" || !selectedMember) { setPopupDiaImg(""); return; }
+    const w = getKyobunWork(selectedMember, new Date(editingDate));
+    if (!w) { setPopupDiaImg(""); return; }
+    const dt = getDiaDayType(w.type, new Date(editingDate));
+    if (!dt) { setPopupDiaImg(""); return; }
+    let cancel = false;
+    supabase.from("dia_image").select("image").eq("dia_no", String(w.dia)).eq("category", dt).maybeSingle().then(({ data }: any) => {
+      if (!cancel) setPopupDiaImg(data && data.image ? data.image : "");
+    });
+    return () => { cancel = true; };
+  }, [editingDate, selectedMember, activeTab]);
+
   const isToday = (y: number, m: number, d: number) =>
     d === today.getDate() &&
     m === today.getMonth() + 1 &&
@@ -16808,7 +16822,9 @@ const getKyobunWork = (member: any, date: Date) => {
             {isKyobun && kWork && (
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a1a", marginBottom: 10 }}>🚉 근무행로</div>
-                {popupRoute === undefined ? (
+                {popupDiaImg ? (
+                  <img src={popupDiaImg} alt="근무행로" style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block" }} />
+                ) : popupRoute === undefined ? (
                   <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>불러오는 중...</div>
                 ) : (popupRoute && popupRoute.length > 0) ? (
                   <RouteDiagram runs={popupRoute} />
