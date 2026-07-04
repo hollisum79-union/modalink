@@ -12646,6 +12646,43 @@ function RouteInputScreen() {
   const [exists, setExists] = useState(false);
   const [diaImg, setDiaImg] = useState<string>("");
   const [diaImgMsg, setDiaImgMsg] = useState("");
+  const [bulkCat, setBulkCat] = useState("평일");
+  const [bulkItems, setBulkItems] = useState<any[]>([]);
+  const [bulkMsg, setBulkMsg] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+
+  const onBulkPick = async (e: any) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setBulkMsg("사진 읽는 중...");
+    const readOne = (file: any) => new Promise<any>((resolve) => {
+      const nameNoExt = String(file.name).replace(/\.[^.]+$/, "");
+      const m = nameNoExt.match(/\d+/);
+      if (!m) { resolve(null); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve({ dia_no: m[0], image: String(reader.result || ""), name: file.name });
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+    const results = (await Promise.all(files.map(readOne))).filter(Boolean);
+    results.sort((a: any, b: any) => Number(a.dia_no) - Number(b.dia_no));
+    const skipped = files.length - results.length;
+    setBulkItems(results);
+    setBulkMsg(results.length + "장 인식됨" + (skipped > 0 ? (" · " + skipped + "장은 파일명에 숫자가 없어 제외") : ""));
+  };
+  const saveBulk = async () => {
+    if (bulkItems.length === 0) return;
+    setBulkSaving(true);
+    setBulkMsg("저장 중...");
+    const rows = bulkItems.map((it: any) => ({ dia_no: String(it.dia_no), category: bulkCat, image: it.image, updated_at: new Date().toISOString() }));
+    const { error } = await supabase.from("dia_image").upsert(rows);
+    setBulkSaving(false);
+    if (error) { setBulkMsg("저장 실패: " + error.message); return; }
+    setBulkMsg("완료! " + bulkCat + " " + rows.length + "장 저장됐어요");
+    setBulkItems([]);
+    setTimeout(() => setBulkMsg(""), 4000);
+  };
 
   React.useEffect(() => {
     const d = diaNo.trim();
@@ -12862,6 +12899,28 @@ function RouteInputScreen() {
         </label>
       </div>
       <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.5 }}>양식을 받아 채운 뒤 올리면 한 번에 저장돼요. 같은 다이아·구분은 덮어쓰기 돼요. 아래 폼으로 한 건씩 입력·수정도 가능해요.</div>
+
+      <div style={{ marginBottom: 16, padding: 14, background: "#F0FDF4", borderRadius: 12, border: "1px solid #BBF7D0" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#059669", marginBottom: 4 }}>📚 사진 여러 장 한번에 올리기</div>
+        <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 10 }}>구분을 고르고 그 폴더 사진을 전부 선택하세요. 파일명 숫자(1, 2, 51…)를 다이아 번호로 저장해요.</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <select value={bulkCat} onChange={(e) => setBulkCat(e.target.value)} style={{ flex: "0 0 96px", padding: "9px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, background: "#fff" }}>
+            {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <label style={{ flex: 1, textAlign: "center", padding: "9px", background: "#059669", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            사진 여러 장 선택
+            <input type="file" accept="image/*" multiple onChange={onBulkPick} style={{ display: "none" }} />
+          </label>
+        </div>
+        {bulkItems.length > 0 ? (
+          <div style={{ background: "#fff", borderRadius: 8, padding: 10, marginBottom: 10, border: "1px solid #E5E7EB" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{bulkCat} · {bulkItems.length}장</div>
+            <div style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.6 }}>{bulkItems.map((it: any) => it.dia_no).join(", ")}번</div>
+            <button onClick={saveBulk} disabled={bulkSaving} style={{ width: "100%", marginTop: 10, background: "#059669", color: "#fff", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{bulkSaving ? "저장 중..." : (bulkItems.length + "장 저장하기")}</button>
+          </div>
+        ) : null}
+        {bulkMsg ? <div style={{ fontSize: 12, color: "#059669", textAlign: "center", fontWeight: 600 }}>{bulkMsg}</div> : null}
+      </div>
 
       {savedList.length > 0 && (
         <div style={{ marginBottom: 16 }}>
