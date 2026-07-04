@@ -1,18 +1,21 @@
-// netlify/functions/read-form.js
-// 근무행로 사진에서 "근무형태 약어"(예: 대온,온도대)를 AI로 읽어오는 서버 함수입니다.
-// read-dia.js 와 같은 구조입니다. (같은 ANTHROPIC_API_KEY 환경변수, 같은 방식)
+// netlify/functions/read-form.js  (개선판 v2)
+// 근무행로 사진에서 "근무형태 약어"(예: 대온,온도대)를 AI로 읽어옵니다.
+// read-dia.js 와 같은 구조입니다. (같은 ANTHROPIC_API_KEY 환경변수)
 //
-// ※ 만약 실행했을 때 오류가 나면, read-dia.js 파일을 열어서
-//    아래 model 값과 anthropic-version 값이 똑같은지 비교해 맞춰주세요.
+// v2 개선점:
+//  1) 역 칸의 왼쪽→오른쪽 순서를 AI에게 알려줌
+//  2) AI가 열번을 하나씩 짚으며 생각한 뒤 답하게 함(정확도 ↑)
+//  3) 정답 예시(형식)를 보여줌
+//  4) AI가 생각을 길게 해도, 맨 끝의 <<<FORM:...>>> 부분만 뽑아서 앱에 돌려줌
+//
+// ※ 오류가 나면 read-dia.js 를 열어 model 값과 anthropic-version 값을 똑같이 맞춰주세요.
 
 exports.handler = async (event) => {
-  // 1) POST 요청만 받습니다.
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "POST 요청만 받아요." }) };
   }
 
   try {
-    // 2) 앱이 보낸 사진(base64)과 형식을 꺼냅니다.
     const body = JSON.parse(event.body || "{}");
     const image = body.image;
     const mediaType = body.mediaType || "image/jpeg";
@@ -20,35 +23,42 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: "이미지가 없어요." }) };
     }
 
-    // 3) API 키 확인 (Netlify 환경변수)
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return { statusCode: 500, body: JSON.stringify({ error: "ANTHROPIC_API_KEY 환경변수가 설정되지 않았어요." }) };
+      return { statusCode: 500, body: JSON.stringify({ error: "ANTHROPIC_API_KEY 환경변수가 없어요." }) };
     }
 
-    // 4) AI에게 줄 지시문 (7호선 역 약어표 포함)
     const prompt = [
       "당신은 서울 지하철 7호선 승무 근무행로표를 읽는 전문가입니다.",
-      "첨부한 근무행로 이미지를 보고, 그 다이아의 '근무형태 약어' 문자열을 만들어 주세요.",
+      "이 이미지는 '선으로 그린 근무행로표'입니다. 동그라미 안에 열번(예: 7306, 1960)이 있고,",
+      "그 열번에서 가로선이 왼쪽/오른쪽 역 칸까지 그어져 있습니다. 선의 양 끝이 닿는 역을 읽어야 합니다.",
       "",
-      "역 이름 → 약어 대응표:",
-      "도봉기지=도기, 장암=장, 도봉산=도, 수락산=수, 태릉입구=태, 어린이대공원=대,",
-      "건대입구=건, 청담=청, 내방=내, 보라매=보, 신풍=신, 가산디지털단지=가,",
-      "광명사거리=광, 천왕=천, 온수=온, 부평구청=부, 석남=석, 천왕기지=천기",
+      "◆ 역 칸은 왼쪽부터 오른쪽으로 이 순서입니다 (괄호는 약어):",
+      "도봉기(도기) · 장암(장) · 도봉산(도) · 수락산(수) · 태릉입(태) · 어린이(대) · 건대입(건) ·",
+      "청담(청) · 내방(내) · 보라매(보) · 신풍(신) · 가산디(가) · 광명사(광) · 천왕(천) ·",
+      "온수(온) · 부평구(부) · 석남(석) · 천왕기(천기)",
       "",
-      "규칙:",
-      "1) 이미지에 이미 '대온,온도대' 같은 약어 문자열이 인쇄돼 있으면, 그것을 그대로 옮겨 적으세요.",
-      "2) 인쇄돼 있지 않으면, 각 열차 운행(열번)마다 출발역·회차역·도착역을 위 약어표로 이어 붙이세요.",
-      "   예: 어린이대공원 출발 → 온수 도착 = '대온'",
-      "3) 운행(열번)이 여러 개면 쉼표(,)로 구분하세요. 예: '대온,온도대'",
-      "4) 약어만 쓰고, 시각(예: 06:51)이나 열번 숫자(예: 7074)는 넣지 마세요.",
-      "5) 손님으로 타고 이동하는 '편승'이 있으면 그 구간 앞에 '편승'을 붙이세요. 예: '편승장대'",
+      "◆ 만드는 법:",
+      "1) 열번(동그라미)을 위에서 아래로 하나씩 봅니다.",
+      "2) 각 열번의 가로선이 '어느 역 칸에서 시작해서 어느 역 칸까지 가는지' 봅니다.",
+      "   그 열차가 지나는 주요 역(출발역, 회차역, 종착역)을 이동 순서대로 약어로 이어 붙입니다.",
+      "   예) 어린이대공원에서 출발해 온수까지 = '대온'.  온수→도봉산→어린이 = '온도대'.",
+      "3) 열번마다 만든 약어들을 쉼표(,)로 이어 붙입니다.",
+      "4) 점선으로 그려지고 '편승'이라 적힌 구간은 앞에 '편승'을 붙입니다. 예: '편승장대'.",
+      "5) 시각(06:51 등)과 열번 숫자(7306 등)는 약어에 넣지 않습니다.",
       "",
-      "반드시 아래 JSON 형식 하나로만 답하세요. 설명·인사·코드블록 표시(```)는 절대 넣지 마세요:",
-      '{"form": "여기에 약어 문자열"}',
+      "◆ 올바른 결과 예시(형식 참고용):",
+      "  대온,온도대,대장대",
+      "  대신,신장대,대장대",
+      "  대온,온대,대장,장온,온대",
+      "  대도대,대도도기,장온,온대",
+      "",
+      "◆ 답하는 방법:",
+      "먼저 각 열번을 하나씩 짚으며 어느 역에서 어느 역까지 가는지 짧게 확인하세요.",
+      "그리고 맨 마지막 줄에, 반드시 아래 형식으로 최종 약어만 쓰세요(다른 글자 없이):",
+      "<<<FORM:여기에 약어 문자열>>>",
     ].join("\n");
 
-    // 5) Anthropic API 호출 (read-dia.js 와 동일한 방식)
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -58,7 +68,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages: [
           {
             role: "user",
@@ -72,19 +82,29 @@ exports.handler = async (event) => {
     });
 
     const data = await resp.json();
-
-    // 6) API 오류 처리
     if (data.error) {
       return { statusCode: 500, body: JSON.stringify({ error: (data.error && data.error.message) || "AI 호출 오류" }) };
     }
 
-    // 7) AI 답변에서 글자 부분만 모아서 { text } 로 돌려줍니다.
-    const text = (data.content || [])
+    // AI 답변 글자 모으기
+    const raw = (data.content || [])
       .filter((c) => c.type === "text")
       .map((c) => c.text)
       .join("");
 
-    return { statusCode: 200, body: JSON.stringify({ text }) };
+    // 맨 끝의 <<<FORM:...>>> 안에서 약어만 뽑기
+    let form = "";
+    const m = raw.match(/<<<FORM:([\s\S]*?)>>>/);
+    if (m) {
+      form = m[1].trim();
+    } else {
+      // 혹시 형식을 안 지켰으면, 마지막 줄을 후보로 사용
+      const lines = raw.split("\n").map((s) => s.trim()).filter(Boolean);
+      form = lines.length ? lines[lines.length - 1] : "";
+    }
+
+    // 앱이 기대하는 형태 { text: '{"form":"..."}' } 로 돌려줌
+    return { statusCode: 200, body: JSON.stringify({ text: JSON.stringify({ form: form }) }) };
   } catch (e) {
     return { statusCode: 500, body: JSON.stringify({ error: String(e) }) };
   }
