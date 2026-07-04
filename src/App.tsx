@@ -12544,6 +12544,92 @@ function RouteDiagram({ runs }: { runs: any[] }) {
     </div>
   );
 }
+function ImageZoomViewer({ src, onClose }: { src: string; onClose: () => void }) {
+  const wrapRef = React.useRef<any>(null);
+  const stageRef = React.useRef<any>(null);
+  const s = React.useRef({ scale: 1, tx: 0, ty: 0, base: 1 });
+  React.useEffect(() => {
+    const wrap = wrapRef.current, stage = stageRef.current;
+    if (!wrap || !stage) return;
+    const img = stage.querySelector("img");
+    let panning = false, lastX = 0, lastY = 0, startDist = 0, startScale = 1, midX = 0, midY = 0;
+    const apply = () => { stage.style.transform = `translate(${s.current.tx}px,${s.current.ty}px) scale(${s.current.scale})`; };
+    const fit = () => {
+      const iw = img.naturalWidth || img.clientWidth || 800, ih = img.naturalHeight || img.clientHeight || 400;
+      const ww = wrap.clientWidth, wh = wrap.clientHeight;
+      const base = Math.min(ww / iw, wh / ih) * 0.98;
+      s.current.base = base; s.current.scale = base;
+      s.current.tx = (ww - iw * base) / 2;
+      s.current.ty = (wh - ih * base) / 2;
+      apply();
+    };
+    if (img.complete) fit(); else img.onload = fit;
+    const dist = (t: any) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const clamp = (v: number) => Math.max(s.current.base * 0.6, Math.min(s.current.base * 8, v));
+    const onTS = (e: any) => {
+      if (e.touches.length === 2) {
+        startDist = dist(e.touches); startScale = s.current.scale;
+        const r = wrap.getBoundingClientRect();
+        midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+        midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+      } else if (e.touches.length === 1) {
+        panning = true; lastX = e.touches[0].clientX - s.current.tx; lastY = e.touches[0].clientY - s.current.ty;
+      }
+    };
+    const onTM = (e: any) => {
+      e.preventDefault();
+      if (e.touches.length === 2) {
+        const d = dist(e.touches);
+        const ns = clamp(startScale * (d / startDist));
+        const k = ns / s.current.scale;
+        s.current.tx = midX - (midX - s.current.tx) * k;
+        s.current.ty = midY - (midY - s.current.ty) * k;
+        s.current.scale = ns; apply();
+      } else if (e.touches.length === 1 && panning) {
+        s.current.tx = e.touches[0].clientX - lastX;
+        s.current.ty = e.touches[0].clientY - lastY; apply();
+      }
+    };
+    const onTE = (e: any) => { if (e.touches.length === 0) panning = false; };
+    const onWheel = (e: any) => {
+      e.preventDefault();
+      const r = wrap.getBoundingClientRect();
+      const mx = e.clientX - r.left, my = e.clientY - r.top;
+      const ns = clamp(s.current.scale * (e.deltaY < 0 ? 1.12 : 0.89));
+      const k = ns / s.current.scale;
+      s.current.tx = mx - (mx - s.current.tx) * k;
+      s.current.ty = my - (my - s.current.ty) * k;
+      s.current.scale = ns; apply();
+    };
+    wrap.addEventListener("touchstart", onTS, { passive: false });
+    wrap.addEventListener("touchmove", onTM, { passive: false });
+    wrap.addEventListener("touchend", onTE);
+    wrap.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      wrap.removeEventListener("touchstart", onTS);
+      wrap.removeEventListener("touchmove", onTM);
+      wrap.removeEventListener("touchend", onTE);
+      wrap.removeEventListener("wheel", onWheel);
+    };
+  }, [src]);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(10,12,25,0.94)", zIndex: 3000, display: "flex", flexDirection: "column", touchAction: "none" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", color: "#fff", flex: "0 0 auto" }}>
+        <span style={{ fontSize: 14, fontWeight: 700 }}>🚉 근무행로</span>
+        <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>✕</button>
+      </div>
+      <div ref={wrapRef} style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+        <div ref={stageRef} style={{ position: "absolute", top: 0, left: 0, transformOrigin: "0 0", willChange: "transform" }}>
+          <img src={src} alt="근무행로" draggable={false} style={{ display: "block", userSelect: "none", pointerEvents: "none" }} />
+        </div>
+      </div>
+      <div style={{ flex: "0 0 auto", padding: "12px 16px 22px", color: "#cbd5e1", textAlign: "center", fontSize: 12 }}>
+        두 손가락으로 확대·축소 · 끌어서 이동
+      </div>
+    </div>
+  );
+}
+
 function RouteInputScreen() {
   const [diaNo, setDiaNo] = useState("");
   const [cat, setCat] = useState("평일");
@@ -15623,6 +15709,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [workForms, setWorkForms] = React.useState<any>({});
   const [popupRoute, setPopupRoute] = React.useState<any>(null);
   const [popupDiaImg, setPopupDiaImg] = React.useState<string>("");
+  const [zoomImg, setZoomImg] = React.useState<string>("");
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
   const [tsPickDia, setTsPickDia] = React.useState(51);
@@ -16823,7 +16910,7 @@ const getKyobunWork = (member: any, date: Date) => {
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a1a", marginBottom: 10 }}>🚉 근무행로</div>
                 {popupDiaImg ? (
-                  <img src={popupDiaImg} alt="근무행로" style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block" }} />
+                  <img src={popupDiaImg} alt="근무행로" onClick={() => setZoomImg(popupDiaImg)} style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block", cursor: "zoom-in" }} />
                 ) : popupRoute === undefined ? (
                   <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>불러오는 중...</div>
                 ) : (popupRoute && popupRoute.length > 0) ? (
@@ -16835,6 +16922,7 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
           </div>
                 </div>
+      {zoomImg ? <ImageZoomViewer src={zoomImg} onClose={() => setZoomImg("")} /> : null}
       {allWorkOpen && (() => {
           const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
           const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
