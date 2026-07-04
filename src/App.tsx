@@ -12650,6 +12650,15 @@ function RouteInputScreen() {
   const [bulkItems, setBulkItems] = useState<any[]>([]);
   const [bulkMsg, setBulkMsg] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [aiCat, setAiCat] = useState("평일");
+  const [aiRows, setAiRows] = useState<any[]>([]);
+  const [aiLoadMsg, setAiLoadMsg] = useState("");
+  const [aiLoaded, setAiLoaded] = useState(false);
+  const [aiExtracting, setAiExtracting] = useState(false);
+  const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 });
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiSaveMsg, setAiSaveMsg] = useState("");
 
   const onBulkPick = async (e: any) => {
     const files = Array.from(e.target.files || []);
@@ -12682,6 +12691,86 @@ function RouteInputScreen() {
     setBulkMsg("완료! " + bulkCat + " " + rows.length + "장 저장됐어요");
     setBulkItems([]);
     setTimeout(() => setBulkMsg(""), 4000);
+  };
+
+  const loadAiImages = async () => {
+    setAiLoadMsg("사진 불러오는 중...");
+    setAiRows([]);
+    setAiLoaded(false);
+    setAiOpen(false);
+    setAiSaveMsg("");
+    const { data: imgs } = await supabase.from("dia_image").select("dia_no, image").eq("category", aiCat);
+    const { data: forms } = await supabase.from("dia_work_form").select("dia_no, work_form").eq("category", aiCat);
+    const formMap: any = {};
+    (forms || []).forEach((ff: any) => { formMap[String(ff.dia_no)] = ff.work_form || ""; });
+    const rows = (imgs || []).map((it: any) => ({
+      dia_no: String(it.dia_no),
+      image: it.image || "",
+      work_form: formMap[String(it.dia_no)] || "",
+      existing: !!formMap[String(it.dia_no)],
+      fromAI: false,
+    }));
+    rows.sort((a: any, b: any) => (Number(a.dia_no) - Number(b.dia_no)) || a.dia_no.localeCompare(b.dia_no));
+    setAiRows(rows);
+    setAiLoaded(true);
+    const emptyCnt = rows.filter((r: any) => !r.work_form).length;
+    setAiLoadMsg(aiCat + " 사진 " + rows.length + "장 · 약어 있음 " + (rows.length - emptyCnt) + "장 · 빈 것 " + emptyCnt + "장");
+  };
+
+  const runAiExtract = async (onlyEmpty: boolean) => {
+    const targets = aiRows.filter((r: any) => (onlyEmpty ? !r.work_form : true));
+    if (targets.length === 0) { showToast("추출할 대상이 없어요", "error"); return; }
+    setAiExtracting(true);
+    setAiProgress({ done: 0, total: targets.length });
+    let done = 0;
+    for (const row of targets) {
+      try {
+        const img = row.image || "";
+        const comma = img.indexOf(",");
+        if (comma < 0) { done++; setAiProgress({ done, total: targets.length }); continue; }
+        const meta = img.slice(5, img.indexOf(";"));
+        const b64 = img.slice(comma + 1);
+        const r = await fetch("/.netlify/functions/read-form", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
+        const d = await r.json();
+        if (!d.error) {
+          const txt = (d.text || "").replace(/```json|```/g, "").trim();
+          let form = "";
+          try { const parsed = JSON.parse(txt); form = String(parsed.form || ""); } catch (e) { form = ""; }
+          if (form) {
+            const dn = row.dia_no;
+            setAiRows((prev: any[]) => prev.map((x: any) => (x.dia_no === dn ? { ...x, work_form: form, fromAI: true, existing: false } : x)));
+          }
+        }
+      } catch (e) { /* 이 장은 건너뜀 */ }
+      done++;
+      setAiProgress({ done, total: targets.length });
+    }
+    setAiExtracting(false);
+    setAiOpen(true);
+    showToast("AI 추출 완료! 값을 확인하고 저장하세요", "success");
+  };
+
+  const updateAiRow = (dia_no: string, v: string) => setAiRows((prev: any[]) => prev.map((x: any) => (x.dia_no === dia_no ? { ...x, work_form: v } : x)));
+
+  const saveAiRows = async () => {
+    const rows = aiRows.filter((r: any) => r.work_form && r.work_form.trim());
+    if (rows.length === 0) { showToast("저장할 약어가 없어요", "error"); return; }
+    setAiSaving(true);
+    setAiSaveMsg("저장 중...");
+    let fail = 0;
+    for (const row of rows) {
+      await supabase.from("dia_work_form").delete().eq("dia_no", row.dia_no).eq("category", aiCat);
+      const { error } = await supabase.from("dia_work_form").insert({ dia_no: row.dia_no, category: aiCat, work_form: row.work_form.trim() });
+      if (error) fail++;
+    }
+    setAiSaving(false);
+    if (fail > 0) { setAiSaveMsg("일부 저장 실패 (" + fail + "개)"); showToast(fail + "개 저장 실패", "error"); }
+    else {
+      setAiSaveMsg("완료! " + rows.length + "개 저장됐어요");
+      setAiRows((prev: any[]) => prev.map((x: any) => (x.work_form && x.work_form.trim() ? { ...x, existing: true, fromAI: false } : x)));
+      showToast(rows.length + "개 저장 완료", "success");
+    }
+    setTimeout(() => setAiSaveMsg(""), 4000);
   };
 
   React.useEffect(() => {
@@ -12920,6 +13009,54 @@ function RouteInputScreen() {
           </div>
         ) : null}
         {bulkMsg ? <div style={{ fontSize: 12, color: "#059669", textAlign: "center", fontWeight: 600 }}>{bulkMsg}</div> : null}
+      </div>
+
+      <div style={{ marginBottom: 16, padding: 14, background: "#F8FAFF", borderRadius: 12, border: "1px solid #E0E7FF" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 4 }}>🤖 근무형태 AI 일괄 추출</div>
+        <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 10 }}>이미 올려둔 근무행로 사진에서 근무형태 약어(예: 대온,온도대)를 AI가 읽어와요. 확인·수정 후 저장하세요.</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <select value={aiCat} onChange={(e) => { setAiCat(e.target.value); setAiLoaded(false); setAiRows([]); setAiLoadMsg(""); setAiOpen(false); }} style={{ flex: "0 0 96px", padding: "9px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, background: "#fff" }}>
+            {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button onClick={loadAiImages} style={{ flex: 1, padding: "9px", background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>저장된 사진 불러오기</button>
+        </div>
+        {aiLoadMsg ? <div style={{ fontSize: 12, color: "#4338CA", background: "#EEF2FF", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>{aiLoadMsg}</div> : null}
+
+        {aiLoaded && aiRows.length > 0 ? (
+          <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <button onClick={() => runAiExtract(true)} disabled={aiExtracting} style={{ flex: 1, padding: 11, background: aiExtracting ? "#9CA3AF" : "#4F46E5", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {aiExtracting ? "추출 중..." : ("빈 것만 AI 추출 (" + aiRows.filter((r: any) => !r.work_form).length + "개)")}
+              </button>
+              <button onClick={() => runAiExtract(false)} disabled={aiExtracting} style={{ flex: "0 0 auto", padding: "11px 14px", background: "#fff", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>전체 다시</button>
+            </div>
+            <div style={{ fontSize: 11, color: "#B45309", background: "#FEF3C7", borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.5 }}>⚠️ AI는 아직 오류가 많아요. 아래 목록을 열어 <b>직접 입력</b>하는 걸 추천해요. (AI는 계속 개선 중이에요)</div>
+            {aiExtracting ? <div style={{ fontSize: 12, color: "#4338CA", background: "#EEF2FF", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>AI가 읽는 중... {aiProgress.done} / {aiProgress.total}</div> : null}
+
+            <button onClick={() => setAiOpen((v) => !v)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, padding: "10px 12px", fontSize: 12.5, fontWeight: 700, color: "#374151", cursor: "pointer", marginBottom: aiOpen ? 8 : 10 }}>
+              <span>✏️ 직접 입력 / 검토 ({aiRows.filter((r: any) => r.work_form && r.work_form.trim()).length}개 채워짐)</span>
+              <span style={{ color: "#9CA3AF" }}>{aiOpen ? "접기 ▲" : "열어서 입력 ▼"}</span>
+            </button>
+
+            {aiOpen ? (
+              <div style={{ border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden", marginBottom: 10 }}>
+                {aiRows.map((r: any, i: number) => (
+                  <div key={r.dia_no} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: i < aiRows.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                    <span style={{ flex: "0 0 58px", fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
+                    <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="예: 대온,온도대" style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                    {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <button onClick={saveAiRows} disabled={aiSaving} style={{ width: "100%", padding: 12, background: aiSaving ? "#9CA3AF" : "#059669", color: "#fff", border: "none", borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+              {aiSaving ? "저장 중..." : ("전체 저장 (" + aiRows.filter((r: any) => r.work_form && r.work_form.trim()).length + "개)")}
+            </button>
+            {aiSaveMsg ? <div style={{ fontSize: 12, color: "#059669", textAlign: "center", fontWeight: 600, marginTop: 8 }}>{aiSaveMsg}</div> : null}
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.5 }}>⚠️ AI 값은 틀릴 수 있어요. <b>전체 저장</b> 전에 목록을 펼쳐 꼭 확인하세요.</div>
+          </>
+        ) : null}
       </div>
 
       {savedList.length > 0 && (
