@@ -12558,6 +12558,42 @@ function RouteInputScreen() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [exists, setExists] = useState(false);
+  const [diaImg, setDiaImg] = useState<string>("");
+  const [diaImgMsg, setDiaImgMsg] = useState("");
+
+  React.useEffect(() => {
+    const d = diaNo.trim();
+    if (!d) { setDiaImg(""); return; }
+    let cancel = false;
+    supabase.from("dia_image").select("image").eq("dia_no", d).eq("category", cat).maybeSingle().then(({ data }: any) => {
+      if (!cancel) setDiaImg(data && data.image ? data.image : "");
+    });
+    return () => { cancel = true; };
+  }, [diaNo, cat]);
+
+  const onPickDiaImg = async (e: any) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!diaNo.trim()) { setDiaImgMsg("먼저 다이아 번호를 입력하세요."); setTimeout(() => setDiaImgMsg(""), 3000); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const b64 = String(reader.result || "");
+      setDiaImg(b64);
+      setDiaImgMsg("저장 중...");
+      const { error } = await supabase.from("dia_image").upsert({ dia_no: diaNo.trim(), category: cat, image: b64, updated_at: new Date().toISOString() });
+      setDiaImgMsg(error ? ("저장 실패: " + error.message) : "사진이 저장됐어요");
+      setTimeout(() => setDiaImgMsg(""), 3000);
+    };
+    reader.readAsDataURL(file);
+  };
+  const delDiaImg = async () => {
+    if (!diaNo.trim()) return;
+    await supabase.from("dia_image").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
+    setDiaImg("");
+    setDiaImgMsg("사진을 지웠어요");
+    setTimeout(() => setDiaImgMsg(""), 3000);
+  };
 
   React.useEffect(() => {
     const d = diaNo.trim();
@@ -12884,6 +12920,28 @@ function RouteInputScreen() {
       ))}
       <button onClick={addRun} style={{ width: "100%", background: "#EEF2FF", color: "#4F46E5", border: "1px dashed #A5B4FC", borderRadius: 8, padding: 9, fontSize: 12, fontWeight: 700, marginTop: 4, cursor: "pointer" }}>+ 열번 추가</button>
       <button onClick={save} disabled={loading} style={{ width: "100%", background: exists ? "#059669" : "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, marginTop: 12, cursor: "pointer" }}>{loading ? "저장 중…" : exists ? "수정 저장" : "저장"}</button>
+      <div style={{ marginTop: 18, padding: 14, background: "#F5F3FF", borderRadius: 12, border: "1px solid #E0E7FF" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 4 }}>📎 근무행로 그림 사진</div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 10 }}>조합원이 이 다이아를 볼 때 보여줄 원본 사진이에요. 선택하면 바로 저장돼요.</div>
+        {diaImg ? (
+          <div>
+            <img src={diaImg} alt="근무행로" style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block" }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <label style={{ flex: 1, textAlign: "center", padding: 10, background: "#EEF2FF", color: "#4F46E5", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                사진 바꾸기
+                <input type="file" accept="image/*" onChange={onPickDiaImg} style={{ display: "none" }} />
+              </label>
+              <button onClick={delDiaImg} style={{ padding: "10px 16px", background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>삭제</button>
+            </div>
+          </div>
+        ) : (
+          <label style={{ display: "block", textAlign: "center", padding: 20, border: "2px dashed #C7D2FE", borderRadius: 10, color: "#6366F1", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+            + 근무행로 사진 선택
+            <input type="file" accept="image/*" onChange={onPickDiaImg} style={{ display: "none" }} />
+          </label>
+        )}
+        {diaImgMsg ? <div style={{ marginTop: 8, fontSize: 12, color: "#4F46E5", textAlign: "center" }}>{diaImgMsg}</div> : null}
+      </div>
       {msg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: "#4F46E5" }}>{msg}</div>}
       <div style={{ marginTop: 18, marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>미리보기 (약자로 자동 생성)</div>
       <RouteDiagram runs={runs} />
