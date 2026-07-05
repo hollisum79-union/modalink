@@ -13216,8 +13216,6 @@ function RouteInputScreen() {
         {diaImgMsg ? <div style={{ marginTop: 8, fontSize: 12, color: "#4F46E5", textAlign: "center" }}>{diaImgMsg}</div> : null}
       </div>
       {msg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: "#4F46E5" }}>{msg}</div>}
-      <div style={{ marginTop: 18, marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>미리보기 (약자로 자동 생성)</div>
-      <RouteDiagram runs={runs} />
       {diaInfo && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>다이아 시간 (다이아 입력 자료)</div>
