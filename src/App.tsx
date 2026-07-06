@@ -12991,7 +12991,7 @@ function RouteInputScreen() {
                 {aiRows.map((r: any, i: number) => (
                   <div key={r.dia_no} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: i < aiRows.length - 1 ? "1px solid #F3F4F6" : "none" }}>
                     <span style={{ flex: "0 0 58px", fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
-                    <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="예: 대온,온도대" style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                    <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="예: 대온,온도대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
                     {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
                   </div>
                 ))}
@@ -13044,7 +13044,7 @@ function RouteInputScreen() {
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>근무형태 (약어, 통으로)</div>
         <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-          <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
+          <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
           <button onClick={() => {
             const f = buildWorkForm(runs);
             if (!f) { setMsg("구간이 비어 있어요 — 아래 열번별 행로를 먼저 입력하세요"); setTimeout(() => setMsg(""), 3000); return; }
@@ -13151,7 +13151,7 @@ function RouteInputScreen() {
       {runs.map((r, i) => (
         <div key={i} style={{ ...grid, marginBottom: 6, alignItems: "center" }}>
           <input value={r.train_no} onChange={(e) => upd(i, "train_no", e.target.value)} placeholder="7254" style={ipt} />
-          <input value={r.section} onChange={(e) => upd(i, "section", e.target.value)} placeholder="대온" style={ipt} />
+          <input value={r.section} onChange={(e) => upd(i, "section", e.target.value)} placeholder="대온" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={ipt} />
           <input value={r.start_time} onChange={(e) => upd(i, "start_time", e.target.value)} onBlur={(e) => fmtTime(i, "start_time", e.target.value)} placeholder="073550" inputMode="numeric" style={ipt} />
           <input value={r.end_time} onChange={(e) => upd(i, "end_time", e.target.value)} onBlur={(e) => fmtTime(i, "end_time", e.target.value)} placeholder="082830" inputMode="numeric" style={ipt} />
           <span onClick={() => delRun(i)} style={{ color: "#EF4444", textAlign: "center", fontSize: 14, cursor: "pointer" }}>✕</span>
