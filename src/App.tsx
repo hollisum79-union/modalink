@@ -12406,6 +12406,26 @@ function parseRouteAbbr(s: string): number[] {
   }
   return idxs;
 }
+// 근무형태 약어 자동생성: runs의 구간(section)을 순서대로 읽어 이어붙임.
+// 앞 도착역 = 뒤 출발역이면 한 덩어리(공유역 1번), 끊기면 쉼표. 편승 제외. (AI 미사용, 순수 계산)
+function buildWorkForm(runs: any[]): string {
+  const chunks: number[][] = [];
+  let cur: number[] = [];
+  let lastArr: number | null = null;
+  (runs || []).forEach((r: any) => {
+    const isRide = String(r.section || "").includes("편승") || String(r.train_no || "").includes("편승");
+    if (isRide) return;
+    const idxs = parseRouteAbbr(r.section);
+    if (idxs.length < 2) return;
+    if (cur.length === 0) { cur = idxs.slice(); }
+    else if (idxs[0] === lastArr) { cur = cur.concat(idxs.slice(1)); }
+    else { chunks.push(cur); cur = idxs.slice(); }
+    lastArr = idxs[idxs.length - 1];
+  });
+  if (cur.length) chunks.push(cur);
+  const abbrOf = (id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "");
+  return chunks.map((c) => c.map(abbrOf).join("")).join(",");
+}
 function splitComma(s: string): string[] {
   return String(s || "").split(",").map((x) => x.trim());
 }
@@ -13023,8 +13043,17 @@ function RouteInputScreen() {
       </div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>근무형태 (약어, 통으로)</div>
-        <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>편승도우미 등에서 열번 검색 시 보여줄 근무형태예요. (그림은 아래 열번별 행로로 그려져요)</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+          <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
+          <button onClick={() => {
+            const f = buildWorkForm(runs);
+            if (!f) { setMsg("구간이 비어 있어요 — 아래 열번별 행로를 먼저 입력하세요"); setTimeout(() => setMsg(""), 3000); return; }
+            setWorkForm(f);
+            setMsg("✅ 근무형태 자동생성: " + f + " — 확인 후 저장하세요");
+            setTimeout(() => setMsg(""), 4000);
+          }} style={{ whiteSpace: "nowrap", border: "none", borderRadius: 8, padding: "0 14px", background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🔧 자동생성</button>
+        </div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>편승도우미 등에서 열번 검색 시 보여줄 근무형태예요. (🔧 자동생성 = 아래 열번별 행로 구간을 읽어 채움, 편승 제외)</div>
       </div>
       <div style={{ marginBottom: 16, padding: 12, background: "#F8FAFF", borderRadius: 12, border: "1px solid #E0E7FF" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 8 }}>📷 사진으로 자동 입력</div>
