@@ -12941,24 +12941,16 @@ function RouteInputScreen() {
 
   const save = async () => {
     if (!diaNo.trim()) { setMsg("다이아 번호를 입력하세요."); return; }
-    const { flat } = expandRouteRuns(runs);
-    const rows = flat.filter((r) => r.train_no && r.idxs && r.idxs.length >= 1).map((r, i) => ({ dia_no: diaNo.trim(), category: cat, train_no: r.train_no, section: r.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: r.start_time, end_time: r.end_time, seq: i, grp: (r.group ?? 0) + 1 }));
-    if (rows.length === 0) { setMsg("열번을 1개 이상 입력하세요."); return; }
+    if (!workForm.trim()) { setMsg("근무형태(약어)를 입력하세요."); return; }
     setLoading(true);
-    await supabase.from("dia_route").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
-    const { error } = await supabase.from("dia_route").insert(rows);
+    // 약어(dia_work_form)만 저장 — 열번(dia_route)은 AI 일괄추출이 관리하므로 건드리지 않음
     await supabase.from("dia_work_form").delete().eq("dia_no", diaNo.trim()).eq("category", cat);
-    let wfErr: any = null;
-    if (workForm.trim()) {
-      const res = await supabase.from("dia_work_form").insert({ dia_no: diaNo.trim(), category: cat, work_form: workForm.trim() });
-      wfErr = res.error;
-    }
+    const { error } = await supabase.from("dia_work_form").insert({ dia_no: diaNo.trim(), category: cat, work_form: workForm.trim() });
     setLoading(false);
-    if (error || wfErr) { setMsg("❌ 저장 실패: " + ((error || wfErr).message || "")); setTimeout(() => setMsg(""), 5000); return; }
-    setMsg("✅ 저장됐어요! (새로 입력하세요)");
+    if (error) { setMsg("❌ 저장 실패: " + (error.message || "")); setTimeout(() => setMsg(""), 5000); return; }
+    setMsg("✅ 저장됐어요!");
     setDiaNo("");
     setWorkForm("");
-    setRuns([{ train_no: "", section: "", start_time: "", end_time: "" }]);
     loadList();
     setTimeout(() => setMsg(""), 3000);
   };
@@ -12979,7 +12971,7 @@ function RouteInputScreen() {
   return (
     <div style={{ padding: "16px 16px 28px" }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>🚆 근무행로 입력</div>
-      <AdminGuide steps={["사진 여러 장 올리기로 근무행로 사진을 한 번에 올리세요", "근무형태 약어는 아래 목록에서 직접 입력해 저장하세요", "편승 도우미용 열번별 행로는 다이아를 골라 열번/구간/출발/도착을 입력하세요", "입력 후 저장하면 조합원 화면에 반영돼요"]} tip="💡 사진 파일명의 숫자(1, 2, 51…)를 다이아 번호로 저장해요." />
+      <AdminGuide steps={["사진 여러 장 올리기로 근무행로 사진을 한 번에 올리세요", "🤖 근무형태 AI 일괄추출로 약어와 열번을 한 번에 뽑고, 틀린 것만 고쳐 저장하세요", "한 다이아만 손볼 땐 아래 목록에서 골라 약어를 고치면 돼요", "저장하면 조합원 화면과 편승 도우미에 반영돼요"]} tip="💡 사진 파일명의 숫자(1, 2, 51…)를 다이아 번호로 저장해요." />
 
       <div style={{ marginBottom: 16, padding: 14, background: "#F0FDF4", borderRadius: 12, border: "1px solid #BBF7D0" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#059669", marginBottom: 4 }}>📚 사진 여러 장 한번에 올리기</div>
@@ -13093,121 +13085,9 @@ function RouteInputScreen() {
       </div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>근무형태 (약어, 통으로)</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-          <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
-          <button onClick={() => {
-            const f = buildWorkForm(runs);
-            if (!f) { setMsg("구간이 비어 있어요 — 아래 열번별 행로를 먼저 입력하세요"); setTimeout(() => setMsg(""), 3000); return; }
-            setWorkForm(f);
-            setMsg("✅ 근무형태 자동생성: " + f + " — 확인 후 저장하세요");
-            setTimeout(() => setMsg(""), 4000);
-          }} style={{ whiteSpace: "nowrap", border: "none", borderRadius: 8, padding: "0 14px", background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🔧 자동생성</button>
-        </div>
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>편승도우미 등에서 열번 검색 시 보여줄 근무형태예요. (🔧 자동생성 = 아래 열번별 행로 구간을 읽어 채움, 편승 제외)</div>
+        <input value={workForm} onChange={(e) => setWorkForm(e.target.value)} placeholder="예: 천기신장대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }} />
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>편승도우미 등에서 열번 검색 시 보여줄 근무형태예요. 여러 다이아는 위 🤖 AI 일괄추출로 한 번에 채우세요.</div>
       </div>
-      <div style={{ marginBottom: 16, padding: 12, background: "#F8FAFF", borderRadius: 12, border: "1px solid #E0E7FF" }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 8 }}>📷 사진으로 자동 입력</div>
-        <label style={{ display: "block", padding: 12, border: "2px dashed #C7D2FE", borderRadius: 10, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 13, fontWeight: 600 }}>
-          {routePhoto ? "사진 다시 선택" : "근무행로 사진 선택"}
-          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
-            const f = e.target.files && e.target.files[0];
-            if (!f) return;
-            const reader = new FileReader();
-            reader.onload = () => { setRoutePhoto(String(reader.result)); setRouteError(""); };
-            reader.readAsDataURL(f);
-          }} />
-        </label>
-        {routePhoto && (<img src={routePhoto} alt="미리보기" style={{ width: "100%", borderRadius: 8, marginTop: 8 }} />)}
-        {routePhoto && (
-          <button disabled={routeLoading} onClick={async () => {
-            setRouteLoading(true); setRouteError("");
-            try {
-              const comma = routePhoto.indexOf(",");
-              const meta = routePhoto.slice(5, routePhoto.indexOf(";"));
-              const b64 = routePhoto.slice(comma + 1);
-              const r = await fetch("/.netlify/functions/read-route", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
-              const d = await r.json();
-              if (d.error) throw new Error(d.error);
-              const txt = (d.text || "").replace(/```json|```/g, "").trim();
-              const parsed = JSON.parse(txt);
-              if (parsed.runs && parsed.runs.length > 0) {
-                const fmtColon = (s: string) => {
-                  const d = String(s).replace(/\D/g, "");
-                  if (d.length === 6) return d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4, 6);
-                  if (d.length === 5) return "0" + d.slice(0, 1) + ":" + d.slice(1, 3) + ":" + d.slice(3, 5);
-                  return String(s).trim();
-                };
-                const num = (s: string) => Number(String(s).replace(/\D/g, ""));
-                // 1) 열번별로 읽고, 이른 시각=출발 / 늦은 시각=도착으로 정렬
-                const seq = parsed.runs.map((x: any) => {
-                  let st = String(x.start_time || ""), et = String(x.end_time || "");
-                  if (num(st) && num(et) && num(st) > num(et)) { const t = st; st = et; et = t; }
-                  return { train_no: String(x.train_no || ""), start_time: st, end_time: et };
-                });
-                // 2) 근무형태 약어 그룹별로 묶기 (버전 B: 열번·시각 콤마, 구간=그룹 약어 통째)
-                let mismatch = false;
-                if (workForm && workForm.trim()) {
-                  const groups = workForm.split(",").map((g: string) => g.trim()).filter((g: string) => g);
-                  const grouped: any[] = [];
-                  let ptr = 0;
-                  groups.forEach((g: string) => {
-                    if (g.includes("편승")) {
-                      // 편승: 열번 칸="편승", 구간 칸=역 부분만(예: 편승장대→장대), 시각 없음
-                      const sec = g.replace(/편승/g, "").replace(/[()]/g, "").trim();
-                      grouped.push({ train_no: "편승", section: sec, start_time: "", end_time: "" });
-                      return;
-                    }
-                    const idxs = parseRouteAbbr(g);
-                    const need = Math.max(idxs.length - 1, 1);
-                    const slice = seq.slice(ptr, ptr + need);
-                    ptr += need;
-                    if (slice.length === 0) return;
-                    grouped.push({
-                      train_no: slice.map((r: any) => r.train_no).join(","),
-                      section: g,
-                      start_time: slice.map((r: any) => fmtColon(r.start_time)).join(","),
-                      end_time: slice.map((r: any) => fmtColon(r.end_time)).join(","),
-                    });
-                  });
-                  if (ptr !== seq.length) mismatch = true;
-                  setRuns(grouped.length > 0 ? grouped : seq.map((r: any) => ({ train_no: r.train_no, section: "", start_time: fmtColon(r.start_time), end_time: fmtColon(r.end_time) })));
-                } else {
-                  setRuns(seq.map((r: any) => ({ train_no: r.train_no, section: "", start_time: fmtColon(r.start_time), end_time: fmtColon(r.end_time) })));
-                }
-                if (parsed.dia && parsed.dia.dia_no) setDiaNo(String(parsed.dia.dia_no));
-                if (mismatch) {
-                  showToast("열번 수와 약어 구간 수가 안 맞아요. 확인하세요", "error");
-                } else if (workForm && workForm.trim()) {
-                  showToast("AI가 읽고 약어 그룹으로 묶었어요. 시각을 확인하세요", "success");
-                } else {
-                  showToast("AI가 읽었어요. 약어를 넣으면 그룹으로 묶여요", "success");
-                }
-              } else {
-                showToast("열번을 읽지 못했어요. 사진을 다시 확인하세요", "error");
-              }
-            } catch (err) { setRouteError("읽기 실패: " + String(err)); }
-            setRouteLoading(false);
-          }} style={{ width: "100%", marginTop: 8, padding: 12, background: routeLoading ? "#9CA3AF" : "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-            {routeLoading ? "AI가 읽는 중…" : "🔍 AI로 읽기"}
-          </button>
-        )}
-        {routeError && (<div style={{ color: "#DC2626", fontSize: 12, marginTop: 8 }}>{routeError}</div>)}
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.5 }}>💡 위 <b>근무형태 약어</b>를 먼저 입력하면 구간도 자동으로 채워져요. ⚠️ AI 값은 틀릴 수 있으니 <b>출발·도착 시각</b>을 꼭 확인하세요.</div>
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>열번별 행로</div>
-      <div style={{ ...grid, fontSize: 10, color: "#9CA3AF", marginBottom: 4, padding: "0 2px" }}>
-        <span>열번</span><span>구간</span><span>출발</span><span>도착</span><span></span>
-      </div>
-      {runs.map((r, i) => (
-        <div key={i} style={{ ...grid, marginBottom: 6, alignItems: "center" }}>
-          <input value={r.train_no} onChange={(e) => upd(i, "train_no", e.target.value)} placeholder="7254" style={ipt} />
-          <input value={r.section} onChange={(e) => upd(i, "section", e.target.value)} placeholder="대온" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={ipt} />
-          <input value={r.start_time} onChange={(e) => upd(i, "start_time", e.target.value)} onBlur={(e) => fmtTime(i, "start_time", e.target.value)} placeholder="073550" inputMode="numeric" style={ipt} />
-          <input value={r.end_time} onChange={(e) => upd(i, "end_time", e.target.value)} onBlur={(e) => fmtTime(i, "end_time", e.target.value)} placeholder="082830" inputMode="numeric" style={ipt} />
-          <span onClick={() => delRun(i)} style={{ color: "#EF4444", textAlign: "center", fontSize: 14, cursor: "pointer" }}>✕</span>
-        </div>
-      ))}
-      <button onClick={addRun} style={{ width: "100%", background: "#EEF2FF", color: "#4F46E5", border: "1px dashed #A5B4FC", borderRadius: 8, padding: 9, fontSize: 12, fontWeight: 700, marginTop: 4, cursor: "pointer" }}>+ 열번 추가</button>
       <button onClick={save} disabled={loading} style={{ width: "100%", background: exists ? "#059669" : "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 700, marginTop: 12, cursor: "pointer" }}>{loading ? "저장 중…" : exists ? "수정 저장" : "저장"}</button>
       <div style={{ marginTop: 18, padding: 14, background: "#F5F3FF", borderRadius: 12, border: "1px solid #E0E7FF" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 4 }}>📎 근무행로 그림 사진</div>
