@@ -12978,16 +12978,7 @@ function RouteInputScreen() {
   return (
     <div style={{ padding: "16px 16px 28px" }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>🚆 근무행로 입력</div>
-      <AdminGuide steps={["다이아 번호와 구분을 고르세요 (예: 61 / 평일)", "근무형태 약어를 통으로 적으세요 (예: 천기신장대)", "열번별 행로를 한 줄씩 입력하세요: 열번 / 구간 / 출발 / 도착", "아래 미리보기로 그림이 자동 생성돼요 — 확인 후 저장"]} tip="💡 엑셀/CSV로 여러 행로를 한 번에 올릴 수도 있어요." />
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <button onClick={downloadTemplate} style={{ flex: 1, background: "#fff", border: "1px solid #D1D5DB", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: "#4338CA", cursor: "pointer" }}>📄 엑셀 양식 받기</button>
-        <label style={{ flex: 1, background: "#EEF2FF", border: "1px solid #A5B4FC", borderRadius: 10, padding: "10px", fontSize: 12, fontWeight: 700, color: "#4F46E5", cursor: "pointer", textAlign: "center" }}>
-          📤 엑셀 올리기
-          <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={onUpload} />
-        </label>
-      </div>
-      <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.5 }}>양식을 받아 채운 뒤 올리면 한 번에 저장돼요. 같은 다이아·구분은 덮어쓰기 돼요. 아래 폼으로 한 건씩 입력·수정도 가능해요.</div>
+      <AdminGuide steps={["사진 여러 장 올리기로 근무행로 사진을 한 번에 올리세요", "근무형태 약어는 아래 목록에서 직접 입력해 저장하세요", "편승 도우미용 열번별 행로는 다이아를 골라 열번/구간/출발/도착을 입력하세요", "입력 후 저장하면 조합원 화면에 반영돼요"]} tip="💡 사진 파일명의 숫자(1, 2, 51…)를 다이아 번호로 저장해요." />
 
       <div style={{ marginBottom: 16, padding: 14, background: "#F0FDF4", borderRadius: 12, border: "1px solid #BBF7D0" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#059669", marginBottom: 4 }}>📚 사진 여러 장 한번에 올리기</div>
@@ -13225,8 +13216,6 @@ function RouteInputScreen() {
         {diaImgMsg ? <div style={{ marginTop: 8, fontSize: 12, color: "#4F46E5", textAlign: "center" }}>{diaImgMsg}</div> : null}
       </div>
       {msg && <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: "#4F46E5" }}>{msg}</div>}
-      <div style={{ marginTop: 18, marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>미리보기 (약자로 자동 생성)</div>
-      <RouteDiagram runs={runs} />
       {diaInfo && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 6 }}>다이아 시간 (다이아 입력 자료)</div>
