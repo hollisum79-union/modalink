@@ -17980,7 +17980,6 @@ const getKyobunWork = (member: any, date: Date) => {
                     })
                     .map((m: any) => m.name);
                   const info = getDiaInfo(h.dia_no, h.category);
-                  const runs = rideRoutes[String(h.dia_no) + "|" + h.category];
                   return (
                     <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
                       <div style={{ textAlign: "center" }}>
@@ -18005,12 +18004,6 @@ const getKyobunWork = (member: any, date: Date) => {
                             <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>퇴근</div>
                             <div style={{ fontSize: 16, fontWeight: 700, color: "#BE185D" }}>{info.end_time || "-"}</div>
                           </div>
-                        </div>
-                      )}
-                      {runs && runs.length > 0 && (
-                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
-                          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8, textAlign: "center" }}>근무행로</div>
-                          <RouteDiagram runs={runs} />
                         </div>
                       )}
                     </div>
