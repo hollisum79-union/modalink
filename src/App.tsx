@@ -12720,6 +12720,7 @@ function RouteInputScreen() {
   };
 
   const loadAiImages = async () => {
+    if (aiLoaded && aiRows.length > 0 && !window.confirm("다시 불러오면 저장 안 한 수정은 사라져요. 계속할까요?")) return;
     setAiLoadMsg("사진 불러오는 중...");
     setAiRows([]);
     setAiLoaded(false);
@@ -12774,7 +12775,20 @@ function RouteInputScreen() {
           try { const parsed = JSON.parse(txt); form = String(parsed.form || ""); if (Array.isArray(parsed.trains)) trains = parsed.trains.join(","); } catch (e) { form = ""; trains = ""; }
           if (form || trains) {
             const dn = row.dia_no;
-            setAiRows((prev: any[]) => prev.map((x: any) => (x.dia_no === dn ? { ...x, work_form: form || x.work_form, trains: trains || x.trains, fromAI: true, existing: false } : x)));
+            setAiRows((prev: any[]) => prev.map((x: any) => {
+              if (x.dia_no !== dn) return x;
+              if (onlyEmpty) {
+                // 빈 칸만 채움 — 내가 고쳤거나 저장한 값은 그대로 둠 (직접입력 우선)
+                const hasForm = x.work_form && x.work_form.trim();
+                const hasTrains = x.trains && x.trains.trim();
+                const nf = hasForm ? x.work_form : form;
+                const nt = hasTrains ? x.trains : trains;
+                const filled = (nf !== x.work_form) || (nt !== x.trains);
+                return { ...x, work_form: nf, trains: nt, fromAI: filled ? true : x.fromAI };
+              }
+              // 전체 다시 — AI 값으로 덮어씀
+              return { ...x, work_form: form || x.work_form, trains: trains || x.trains, fromAI: true, existing: false };
+            }));
           }
         }
       } catch (e) { /* 이 장은 건너뜀 */ }
@@ -13006,7 +13020,7 @@ function RouteInputScreen() {
               <button onClick={() => runAiExtract(true)} disabled={aiExtracting} style={{ flex: 1, padding: 11, background: aiExtracting ? "#9CA3AF" : "#4F46E5", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                 {aiExtracting ? "추출 중..." : ("빈 것만 AI 추출 (" + aiRows.filter((r: any) => !r.work_form || !r.trains).length + "개)")}
               </button>
-              <button onClick={() => runAiExtract(false)} disabled={aiExtracting} style={{ flex: "0 0 auto", padding: "11px 14px", background: "#fff", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>전체 다시</button>
+              <button onClick={() => { if (window.confirm("직접 고친 값도 AI 값으로 덮어써요. 계속할까요?")) runAiExtract(false); }} disabled={aiExtracting} style={{ flex: "0 0 auto", padding: "11px 14px", background: "#fff", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>전체 다시</button>
             </div>
             <div style={{ fontSize: 11, color: "#B45309", background: "#FEF3C7", borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.5 }}>⚠️ AI는 아직 오류가 많아요. 아래 목록을 열어 <b>직접 입력</b>하는 걸 추천해요. (AI는 계속 개선 중이에요)</div>
             {aiExtracting ? <div style={{ fontSize: 12, color: "#4338CA", background: "#EEF2FF", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>AI가 읽는 중... {aiProgress.done} / {aiProgress.total}</div> : null}
