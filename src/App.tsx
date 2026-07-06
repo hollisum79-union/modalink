@@ -12908,69 +12908,6 @@ function RouteInputScreen() {
     document.head.appendChild(s);
   });
 
-  const downloadTemplate = () => {
-    ensureXLSX().then((XLSX: any) => {
-      const aoa = [
-        ["다이아", "구분", "열번", "구간", "출발", "도착"],
-        ["61", "평일", "7254", "대온", "18:01:00", "17:30:50"],
-        ["1", "평일", "7074,7143", "대온,도대", "06:51:40,09:45:00", "08:13:30,10:15:10"],
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "근무행로");
-      XLSX.writeFile(wb, "근무행로_양식.xlsx");
-    });
-  };
-
-  const onUpload = (e: any) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    e.target.value = "";
-    setMsg("📤 읽는 중…");
-    ensureXLSX().then((XLSX: any) => {
-      const fr = new FileReader();
-      fr.onload = async (ev: any) => {
-        try {
-          const data = new Uint8Array(ev.target.result);
-          const wb = XLSX.read(data, { type: "array" });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
-          const header = (aoa[0] || []).map((h: any) => String(h).trim());
-          const col: any = {};
-          header.forEach((h: string, i: number) => { col[h] = i; });
-          const g = (r: any[], name: string) => String(r[col[name]] ?? "").trim();
-          const dataRows = aoa.slice(1).filter((r) => r && g(r, "열번"));
-          const seqMap: any = {};
-          const grpMap: any = {};
-          const rows: any[] = [];
-          dataRows.forEach((r) => {
-            const dia = g(r, "다이아"); const c = g(r, "구분");
-            const ex = expandRouteRuns([{ train_no: g(r, "열번"), section: g(r, "구간"), start_time: g(r, "출발"), end_time: g(r, "도착") }]).flat;
-            const key = dia + "|" + c;
-            grpMap[key] = (grpMap[key] ?? 0) + 1;
-            const thisGrp = grpMap[key];
-            ex.forEach((x) => {
-              if (!x.train_no || !x.idxs || !x.idxs.length) return;
-              seqMap[key] = (seqMap[key] ?? -1) + 1;
-              rows.push({ dia_no: dia, category: c, train_no: x.train_no, section: x.idxs.map((id: number) => (ROUTE_STATIONS[id] ? ROUTE_STATIONS[id].abbr : "")).join(""), start_time: x.start_time, end_time: x.end_time, seq: seqMap[key], grp: thisGrp });
-            });
-          });
-          if (rows.length === 0) { setMsg("읽을 행이 없어요 (열번 칸 확인)"); return; }
-          const combos = Array.from(new Set(rows.map((x) => x.dia_no + "|" + x.category)));
-          for (const cmb of combos) {
-            const parts = cmb.split("|");
-            await supabase.from("dia_route").delete().eq("dia_no", parts[0]).eq("category", parts[1]);
-          }
-          const { error } = await supabase.from("dia_route").insert(rows);
-          setMsg(error ? "❌ 업로드 실패: " + error.message : `✅ ${rows.length}개 행 업로드 완료!`);
-          setTimeout(() => setMsg(""), 4000);
-        } catch (err) {
-          setMsg("❌ 파일을 읽지 못했어요");
-        }
-      };
-      fr.readAsArrayBuffer(f);
-    });
-  };
 
   const ipt = { border: "1px solid #D1D5DB", borderRadius: 7, padding: "7px 6px", fontSize: 12, width: "100%", boxSizing: "border-box" as const };
   const grid = { display: "grid", gridTemplateColumns: "1fr 1.4fr 0.9fr 0.9fr 26px", gap: 5 };
