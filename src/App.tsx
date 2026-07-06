@@ -12729,10 +12729,20 @@ function RouteInputScreen() {
     const { data: forms } = await supabase.from("dia_work_form").select("dia_no, work_form").eq("category", aiCat);
     const formMap: any = {};
     (forms || []).forEach((ff: any) => { formMap[String(ff.dia_no)] = ff.work_form || ""; });
+    // 기존 열번(편승 도우미용) 불러오기 — dia_route에서 열번만 모음 (편승 제외)
+    const { data: routes } = await supabase.from("dia_route").select("dia_no, train_no").eq("category", aiCat);
+    const trainMap: any = {};
+    (routes || []).forEach((rr: any) => {
+      if (!rr.train_no || String(rr.train_no).includes("편승")) return;
+      const dn = String(rr.dia_no);
+      if (!trainMap[dn]) trainMap[dn] = [];
+      String(rr.train_no).split(",").forEach((t: string) => { const tt = t.trim(); if (/^\d+$/.test(tt) && !trainMap[dn].includes(tt)) trainMap[dn].push(tt); });
+    });
     const rows = (imgs || []).map((it: any) => ({
       dia_no: String(it.dia_no),
       image: it.image || "",
       work_form: formMap[String(it.dia_no)] || "",
+      trains: (trainMap[String(it.dia_no)] || []).join(","),
       existing: !!formMap[String(it.dia_no)],
       fromAI: false,
     }));
@@ -12744,7 +12754,7 @@ function RouteInputScreen() {
   };
 
   const runAiExtract = async (onlyEmpty: boolean) => {
-    const targets = aiRows.filter((r: any) => (onlyEmpty ? !r.work_form : true));
+    const targets = aiRows.filter((r: any) => (onlyEmpty ? (!r.work_form || !r.trains) : true));
     if (targets.length === 0) { showToast("추출할 대상이 없어요", "error"); return; }
     setAiExtracting(true);
     setAiProgress({ done: 0, total: targets.length });
@@ -12760,11 +12770,11 @@ function RouteInputScreen() {
         const d = await r.json();
         if (!d.error) {
           const txt = (d.text || "").replace(/```json|```/g, "").trim();
-          let form = "";
-          try { const parsed = JSON.parse(txt); form = String(parsed.form || ""); } catch (e) { form = ""; }
-          if (form) {
+          let form = ""; let trains = "";
+          try { const parsed = JSON.parse(txt); form = String(parsed.form || ""); if (Array.isArray(parsed.trains)) trains = parsed.trains.join(","); } catch (e) { form = ""; trains = ""; }
+          if (form || trains) {
             const dn = row.dia_no;
-            setAiRows((prev: any[]) => prev.map((x: any) => (x.dia_no === dn ? { ...x, work_form: form, fromAI: true, existing: false } : x)));
+            setAiRows((prev: any[]) => prev.map((x: any) => (x.dia_no === dn ? { ...x, work_form: form || x.work_form, trains: trains || x.trains, fromAI: true, existing: false } : x)));
           }
         }
       } catch (e) { /* 이 장은 건너뜀 */ }
@@ -12777,23 +12787,37 @@ function RouteInputScreen() {
   };
 
   const updateAiRow = (dia_no: string, v: string) => setAiRows((prev: any[]) => prev.map((x: any) => (x.dia_no === dia_no ? { ...x, work_form: v } : x)));
+  const updateAiTrain = (dia_no: string, v: string) => setAiRows((prev: any[]) => prev.map((x: any) => (x.dia_no === dia_no ? { ...x, trains: v } : x)));
 
   const saveAiRows = async () => {
-    const rows = aiRows.filter((r: any) => r.work_form && r.work_form.trim());
-    if (rows.length === 0) { showToast("저장할 약어가 없어요", "error"); return; }
+    const rows = aiRows.filter((r: any) => (r.work_form && r.work_form.trim()) || (r.trains && r.trains.trim()));
+    if (rows.length === 0) { showToast("저장할 내용이 없어요", "error"); return; }
     setAiSaving(true);
     setAiSaveMsg("저장 중...");
     let fail = 0;
     for (const row of rows) {
-      await supabase.from("dia_work_form").delete().eq("dia_no", row.dia_no).eq("category", aiCat);
-      const { error } = await supabase.from("dia_work_form").insert({ dia_no: row.dia_no, category: aiCat, work_form: row.work_form.trim() });
-      if (error) fail++;
+      // 약어 저장 (조합원 근무형태 표시용)
+      if (row.work_form && row.work_form.trim()) {
+        await supabase.from("dia_work_form").delete().eq("dia_no", row.dia_no).eq("category", aiCat);
+        const { error } = await supabase.from("dia_work_form").insert({ dia_no: row.dia_no, category: aiCat, work_form: row.work_form.trim() });
+        if (error) fail++;
+      }
+      // 열번 저장 (편승 도우미용) — 열번만, 구간/시각은 빈칸
+      if (row.trains && row.trains.trim()) {
+        const trainList = row.trains.split(",").map((t: string) => t.trim()).filter((t: string) => /^\d+$/.test(t));
+        await supabase.from("dia_route").delete().eq("dia_no", String(row.dia_no)).eq("category", aiCat);
+        if (trainList.length > 0) {
+          const rrows = trainList.map((t: string, i: number) => ({ dia_no: String(row.dia_no), category: aiCat, train_no: t, section: "", start_time: "", end_time: "", seq: i, grp: 1 }));
+          const { error: rErr } = await supabase.from("dia_route").insert(rrows);
+          if (rErr) fail++;
+        }
+      }
     }
     setAiSaving(false);
     if (fail > 0) { setAiSaveMsg("일부 저장 실패 (" + fail + "개)"); showToast(fail + "개 저장 실패", "error"); }
     else {
       setAiSaveMsg("완료! " + rows.length + "개 저장됐어요");
-      setAiRows((prev: any[]) => prev.map((x: any) => (x.work_form && x.work_form.trim() ? { ...x, existing: true, fromAI: false } : x)));
+      setAiRows((prev: any[]) => prev.map((x: any) => (((x.work_form && x.work_form.trim()) || (x.trains && x.trains.trim())) ? { ...x, existing: true, fromAI: false } : x)));
       showToast(rows.length + "개 저장 완료", "success");
     }
     setTimeout(() => setAiSaveMsg(""), 4000);
@@ -12980,7 +13004,7 @@ function RouteInputScreen() {
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <button onClick={() => runAiExtract(true)} disabled={aiExtracting} style={{ flex: 1, padding: 11, background: aiExtracting ? "#9CA3AF" : "#4F46E5", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                {aiExtracting ? "추출 중..." : ("빈 것만 AI 추출 (" + aiRows.filter((r: any) => !r.work_form).length + "개)")}
+                {aiExtracting ? "추출 중..." : ("빈 것만 AI 추출 (" + aiRows.filter((r: any) => !r.work_form || !r.trains).length + "개)")}
               </button>
               <button onClick={() => runAiExtract(false)} disabled={aiExtracting} style={{ flex: "0 0 auto", padding: "11px 14px", background: "#fff", color: "#6B7280", border: "1px solid #D1D5DB", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>전체 다시</button>
             </div>
@@ -12995,17 +13019,23 @@ function RouteInputScreen() {
             {aiOpen ? (
               <div style={{ border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden", marginBottom: 10 }}>
                 {aiRows.map((r: any, i: number) => (
-                  <div key={r.dia_no} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: i < aiRows.length - 1 ? "1px solid #F3F4F6" : "none" }}>
-                    <span style={{ flex: "0 0 58px", fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
-                    <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="예: 대온,온도대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
-                    {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
+                  <div key={r.dia_no} style={{ padding: "10px", borderBottom: i < aiRows.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ flex: "0 0 58px", fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
+                      <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="약어 예: 대온,온도대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                      {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                      <span style={{ flex: "0 0 58px", fontSize: 11, color: "#4F46E5", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>열번</span>
+                      <input value={r.trains || ""} onChange={(e) => updateAiTrain(r.dia_no, e.target.value)} placeholder="열번 예: 7306,1960,7012" inputMode="numeric" autoComplete="off" autoCorrect="off" style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #C7D2FE", borderRadius: 6, padding: "6px 8px", fontSize: 13, background: "#F5F7FF" }} />
+                    </div>
                   </div>
                 ))}
               </div>
             ) : null}
 
             <button onClick={saveAiRows} disabled={aiSaving} style={{ width: "100%", padding: 12, background: aiSaving ? "#9CA3AF" : "#059669", color: "#fff", border: "none", borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-              {aiSaving ? "저장 중..." : ("전체 저장 (" + aiRows.filter((r: any) => r.work_form && r.work_form.trim()).length + "개)")}
+              {aiSaving ? "저장 중..." : ("전체 저장 (" + aiRows.filter((r: any) => (r.work_form && r.work_form.trim()) || (r.trains && r.trains.trim())).length + "개)")}
             </button>
             {aiSaveMsg ? <div style={{ fontSize: 12, color: "#059669", textAlign: "center", fontWeight: 600, marginTop: 8 }}>{aiSaveMsg}</div> : null}
             <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.5 }}>⚠️ AI 값은 틀릴 수 있어요. <b>전체 저장</b> 전에 목록을 펼쳐 꼭 확인하세요.</div>
