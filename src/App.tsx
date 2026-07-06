@@ -12680,6 +12680,12 @@ function RouteInputScreen() {
   const [aiOpen, setAiOpen] = useState(false);
   const [aiSaveMsg, setAiSaveMsg] = useState("");
 
+  // 구분(평일/휴일…)을 한 곳에서 바꾸면 네 곳(구간입력·저장목록·사진일괄·AI추출)이 함께 바뀌게 묶음
+  const changeCat = (c: string) => {
+    setCat(c); setSavedCat(c); setBulkCat(c); setAiCat(c);
+    setAiLoaded(false); setAiRows([]); setAiLoadMsg(""); setAiOpen(false);
+  };
+
   const onBulkPick = async (e: any) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
@@ -12865,7 +12871,7 @@ function RouteInputScreen() {
   };
   React.useEffect(() => { loadList(); }, []);
   const pick = async (d: string, c: string) => {
-    setDiaNo(d); setCat(c); setSavedCat(c);
+    setDiaNo(d); changeCat(c);
     setRoutePhoto(""); setRouteError("");
     const { data } = await supabase.from("dia_route").select("*").eq("dia_no", d).eq("category", c).order("seq", { ascending: true });
     const { data: wf } = await supabase.from("dia_work_form").select("work_form").eq("dia_no", d).eq("category", c).maybeSingle();
@@ -12941,7 +12947,7 @@ function RouteInputScreen() {
         <div style={{ fontSize: 12, fontWeight: 700, color: "#059669", marginBottom: 4 }}>📚 사진 여러 장 한번에 올리기</div>
         <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 10 }}>구분을 고르고 그 폴더 사진을 전부 선택하세요. 파일명 숫자(1, 2, 51…)를 다이아 번호로 저장해요.</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <select value={bulkCat} onChange={(e) => setBulkCat(e.target.value)} style={{ flex: "0 0 96px", padding: "9px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, background: "#fff" }}>
+          <select value={bulkCat} onChange={(e) => changeCat(e.target.value)} style={{ flex: "0 0 96px", padding: "9px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, background: "#fff" }}>
             {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <label style={{ flex: 1, textAlign: "center", padding: "9px", background: "#059669", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -12963,7 +12969,7 @@ function RouteInputScreen() {
         <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 4 }}>🤖 근무형태 AI 일괄 추출</div>
         <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 10 }}>이미 올려둔 근무행로 사진에서 근무형태 약어(예: 대온,온도대)를 AI가 읽어와요. 확인·수정 후 저장하세요.</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <select value={aiCat} onChange={(e) => { setAiCat(e.target.value); setAiLoaded(false); setAiRows([]); setAiLoadMsg(""); setAiOpen(false); }} style={{ flex: "0 0 96px", padding: "9px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, background: "#fff" }}>
+          <select value={aiCat} onChange={(e) => changeCat(e.target.value)} style={{ flex: "0 0 96px", padding: "9px", borderRadius: 8, border: "1px solid #D1D5DB", fontSize: 13, background: "#fff" }}>
             {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <button onClick={loadAiImages} style={{ flex: 1, padding: "9px", background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>저장된 사진 불러오기</button>
@@ -13015,7 +13021,7 @@ function RouteInputScreen() {
               const cnt = savedList.filter((s) => s.category === c).length;
               const on = savedCat === c;
               return (
-                <button key={c} onClick={() => { setSavedCat(c); setCat(c); }} style={{ border: on ? "none" : "1px solid #E5E7EB", borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: on ? "#4F46E5" : "#fff", color: on ? "#fff" : "#6B7280" }}>{c}{cnt > 0 ? ` (${cnt})` : ""}</button>
+                <button key={c} onClick={() => changeCat(c)} style={{ border: on ? "none" : "1px solid #E5E7EB", borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: on ? "#4F46E5" : "#fff", color: on ? "#fff" : "#6B7280" }}>{c}{cnt > 0 ? ` (${cnt})` : ""}</button>
               );
             })}
           </div>
@@ -13036,7 +13042,7 @@ function RouteInputScreen() {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>구분</div>
-          <select value={cat} onChange={(e) => { setCat(e.target.value); setSavedCat(e.target.value); }} style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }}>
+          <select value={cat} onChange={(e) => changeCat(e.target.value)} style={{ width: "100%", boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 8, padding: "9px 10px", fontSize: 14 }}>
             {["평일", "휴일", "평평", "평휴", "휴평", "휴휴"].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
