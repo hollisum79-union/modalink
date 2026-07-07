@@ -1695,6 +1695,7 @@ function HaebangRaceGame({ onBack, user }: any) {
 function BoardDetail({ post, onBack, user, onEdit }: any) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
+  const [replyTo, setReplyTo] = useState<any>(null); // 답글 대상 { parentId, name }
   useEffect(() => {
     supabase
       .from("comments")
@@ -1760,6 +1761,8 @@ function BoardDetail({ post, onBack, user, onEdit }: any) {
       author: user?.name,
       author_emp: user?.employee_number,
       content: newComment,
+      parent_id: replyTo ? replyTo.parentId : null,
+      reply_to: replyTo ? replyTo.name : null,
     };
     supabase
       .from("comments")
@@ -1769,6 +1772,7 @@ function BoardDetail({ post, onBack, user, onEdit }: any) {
         if (data && data[0]) {
           setComments([...comments, data[0]]);
           setNewComment("");
+          setReplyTo(null);
           // 글 주인에게 알림 보내기 (내 글에 내가 댓글 단 건 제외)
           if (post.author_emp && post.author_emp !== user?.employee_number) {
             supabase.from("notifications").insert({
@@ -2002,74 +2006,49 @@ const handleDeletePost = async () => {
           </div>
         )}
 
-        {comments.map((c) => (
-          <div
-            key={c.id}
-            style={{ display: "flex", gap: 12, marginBottom: 16 }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: "#EEF0FF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Icon
-                path="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                color="#4F46E5"
-                size={14}
-              />
-            </div>
-            <div
-              style={{
-                flex: 1,
-                background: "#F8F7FF",
-                borderRadius: 12,
-                padding: "12px 14px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 6,
-                }}
-              >
-                <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}
-                >
-                  {c.author}
-                </span>
-                <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                    {c.created_at?.slice(0, 10)}
-                  </span>
-                </span>
+        {comments.filter((c: any) => !c.parent_id).map((c: any) => {
+          const replies = comments.filter((r: any) => r.parent_id === c.id);
+          const renderOne = (m: any, isReply: boolean) => (
+            <div key={m.id} style={{ display: "flex", gap: 12, marginBottom: 12, marginLeft: isReply ? 40 : 0 }}>
+              <div style={{ width: isReply ? 26 : 32, height: isReply ? 26 : 32, borderRadius: "50%", background: "#EEF0FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon path="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" color="#4F46E5" size={isReply ? 12 : 14} />
               </div>
-              <p
-                style={{
-                  fontSize: 14,
-                  color: "#374151",
-                  lineHeight: 1.6,
-                  margin: 0,
-                }}
-              >
-                {c.content}
-              </p>
+              <div style={{ flex: 1, background: "#F8F7FF", borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{m.author}</span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{m.created_at?.slice(0, 10)}</span>
+                </div>
+                <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0 }}>
+                  {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
+                  {m.content}
+                </p>
+                {user && (
+                  <button onClick={() => setReplyTo({ parentId: c.id, name: m.author })} style={{ background: "none", border: "none", padding: 0, marginTop: 6, fontSize: 11, fontWeight: 700, color: "#9CA3AF", cursor: "pointer", fontFamily: "inherit" }}>
+                    답글
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+          return (
+            <div key={c.id}>
+              {renderOne(c, false)}
+              {replies.map((r: any) => renderOne(r, true))}
+            </div>
+          );
+        })}
         {user ? (
+          <div style={{ marginTop: 16 }}>
+            {replyTo && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "0 4px" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>↳ {replyTo.name}님에게 답글</span>
+                <span onClick={() => setReplyTo(null)} style={{ fontSize: 12, color: "#9CA3AF", cursor: "pointer", fontWeight: 600 }}>취소</span>
+              </div>
+            )}
           <div
             style={{
               display: "flex",
               gap: 10,
-              marginTop: 16,
               alignItems: "flex-end",
             }}
           >
@@ -2105,7 +2084,7 @@ const handleDeletePost = async () => {
               <input
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="댓글을 입력하세요"
+                placeholder={replyTo ? "답글을 입력하세요" : "댓글을 입력하세요"}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleComment();
                 }}
@@ -2141,6 +2120,7 @@ const handleDeletePost = async () => {
                 />
               </button>
             </div>
+          </div>
           </div>
         ) : (
           <div
