@@ -13514,9 +13514,8 @@ useEffect(() => {
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
-              { id: "workmanage", label: "교번관리", desc: "교번 교체·충당 관리" },
+              { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
               { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
-              { id: "scheduleupdate", label: "근무표 업데이트", desc: "월 근무표 반영" },
               { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
@@ -15567,6 +15566,7 @@ function WorkManageScreen() {
 
   return (
     <div>
+      <ScheduleUpdateAdmin />
       <div
         style={{
           background: "#FEF2F2",
