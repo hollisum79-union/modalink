@@ -1797,7 +1797,19 @@ function BoardDetail({ post, onBack, user, onEdit }: any) {
         }
       });
   };
-const handleDeletePost = async () => {
+const handleDeleteComment = async (c: any) => {
+    if (!window.confirm("이 댓글을 삭제할까요?")) return;
+    const hasReplies = comments.some((r: any) => r.parent_id === c.id);
+    if (hasReplies) {
+      // A안: 답글이 있으면 자리는 남기고 "삭제된 댓글입니다"로 표시 (답글 보존)
+      await supabase.from("comments").update({ deleted: true }).eq("id", c.id);
+      setComments(comments.map((x: any) => (x.id === c.id ? { ...x, deleted: true } : x)));
+    } else {
+      await supabase.from("comments").delete().eq("id", c.id);
+      setComments(comments.filter((x: any) => x.id !== c.id));
+    }
+  };
+  const handleDeletePost = async () => {
     if (!window.confirm("이 글을 삭제할까요? 되돌릴 수 없습니다.")) return;
     if (post.image_path) {
       await supabase.storage.from("archive").remove([post.image_path]);
@@ -2014,18 +2026,31 @@ const handleDeletePost = async () => {
                 <Icon path="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" color="#4F46E5" size={isReply ? 12 : 14} />
               </div>
               <div style={{ flex: 1, background: "#F8F7FF", borderRadius: 12, padding: "12px 14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{m.author}</span>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{m.created_at?.slice(0, 10)}</span>
-                </div>
-                <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0 }}>
-                  {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
-                  {m.content}
-                </p>
-                {user && (
-                  <button onClick={() => setReplyTo({ parentId: c.id, name: m.author })} style={{ background: "none", border: "none", padding: 0, marginTop: 6, fontSize: 11, fontWeight: 700, color: "#9CA3AF", cursor: "pointer", fontFamily: "inherit" }}>
-                    답글
-                  </button>
+                {m.deleted ? (
+                  <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>삭제된 댓글입니다</p>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{m.author}</span>
+                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>{m.created_at?.slice(0, 10)}</span>
+                    </div>
+                    <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0 }}>
+                      {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
+                      {m.content}
+                    </p>
+                    <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                      {user && (
+                        <button onClick={() => setReplyTo({ parentId: c.id, name: m.author })} style={{ background: "none", border: "none", padding: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", cursor: "pointer", fontFamily: "inherit" }}>
+                          답글
+                        </button>
+                      )}
+                      {user && (String(m.author_emp) === String(user?.employee_number) || user?.is_admin) && (
+                        <button onClick={() => handleDeleteComment(m)} style={{ background: "none", border: "none", padding: 0, fontSize: 11, fontWeight: 700, color: "#EF4444", cursor: "pointer", fontFamily: "inherit" }}>
+                          삭제
+                        </button>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
