@@ -15990,7 +15990,6 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaNo, setDiaNo] = React.useState<string | null>(null);
   const [diaCats, setDiaCats] = React.useState<string[]>([]);
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
-  const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
   const [diaImgMap, setDiaImgMap] = React.useState<any>({});
   const trainWindowFromGrid = (grid: any[][], train: string): { start: number; end: number } | null => {
     if (!grid || !grid.length) return null;
@@ -16086,22 +16085,13 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
 
   const doDiaSearch = async () => {
     const q = diaQ.trim();
-    setDiaSel(null); setDiaCats([]); setDiaRouteMap({});
+    setDiaSel(null); setDiaCats([]);
     if (!q) { setDiaNo(null); return; }
     setDiaNo(q);
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
     const cats = order.filter((c) => diaTable.some((r: any) => Number(r.dia_no) === Number(q) && r.day_type === c));
     setDiaCats(cats);
     if (cats.length === 1) setDiaSel(cats[0]);
-    const { data } = await supabase.from("dia_route").select("*").eq("dia_no", q);
-    const grouped: any = {};
-    (data || []).forEach((r: any) => {
-      if (!grouped[r.category]) grouped[r.category] = [];
-      grouped[r.category].push(r);
-    });
-    const map: any = {};
-    Object.keys(grouped).forEach((k) => { map[k] = rebuildRuns(grouped[k]); });
-    setDiaRouteMap(map);
     // 근무행로 사진(dia_image) 불러오기 — 구분별
     setDiaImgMap({});
     const { data: imgs } = await supabase.from("dia_image").select("category, image").eq("dia_no", q);
@@ -18227,7 +18217,6 @@ const getKyobunWork = (member: any, date: Date) => {
   const renderDiaSearch = () => {
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
     const info = (diaNo && diaSel) ? getDiaInfo(diaNo, diaSel) : null;
-    const runs = diaSel ? diaRouteMap[diaSel] : null;
     const hasVal = (v: any) => v !== null && v !== undefined && v !== "" && Number(v) !== 0;
     const fields: any[] = info ? [
       { label: "주행키로", show: hasVal(info.distance_km), val: `${info.distance_km} km` },
@@ -19143,7 +19132,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
             🔍 직원검색
           </button>
           <button
-            onClick={() => { setDiaQ(""); setDiaNo(null); setDiaCats([]); setDiaSel(null); setDiaRouteMap({}); setSubScreen("diasearch"); }}
+            onClick={() => { setDiaQ(""); setDiaNo(null); setDiaCats([]); setDiaSel(null); setSubScreen("diasearch"); }}
             style={{
               background: "#EEF6F2",
               border: "none",
