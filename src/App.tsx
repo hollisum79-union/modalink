@@ -1797,7 +1797,19 @@ function BoardDetail({ post, onBack, user, onEdit }: any) {
         }
       });
   };
-const handleDeletePost = async () => {
+const handleDeleteComment = async (c: any) => {
+    if (!window.confirm("이 댓글을 삭제할까요?")) return;
+    const hasReplies = comments.some((r: any) => r.parent_id === c.id);
+    if (hasReplies) {
+      // A안: 답글이 있으면 자리는 남기고 "삭제된 댓글입니다"로 표시 (답글 보존)
+      await supabase.from("comments").update({ deleted: true }).eq("id", c.id);
+      setComments(comments.map((x: any) => (x.id === c.id ? { ...x, deleted: true } : x)));
+    } else {
+      await supabase.from("comments").delete().eq("id", c.id);
+      setComments(comments.filter((x: any) => x.id !== c.id));
+    }
+  };
+  const handleDeletePost = async () => {
     if (!window.confirm("이 글을 삭제할까요? 되돌릴 수 없습니다.")) return;
     if (post.image_path) {
       await supabase.storage.from("archive").remove([post.image_path]);
@@ -2014,18 +2026,31 @@ const handleDeletePost = async () => {
                 <Icon path="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" color="#4F46E5" size={isReply ? 12 : 14} />
               </div>
               <div style={{ flex: 1, background: "#F8F7FF", borderRadius: 12, padding: "12px 14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{m.author}</span>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{m.created_at?.slice(0, 10)}</span>
-                </div>
-                <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0 }}>
-                  {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
-                  {m.content}
-                </p>
-                {user && (
-                  <button onClick={() => setReplyTo({ parentId: c.id, name: m.author })} style={{ background: "none", border: "none", padding: 0, marginTop: 6, fontSize: 11, fontWeight: 700, color: "#9CA3AF", cursor: "pointer", fontFamily: "inherit" }}>
-                    답글
-                  </button>
+                {m.deleted ? (
+                  <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>삭제된 댓글입니다</p>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{m.author}</span>
+                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>{m.created_at?.slice(0, 10)}</span>
+                    </div>
+                    <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0 }}>
+                      {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
+                      {m.content}
+                    </p>
+                    <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                      {user && (
+                        <button onClick={() => setReplyTo({ parentId: c.id, name: m.author })} style={{ background: "none", border: "none", padding: 0, fontSize: 11, fontWeight: 700, color: "#9CA3AF", cursor: "pointer", fontFamily: "inherit" }}>
+                          답글
+                        </button>
+                      )}
+                      {user && (String(m.author_emp) === String(user?.employee_number) || user?.is_admin) && (
+                        <button onClick={() => handleDeleteComment(m)} style={{ background: "none", border: "none", padding: 0, fontSize: 11, fontWeight: 700, color: "#EF4444", cursor: "pointer", fontFamily: "inherit" }}>
+                          삭제
+                        </button>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -24830,6 +24855,13 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   const [tempHour, setTempHour] = useState("");
   const [tempMin, setTempMin] = useState("");
   const [tempDistance, setTempDistance] = useState("");
+  const [pickedDia, setPickedDia] = useState<any>(null); // 관리자 등록 임시·변형 다이아 선택
+  const [tempDiaList, setTempDiaList] = useState<any[]>([]);
+  const [showManualTemp, setShowManualTemp] = useState(false);
+  useEffect(() => {
+    if (!showTempModal) return;
+    supabase.from("temp_dia").select("*").eq("visible", true).order("kind", { ascending: true }).order("dia_no", { ascending: true }).then(({ data }: any) => setTempDiaList(data || []));
+  }, [showTempModal]);
   // 교번교체용 상태
   const [swapMembers, setSwapMembers] = useState<any[]>([]);
   const [swapDate, setSwapDate] = useState(
@@ -24991,7 +25023,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
         return;
       }
     }
-    if (formIsTemp && (!tempStart || !tempEnd || (!tempHour && !tempMin))) {
+    if (formIsTemp && !pickedDia && (!tempStart || !tempEnd || (!tempHour && !tempMin))) {
       showToast("임시 다이아 시간을 입력해주세요.");
       return;
     }
@@ -24999,7 +25031,9 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     const isNight = formShift === "야간";
 
     let tempNightHours = 0;
-    if (formIsTemp) {
+    if (formIsTemp && pickedDia) {
+      tempNightHours = Number(pickedDia.night_hours) || 0; // 관리자가 입력한 정확한 심야값
+    } else if (formIsTemp) {
       const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
       let st = toMin(tempStart), en = toMin(tempEnd);
       if (en <= st) en += 1440;
@@ -25009,7 +25043,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     }
 
     const fillInfo = formIsTemp
-      ? `임시 ${tempStart}~${tempEnd}`
+      ? (pickedDia ? pickedDia.name : `임시 ${tempStart}~${tempEnd}`)
       : formFillType === "다이아" ? `다이아 ${formDiaNum}번` : "취급실";
     const fullMemo = formMemo ? `${fillInfo} · ${formMemo}` : fillInfo;
 
@@ -25022,11 +25056,11 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
         memo: fullMemo,
         is_night: isNight,
         is_temp_dia: formIsTemp,
-        temp_start_time: formIsTemp ? tempStart : null,
-        temp_end_time: formIsTemp ? tempEnd : null,
-        temp_work_hours: formIsTemp ? (Number(tempHour || 0) + Number(tempMin || 0) / 60) : null,
+        temp_start_time: formIsTemp ? (pickedDia ? (String(pickedDia.start_time || "").slice(0, 5) || null) : tempStart) : null,
+        temp_end_time: formIsTemp && !pickedDia ? tempEnd : null,
+        temp_work_hours: formIsTemp ? (pickedDia ? Number(pickedDia.work_hours) || 0 : Number(tempHour || 0) + Number(tempMin || 0) / 60) : null,
         temp_night_hours: formIsTemp ? tempNightHours : null,
-        temp_distance_km: formIsTemp ? (Number(tempDistance) || 0) : null,
+        temp_distance_km: formIsTemp ? (pickedDia ? Number(pickedDia.distance_km) || 0 : Number(tempDistance) || 0) : null,
       },
     ]);
 
@@ -25039,6 +25073,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     setFormMemo("");
     setFormDiaNum("");
     setFormIsTemp(false);
+    setPickedDia(null);
+    setShowManualTemp(false);
     setTempStart(""); setTempEnd(""); setTempHour(""); setTempMin(""); setTempDistance("");
 
     const { data } = await supabase
@@ -26167,7 +26203,7 @@ appearance: "none",
                           fontWeight: 600,
                         }}
                       >
-                        임시 ({tempStart || "--:--"}~{tempEnd || "--:--"})
+                        {pickedDia ? pickedDia.name + " · 인정 " + pickedDia.work_hours + "h" : "임시 (" + (tempStart || "--:--") + "~" + (tempEnd || "--:--") + ")"}
                       </div>
                     ) : (
                       <input
@@ -26198,8 +26234,10 @@ appearance: "none",
                       onClick={() => {
                         if (formIsTemp) {
                           setFormIsTemp(false);
+                          setPickedDia(null);
                           setTempStart(""); setTempEnd(""); setTempHour(""); setTempMin(""); setTempDistance("");
                         } else {
+                          setShowManualTemp(false);
                           setShowTempModal(true);
                         }
                       }}
@@ -26256,23 +26294,59 @@ appearance: "none",
                       <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>임시 다이아 입력</div>
                       <div onClick={() => setShowTempModal(false)} style={{ fontSize: 20, color: "#9CA3AF", cursor: "pointer" }}>✕</div>
                     </div>
+                    {tempDiaList.length > 0 ? (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>등록된 임시·변형 다이아에서 선택</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 7, maxHeight: 220, overflowY: "auto" }}>
+                          {tempDiaList.map((r: any) => (
+                            <div
+                              key={r.id}
+                              onClick={() => {
+                                setPickedDia(r);
+                                setFormIsTemp(true);
+                                setFormDiaNum("");
+                                setTempStart(""); setTempEnd(""); setTempHour(""); setTempMin(""); setTempDistance("");
+                                setShowTempModal(false);
+                              }}
+                              style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 12px", borderRadius: 12, border: "1.5px solid #E5E7EB", cursor: "pointer", background: "#fff" }}
+                            >
+                              <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 8px", borderRadius: 7, background: r.kind === "변형" ? "#FCE7F3" : "#FEF3C7", color: r.kind === "변형" ? "#BE185D" : "#B45309", flexShrink: 0 }}>{r.kind}</span>
+                              <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", flexShrink: 0 }}>{r.name}</span>
+                              <span style={{ fontSize: 11, color: "#9CA3AF", flex: 1 }}>인정 {r.work_hours}h · 심야 {r.night_hours}h · {r.distance_km}km</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12.5, color: "#9CA3AF", background: "#F9FAFB", borderRadius: 10, padding: "10px 12px", marginBottom: 12, lineHeight: 1.6 }}>
+                        관리자가 등록한 임시·변형 다이아가 아직 없어요. 아래 직접 입력을 이용하세요.
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setShowManualTemp(!showManualTemp)}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1.5px dashed #C7D2FE", background: "#fff", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: showManualTemp ? 14 : 0 }}
+                    >
+                      {showManualTemp ? "직접 입력 접기 ▲" : "✏️ 직접 입력 (목록에 없을 때) ▼"}
+                    </button>
+                    {showManualTemp && (
+                      <>
                     <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                      <div style={{ flex: 1 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>출근 시간</div>
                         <input
                           type="time"
                           value={tempStart}
                           onChange={(e) => setTempStart(e.target.value)}
-                          style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }}
+                          style={{ width: "100%", minWidth: 0, padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }}
                         />
                       </div>
-                      <div style={{ flex: 1 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, color: "#374151", fontWeight: 600, marginBottom: 6 }}>퇴근 시간</div>
                         <input
                           type="time"
                           value={tempEnd}
                           onChange={(e) => setTempEnd(e.target.value)}
-                          style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }}
+                          style={{ width: "100%", minWidth: 0, padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937", WebkitAppearance: "none", appearance: "none" }}
                         />
                       </div>
                     </div>
@@ -26287,18 +26361,18 @@ appearance: "none",
                           value={tempHour}
                           onChange={(e) => setTempHour(e.target.value)}
                           placeholder="8"
-                          style={{ flex: 1, padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                          style={{ flex: 1, minWidth: 0, width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
                         />
-                        <span style={{ fontSize: 13, color: "#6B7280" }}>시간</span>
+                        <span style={{ fontSize: 13, color: "#6B7280", flexShrink: 0 }}>시간</span>
                         <input
                           type="number"
                           inputMode="numeric"
                           value={tempMin}
                           onChange={(e) => setTempMin(e.target.value)}
                           placeholder="30"
-                          style={{ flex: 1, padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                          style={{ flex: 1, minWidth: 0, width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
                         />
-                        <span style={{ fontSize: 13, color: "#6B7280" }}>분</span>
+                        <span style={{ fontSize: 13, color: "#6B7280", flexShrink: 0 }}>분</span>
                       </div>
                     </div>
                     <div style={{ marginBottom: 18 }}>
@@ -26310,7 +26384,7 @@ appearance: "none",
                         value={tempDistance}
                         onChange={(e) => setTempDistance(e.target.value)}
                         placeholder="예: 85"
-                        style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
+                        style={{ width: "100%", minWidth: 0, padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937" }}
                       />
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -26326,6 +26400,7 @@ appearance: "none",
                             showToast("출근·퇴근 시간과 인정시간을 입력해주세요.");
                             return;
                           }
+                          setPickedDia(null);
                           setFormIsTemp(true);
                           setFormDiaNum("");
                           setShowTempModal(false);
@@ -26335,6 +26410,8 @@ appearance: "none",
                         적용
                       </button>
                     </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -27749,6 +27826,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
   const [comments, setComments] = React.useState<any[]>([]);
   const [newComment, setNewComment] = React.useState("");
     const [savingComment, setSavingComment] = React.useState(false);
+  const [cmtReply, setCmtReply] = React.useState<any>(null); // 답글 대상 { parentId, name }
   const myId = String(user?.employee_number || user?.emp_id || user?.id || user?.name || "");
   const loadComments = async (actId: any) => {
   const { data } = await supabase.from("activity_comments").select("*").eq("activity_id", actId).order("created_at", { ascending: true });
@@ -27761,14 +27839,21 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
         if (!newComment.trim() || !sel) return;
             if (!myId) { showToast("로그인 정보가 없어요.", "error"); return; }
     setSavingComment(true);
-    await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim() });
+    await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim(), parent_id: cmtReply ? cmtReply.parentId : null, reply_to: cmtReply ? cmtReply.name : null });
     setNewComment("");
+    setCmtReply(null);
     setSavingComment(false);
     loadComments(sel.id);
   };
-    const delComment = async (id: any) => {
+    const delComment = async (m: any) => {
     if (!window.confirm("댓글을 삭제할까요?")) return;
-    await supabase.from("activity_comments").delete().eq("id", id);
+    const hasReplies = comments.some((r: any) => r.parent_id === m.id);
+    if (hasReplies) {
+      // A안: 답글이 있으면 자리는 남기고 표시만 (답글 보존)
+      await supabase.from("activity_comments").update({ deleted: true }).eq("id", m.id);
+    } else {
+      await supabase.from("activity_comments").delete().eq("id", m.id);
+    }
     loadComments(sel.id);
   };
   const toggleLike = async (act: any) => {
@@ -27845,24 +27930,49 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
                 <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 12 }}>첫 응원 댓글을 남겨보세요!</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
-                  {comments.map((c: any) => (
-                    <div key={c.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{c.member_name || "조합원"}</span>
-                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 11, color: "#9CA3AF" }}>{(c.created_at || "").slice(5, 10)}</span>
-                                                    {myId && String(c.employee_number) === myId && (
-                            <span onClick={() => delComment(c.id)} style={{ fontSize: 11, color: "#EF4444", cursor: "pointer" }}>삭제</span>
-                          )}
-                        </span>
+                  {comments.filter((c: any) => !c.parent_id).map((c: any) => {
+                    const replies = comments.filter((r: any) => r.parent_id === c.id);
+                    const renderOne = (m: any, isReply: boolean) => (
+                      <div key={m.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", marginLeft: isReply ? 28 : 0 }}>
+                        {m.deleted ? (
+                          <div style={{ fontSize: 12, color: "#9CA3AF" }}>삭제된 댓글입니다</div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{m.member_name || "조합원"}</span>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 11, color: "#9CA3AF" }}>{(m.created_at || "").slice(5, 10)}</span>
+                                <span onClick={() => setCmtReply({ parentId: c.id, name: m.member_name || "조합원" })} style={{ fontSize: 11, color: "#9CA3AF", cursor: "pointer", fontWeight: 700 }}>답글</span>
+                                {myId && (String(m.employee_number) === myId || user?.is_admin) && (
+                                  <span onClick={() => delComment(m)} style={{ fontSize: 11, color: "#EF4444", cursor: "pointer" }}>삭제</span>
+                                )}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 14, color: "#374151", whiteSpace: "pre-wrap" }}>
+                              {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
+                              {m.content}
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <div style={{ fontSize: 14, color: "#374151", whiteSpace: "pre-wrap" }}>{c.content}</div>
-                    </div>
-                  ))}
+                    );
+                    return (
+                      <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {renderOne(c, false)}
+                        {replies.map((r: any) => renderOne(r, true))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {cmtReply && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "0 2px" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>↳ {cmtReply.name}님에게 답글</span>
+                  <span onClick={() => setCmtReply(null)} style={{ fontSize: 12, color: "#9CA3AF", cursor: "pointer", fontWeight: 600 }}>취소</span>
                 </div>
               )}
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="응원 한마디 남기기" style={{ flex: 1, padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
+                <input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder={cmtReply ? "답글 남기기" : "응원 한마디 남기기"} style={{ flex: 1, padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
                 <button onClick={addComment} disabled={savingComment} style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>{savingComment ? "..." : "등록"}</button>
               </div>
             </div>
