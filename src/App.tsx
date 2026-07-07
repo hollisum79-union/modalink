@@ -15613,6 +15613,7 @@ function StartHistoryAdmin() {
         ]}
         tip="⚠️ 임시 교체는 여기가 아니라 조합원끼리 하는 '교번교체'를 쓰세요. 여기는 영구 변경 전용이에요. 잘못 저장했으면 아래 목록에서 취소하면 됩니다."
       />
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", marginBottom: 4 }}>📅 적용일 — 이 날짜부터 자리가 맞바뀝니다 (아래 칸을 눌러 선택)</div>
       <input
         type="date"
         value={적용일}
