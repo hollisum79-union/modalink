@@ -15618,7 +15618,7 @@ function StartHistoryAdmin() {
         type="date"
         value={적용일}
         onChange={(e) => set적용일(e.target.value)}
-        style={{ ...selStyle, WebkitAppearance: "none", appearance: "none", maxWidth: "100%" }}
+                style={{ ...selStyle, WebkitAppearance: "none", appearance: "none", maxWidth: "100%", boxSizing: "border-box" }}
       />
       <select value={선택A} onChange={(e) => set선택A(e.target.value)} style={selStyle}>
         <option value="">첫 번째 사람 선택</option>
