@@ -13136,6 +13136,7 @@ function RouteInputScreen() {
 }
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
+  const [diaTimeTab, setDiaTimeTab] = useState("편승용");
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
     if (["workmanage", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
@@ -13514,7 +13515,7 @@ useEffect(() => {
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
               { id: "workmanage", label: "교번관리", desc: "교번 교체·충당 관리" },
-              { id: "kyobundia", label: "다이아 입력", desc: "운전 다이아 등록·수정" },
+              { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
               { id: "scheduleupdate", label: "근무표 업데이트", desc: "월 근무표 반영" },
               { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
             ].map((m) => (
@@ -14039,6 +14040,14 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
         
 {activeMenu === "kyobundia" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+    <div style={{ fontSize: 16, fontWeight: 800, color: "#4338CA", marginBottom: 14 }}>🕐 다이아 시간 입력</div>
+    <div style={{ display: "flex", gap: 8, background: "#F3F4F6", padding: 5, borderRadius: 12, marginBottom: 16 }}>
+      {[["편승용", "상세 시각표"], ["급여용", "근무시간·거리"]].map(([t, s]) => (
+        <button key={t} onClick={() => setDiaTimeTab(t)} style={{ flex: 1, padding: "9px 4px", border: "none", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", background: diaTimeTab === t ? "#fff" : "transparent", color: diaTimeTab === t ? "#4F46E5" : "#6B7280", fontWeight: 700, fontSize: 13, boxShadow: diaTimeTab === t ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>{t}<span style={{ display: "block", fontSize: 10, fontWeight: 600, color: diaTimeTab === t ? "#8B8FE0" : "#9CA3AF" }}>{s}</span></button>
+      ))}
+    </div>
+    {diaTimeTab === "편승용" && <DiaTimetableUpload />}
+    {diaTimeTab === "급여용" && (<>
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록 (여러 장)</div>
     <AdminGuide steps={["[파일] 엑셀/CSV를 선택하면 여러 다이아가 한 번에 등록돼요", "[사진] 시간표 사진 여러 장을 선택하면 AI가 자동으로 읽어 표로 만들어요", "AI가 읽은 내용을 확인·수정한 뒤 저장하세요"]} tip="💡 AI가 읽은 값이 틀릴 수 있으니 저장 전에 꼭 확인하세요." />
         {/* ===== 엑셀(CSV) 한 번에 업로드 ===== */}
@@ -14255,6 +14264,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
         전부 저장 ({diaList.filter((x) => x.result).length}개)
       </button>
     )}
+  </>)}
   </div>
 )}
         {activeMenu === "vote" &&
@@ -15425,53 +15435,13 @@ const 유형색: { [key: string]: { bg: string; fg: string; label: string } } = 
 // ===== 관리자: 근무 관리 화면 (WorkManageScreen) - Supabase 저장 버전 =====
 // 기존 function WorkManageScreen() {...} 전체를 이걸로 교체하세요.
 
-function WorkManageScreen() {
-  const [휴무목록, set휴무목록] = React.useState<
-    { id: number; dia: string; 소속: string }[]
-  >([]);
-  const [휴무입력, set휴무입력] = React.useState("");
-
-  const [소속입력, set소속입력] = React.useState("대공원");
-    const [로딩, set로딩] = React.useState(false);
+function DiaTimetableUpload() {
   const [ttDayType, setTtDayType] = React.useState("평일");
   const [ttRegistered, setTtRegistered] = React.useState<any[]>([]);
   const loadTtRegistered = async () => { const { data } = await supabase.from("dia_timetable").select("dia_no, day_type"); setTtRegistered(data || []); };
   React.useEffect(() => { loadTtRegistered(); }, []);
   const [ttUploading, setTtUploading] = React.useState(false);
   const [ttResult, setTtResult] = React.useState("");
-
-  React.useEffect(() => {
-    불러오기();
-  }, []);
-
-  const 불러오기 = async () => {
-    const { data, error } = await supabase
-      .from("off_dias")
-      .select("*")
-      .order("created_at", { ascending: true });
-    if (!error && data) set휴무목록(data as any);
-  };
-
-  const 휴무추가 = async () => {
-    const v = 휴무입력.trim();
-    if (!v) return;
-    if (휴무목록.some((x) => x.dia === v && x.소속 === 소속입력)) {
-      showToast("이미 지정된 다이아입니다.");
-      set휴무입력("");
-      return;
-    }
-    set로딩(true);
-    const { error } = await supabase
-      .from("off_dias")
-      .insert([{ dia: v, 소속: 소속입력 }]);
-    set로딩(false);
-    if (error) {
-      showToast("저장 실패: " + error.message, "error");
-      return;
-    }
-    set휴무입력("");
-    불러오기();
-  };
   const handleTimetableUpload = (file: File) => {
     setTtUploading(true); setTtResult("");
     const ensureXLSX = () => new Promise<any>((resolve, reject) => {
@@ -15507,15 +15477,6 @@ function WorkManageScreen() {
       reader.readAsArrayBuffer(file);
     }).catch(() => { setTtUploading(false); setTtResult("엑셀 라이브러리 로드 실패"); });
   };
-  const 휴무삭제 = async (id: number) => {
-    const { error } = await supabase.from("off_dias").delete().eq("id", id);
-    if (error) {
-      showToast("삭제 실패: " + error.message, "error");
-      return;
-    }
-    불러오기();
-  };
-
   return (
     <div>
       <AdminGuide steps={["구분을 먼저 고르세요 (평일/휴일/평평/평휴/휴휴/휴평)", "그 구분의 운행시각표 엑셀(.xlsx)을 선택하세요", "업로드하면 자동으로 저장됩니다"]} tip="⚠️ 엑셀의 시트 이름이 다이아 번호여야 해요 (예: 시트명 '6' = 다이아 6). 한 파일에 여러 다이아(시트)를 넣을 수 있어요." />
@@ -15551,6 +15512,61 @@ function WorkManageScreen() {
           );
         })}
       </div>
+    </div>
+  );
+}
+function WorkManageScreen() {
+  const [휴무목록, set휴무목록] = React.useState<
+    { id: number; dia: string; 소속: string }[]
+  >([]);
+  const [휴무입력, set휴무입력] = React.useState("");
+
+  const [소속입력, set소속입력] = React.useState("대공원");
+    const [로딩, set로딩] = React.useState(false);
+
+  React.useEffect(() => {
+    불러오기();
+  }, []);
+
+  const 불러오기 = async () => {
+    const { data, error } = await supabase
+      .from("off_dias")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (!error && data) set휴무목록(data as any);
+  };
+
+  const 휴무추가 = async () => {
+    const v = 휴무입력.trim();
+    if (!v) return;
+    if (휴무목록.some((x) => x.dia === v && x.소속 === 소속입력)) {
+      showToast("이미 지정된 다이아입니다.");
+      set휴무입력("");
+      return;
+    }
+    set로딩(true);
+    const { error } = await supabase
+      .from("off_dias")
+      .insert([{ dia: v, 소속: 소속입력 }]);
+    set로딩(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    set휴무입력("");
+    불러오기();
+  };
+  const 휴무삭제 = async (id: number) => {
+    const { error } = await supabase.from("off_dias").delete().eq("id", id);
+    if (error) {
+      showToast("삭제 실패: " + error.message, "error");
+      return;
+    }
+    불러오기();
+  };
+
+  return (
+    <div>
       <div
         style={{
           background: "#FEF2F2",
@@ -15800,11 +15816,47 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [rideSel, setRideSel] = React.useState<string | null>(null);
   const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
   const [rideRoutes, setRideRoutes] = React.useState<any>({});
+  const [rideRun, setRideRun] = React.useState<any>({});
   const [diaQ, setDiaQ] = React.useState("");
   const [diaNo, setDiaNo] = React.useState<string | null>(null);
   const [diaCats, setDiaCats] = React.useState<string[]>([]);
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
   const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
+  const trainWindowFromGrid = (grid: any[][], train: string): { start: number; end: number } | null => {
+    if (!grid || !grid.length) return null;
+    const toMin = (s: any): number | null => {
+      const str = String(s == null ? "" : s).trim();
+      const m = str.match(/^(\d{1,2}):(\d{2})/);
+      if (!m) return null;
+      const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+      if (isNaN(h) || isNaN(mi)) return null;
+      return h * 60 + mi; // 24:xx, 25:xx = 자정 넘김 → 1440 이상 (의도된 값)
+    };
+    const hdr = (grid[6] || []) as any[];
+    let col = -1;
+    hdr.forEach((v: any, ci: number) => { if (String(v == null ? "" : v).trim() === String(train).trim()) col = ci; });
+    if (col < 0) return null;
+    let stCol = -1, labelRowIdx = -1;
+    for (let rr = 8; rr < 14 && rr < grid.length; rr++) {
+      const lr = (grid[rr] || []) as any[];
+      lr.forEach((v: any, ci: number) => { if (String(v == null ? "" : v).indexOf("역명") >= 0) { stCol = ci; labelRowIdx = rr; } });
+      if (stCol >= 0) break;
+    }
+    const startRow = labelRowIdx >= 0 ? labelRowIdx + 1 : 11;
+    const times: number[] = [];
+    for (let r = startRow; r < grid.length; r++) {
+      const mm = toMin((grid[r] || [])[col]);
+      if (mm != null) times.push(mm);
+    }
+    if (times.length === 0) return null;
+    return { start: Math.min(...times), end: Math.max(...times) };
+  };
+  const trainRunsNow = (grid: any[][] | null, train: string, nowMin: number): boolean | null => {
+    if (!grid) return null;
+    const w = trainWindowFromGrid(grid, train);
+    if (!w) return null;
+    return (nowMin >= w.start && nowMin <= w.end) || (nowMin + 1440 >= w.start && nowMin + 1440 <= w.end);
+  };
   const doRideSearch = async () => {
     const q = rideQ.trim();
     setRideSel(null);
@@ -15819,12 +15871,12 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     }
     const { data } = await supabase.from("ride_dia").select("*").eq("train_no", q);
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
-    const sorted = (data || []).sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (a.dia_no - b.dia_no));
-    setRideHits(sorted);
+    const hits = (data || []).slice();
     const wfMap: any = {};
     const rtMap: any = {};
-    if (sorted.length > 0) {
-      const dias = Array.from(new Set(sorted.map((r: any) => String(r.dia_no))));
+    const runMap: any = {};
+    if (hits.length > 0) {
+      const dias = Array.from(new Set(hits.map((r: any) => String(r.dia_no))));
       const { data: wfs } = await supabase.from("dia_work_form").select("*").in("dia_no", dias);
       (wfs || []).forEach((w: any) => { wfMap[String(w.dia_no) + "|" + w.category] = w.work_form; });
       const { data: rts } = await supabase.from("dia_route").select("*").in("dia_no", dias);
@@ -15835,9 +15887,23 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
         grouped[k].push(r);
       });
       Object.keys(grouped).forEach((k) => { rtMap[k] = rebuildRuns(grouped[k]); });
+      // 시간표로 '지금 이 열번 운행중'인지 판단 (열번별 정확 시각, 자정 넘김 처리)
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      for (const h of hits) {
+        const key = String(h.dia_no) + "|" + h.category;
+        if (key in runMap) continue;
+        const { data: tt } = await supabase.from("dia_timetable").select("grid").eq("dia_no", String(h.dia_no)).eq("day_type", h.category).maybeSingle();
+        runMap[key] = trainRunsNow(tt ? ((tt as any).grid as any[][]) : null, q, nowMin);
+      }
     }
+    // 정렬: 구분 순 → 지금 운행중 우선(운행중 0, 모름 1, 안함 2) → 다이아번호
+    const rank = (h: any) => { const v = runMap[String(h.dia_no) + "|" + h.category]; return v === true ? 0 : (v == null ? 1 : 2); };
+    const sorted = hits.sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (rank(a) - rank(b)) || (a.dia_no - b.dia_no));
+    setRideHits(sorted);
     setRideWorkForms(wfMap);
     setRideRoutes(rtMap);
+    setRideRun(runMap);
     const cats = Array.from(new Set(sorted.map((r: any) => r.category)));
     if (cats.length === 1) setRideSel(cats[0] as string);
   };
@@ -17897,6 +17963,8 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아</div>
                 {rideHits.filter((h: any) => h.category === rideSel).map((h: any, i: number) => {
                   const bs = badgeStyle(h.mark);
+                  const runNow = rideRun[String(h.dia_no) + "|" + h.category];
+                  const off = runNow === false;
                   const todayDrivers = members
                     .filter((m: any) => {
                       const w = getKyobunWork(m, today);
@@ -17905,28 +17973,30 @@ const getKyobunWork = (member: any, date: Date) => {
                     .map((m: any) => m.name);
                   const info = getDiaInfo(h.dia_no, h.category);
                   return (
-                    <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
+                    <div key={i} style={{ background: off ? "#F7F7F9" : "#fff", borderRadius: 16, padding: "18px", boxShadow: off ? "none" : "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10, position: "relative" }}>
+                      {runNow === true && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A" }}>🟢 지금 운행중</span>}
+                      {runNow === false && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#E5E7EB", color: "#9CA3AF" }}>지금 운행 안 함</span>}
                       <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
+                        <div style={{ fontSize: 26, fontWeight: 800, color: off ? "#B0B0B8" : "#4338CA" }}>다이아 {h.dia_no}</div>
                         <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
-                        {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
+                        {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: off ? "#B0B0B8" : "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
                         {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
                       </div>
                       <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #F3F4F6", textAlign: "center" }}>
                         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>오늘 이 다이아 기관사</div>
                         {todayDrivers.length > 0
-                          ? <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>{todayDrivers.join(", ")}</div>
+                          ? <div style={{ fontSize: 16, fontWeight: 700, color: off ? "#B0B0B8" : "#1F2937" }}>{todayDrivers.join(", ")}</div>
                           : <div style={{ fontSize: 13, color: "#9CA3AF" }}>오늘은 해당 없음</div>}
                       </div>
                       {info && (info.start_time || info.end_time) && (
                         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6", display: "flex", justifyContent: "center", gap: 28 }}>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>출근</div>
-                            <div style={{ fontSize: 16, fontWeight: 700, color: "#1D4ED8" }}>{info.start_time || "-"}</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: off ? "#B0B0B8" : "#1D4ED8" }}>{info.start_time || "-"}</div>
                           </div>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>퇴근</div>
-                            <div style={{ fontSize: 16, fontWeight: 700, color: "#BE185D" }}>{info.end_time || "-"}</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: off ? "#B0B0B8" : "#BE185D" }}>{info.end_time || "-"}</div>
                           </div>
                         </div>
                       )}
