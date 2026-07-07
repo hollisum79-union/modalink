@@ -46,7 +46,7 @@ function showToast(message: string, type: "success" | "error" = "success") {
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
-function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = []) {
+function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
   if (!member || rotationData.length === 0) return null;
 
   const calc = (mem: any) => {
@@ -57,8 +57,20 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: 
     const target = new Date(date);
     target.setHours(0, 0, 0, 0);
     const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+    // B안: 날짜별 시작점 이력 반영 (이력 없으면 원본 그대로)
+    let effStart = mem.start_position;
+    if (startHistory.length > 0 && mem.id != null) {
+      const _yy = target.getFullYear();
+      const _mo = String(target.getMonth() + 1).padStart(2, "0");
+      const _da = String(target.getDate()).padStart(2, "0");
+      const _dStr = `${_yy}-${_mo}-${_da}`;
+      const _hit = startHistory
+        .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= _dStr)
+        .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+      if (_hit) effStart = _hit.start_position;
+    }
     const pos =
-      ((((mem.start_position - 1 + diff) % mem.schedule_total) +
+      ((((effStart - 1 + diff) % mem.schedule_total) +
         mem.schedule_total) %
         mem.schedule_total) +
       1;
@@ -15799,8 +15811,9 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refr
     if (user.work_group === "대공원" || user.work_group === "도봉") return;
     setSelectedMember(user);
   }, [user]);
-  const [members, setMembers] = React.useState<any[]>([]);
+ const [members, setMembers] = React.useState<any[]>([]);
   const [rotationData, setRotationData] = React.useState<any[]>([]);
+  const [startHistory, setStartHistory] = React.useState<any[]>([]);
 const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [workForms, setWorkForms] = React.useState<any>({});
@@ -16153,6 +16166,17 @@ if (data) {
       if (data) setRotationData(data);
     };
     fetch();
+  }, []);
+
+  // B안: 날짜별 시작점 이력 불러오기
+  React.useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase
+        .from("kyobun_start_history")
+        .select("member_id, effective_date, start_position");
+      if (data) setStartHistory(data);
+    };
+    load();
   }, []);
   // ============================================================
   // [추가 위치 1] ScheduleScreen 안에서
