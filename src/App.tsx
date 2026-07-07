@@ -1695,6 +1695,7 @@ function HaebangRaceGame({ onBack, user }: any) {
 function BoardDetail({ post, onBack, user, onEdit }: any) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
+  const [replyTo, setReplyTo] = useState<any>(null); // 답글 대상 { parentId, name }
   useEffect(() => {
     supabase
       .from("comments")
@@ -1760,6 +1761,8 @@ function BoardDetail({ post, onBack, user, onEdit }: any) {
       author: user?.name,
       author_emp: user?.employee_number,
       content: newComment,
+      parent_id: replyTo ? replyTo.parentId : null,
+      reply_to: replyTo ? replyTo.name : null,
     };
     supabase
       .from("comments")
@@ -1769,6 +1772,7 @@ function BoardDetail({ post, onBack, user, onEdit }: any) {
         if (data && data[0]) {
           setComments([...comments, data[0]]);
           setNewComment("");
+          setReplyTo(null);
           // 글 주인에게 알림 보내기 (내 글에 내가 댓글 단 건 제외)
           if (post.author_emp && post.author_emp !== user?.employee_number) {
             supabase.from("notifications").insert({
@@ -2002,74 +2006,49 @@ const handleDeletePost = async () => {
           </div>
         )}
 
-        {comments.map((c) => (
-          <div
-            key={c.id}
-            style={{ display: "flex", gap: 12, marginBottom: 16 }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: "#EEF0FF",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Icon
-                path="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                color="#4F46E5"
-                size={14}
-              />
-            </div>
-            <div
-              style={{
-                flex: 1,
-                background: "#F8F7FF",
-                borderRadius: 12,
-                padding: "12px 14px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 6,
-                }}
-              >
-                <span
-                  style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}
-                >
-                  {c.author}
-                </span>
-                <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                    {c.created_at?.slice(0, 10)}
-                  </span>
-                </span>
+        {comments.filter((c: any) => !c.parent_id).map((c: any) => {
+          const replies = comments.filter((r: any) => r.parent_id === c.id);
+          const renderOne = (m: any, isReply: boolean) => (
+            <div key={m.id} style={{ display: "flex", gap: 12, marginBottom: 12, marginLeft: isReply ? 40 : 0 }}>
+              <div style={{ width: isReply ? 26 : 32, height: isReply ? 26 : 32, borderRadius: "50%", background: "#EEF0FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon path="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" color="#4F46E5" size={isReply ? 12 : 14} />
               </div>
-              <p
-                style={{
-                  fontSize: 14,
-                  color: "#374151",
-                  lineHeight: 1.6,
-                  margin: 0,
-                }}
-              >
-                {c.content}
-              </p>
+              <div style={{ flex: 1, background: "#F8F7FF", borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{m.author}</span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>{m.created_at?.slice(0, 10)}</span>
+                </div>
+                <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0 }}>
+                  {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
+                  {m.content}
+                </p>
+                {user && (
+                  <button onClick={() => setReplyTo({ parentId: c.id, name: m.author })} style={{ background: "none", border: "none", padding: 0, marginTop: 6, fontSize: 11, fontWeight: 700, color: "#9CA3AF", cursor: "pointer", fontFamily: "inherit" }}>
+                    답글
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+          return (
+            <div key={c.id}>
+              {renderOne(c, false)}
+              {replies.map((r: any) => renderOne(r, true))}
+            </div>
+          );
+        })}
         {user ? (
+          <div style={{ marginTop: 16 }}>
+            {replyTo && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "0 4px" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>↳ {replyTo.name}님에게 답글</span>
+                <span onClick={() => setReplyTo(null)} style={{ fontSize: 12, color: "#9CA3AF", cursor: "pointer", fontWeight: 600 }}>취소</span>
+              </div>
+            )}
           <div
             style={{
               display: "flex",
               gap: 10,
-              marginTop: 16,
               alignItems: "flex-end",
             }}
           >
@@ -2105,7 +2084,7 @@ const handleDeletePost = async () => {
               <input
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="댓글을 입력하세요"
+                placeholder={replyTo ? "답글을 입력하세요" : "댓글을 입력하세요"}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleComment();
                 }}
@@ -2141,6 +2120,7 @@ const handleDeletePost = async () => {
                 />
               </button>
             </div>
+          </div>
           </div>
         ) : (
           <div
@@ -13133,11 +13113,11 @@ function TempDiaAdmin() {
       if (d) {
         setFields({
           distance_km: String(d.distance_km ?? ""), start_time: String(d.start_time ?? ""),
-          work_hours: String(d.work_hours ?? ""), drive_hours: String(d.drive_hours ?? ""),
-          wait_hours: String(d.wait_hours ?? ""), ride_hours: String(d.ride_hours ?? ""),
-          watch_hours: String(d.watch_hours ?? ""), edu_hours: String(d.edu_hours ?? ""),
-          prep_hours: String(d.prep_hours ?? ""), clean_hours: String(d.clean_hours ?? ""),
-          night_hours: String(d.night_hours ?? ""),
+          work_hours: decToTime(d.work_hours), drive_hours: decToTime(d.drive_hours),
+          wait_hours: decToTime(d.wait_hours), ride_hours: decToTime(d.ride_hours),
+          watch_hours: decToTime(d.watch_hours), edu_hours: decToTime(d.edu_hours),
+          prep_hours: decToTime(d.prep_hours), clean_hours: decToTime(d.clean_hours),
+          night_hours: decToTime(d.night_hours),
         });
         setLoadedFrom(n);
       } else {
@@ -13165,11 +13145,11 @@ function TempDiaAdmin() {
       const res = JSON.parse(txt);
       setFields({
         distance_km: String(res.distance_km ?? ""), start_time: String(res.start_time ?? ""),
-        work_hours: String(res.work_hours ?? ""), drive_hours: String(res.drive_hours ?? ""),
-        wait_hours: String(res.wait_hours ?? ""), ride_hours: String(res.ride_hours ?? ""),
-        watch_hours: String(res.watch_hours ?? ""), edu_hours: String(res.edu_hours ?? ""),
-        prep_hours: String(res.prep_hours ?? ""), clean_hours: String(res.clean_hours ?? ""),
-        night_hours: String(res.night_hours ?? ""),
+        work_hours: decToTime(res.work_hours), drive_hours: decToTime(res.drive_hours),
+        wait_hours: decToTime(res.wait_hours), ride_hours: decToTime(res.ride_hours),
+        watch_hours: decToTime(res.watch_hours), edu_hours: decToTime(res.edu_hours),
+        prep_hours: decToTime(res.prep_hours), clean_hours: decToTime(res.clean_hours),
+        night_hours: decToTime(res.night_hours),
       });
       if (!no && res.dia_no) setNo(String(res.dia_no));
     } catch (err) { setAiError("읽기 실패: " + String(err)); }
@@ -13210,6 +13190,20 @@ function TempDiaAdmin() {
     load();
   };
 
+  // 저장된 소수(3.96)를 화면용 시간(03:57:36)으로. 이미 시간 형태면 그대로
+  const decToTime = (x: any): string => {
+    const s = String(x ?? "");
+    if (s === "") return "";
+    if (s.includes(":")) return s;
+    const f = parseFloat(s);
+    if (!f) return "";
+    const total = Math.round(f * 3600);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    const p = (v: number) => String(v).padStart(2, "0");
+    return p(h) + ":" + p(m) + ":" + p(sec);
+  };
   // 숫자만 치면 06:53:00 형태로 자동 포맷 (6자리 기준)
   const fmtTime = (v: string): string => {
     const d = v.replace(/[^0-9]/g, "").slice(0, 6);
