@@ -12500,83 +12500,6 @@ function fmtHours(n: any): string {
   const s = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
-function RouteDiagram({ runs }: { runs: any[] }) {
-  const padL = 44, step = 48, top = 50, rowH = 42;
-  const xOf = (idx: number) => padL + idx * step;
-  const W = padL + 17 * step + 40;
-  const { flat, warnings } = expandRouteRuns(runs);
-  const rows = flat.map((r) => {
-    const idxs = r.idxs || [];
-    return { train_no: r.train_no, start_time: r.start_time, end_time: r.end_time, idxs, isRide: !!r.isRide, from: idxs[0], to: idxs[idxs.length - 1], group: r.group };
-  }).filter((r) => r.idxs.length >= 2);
-  const warnBox = warnings.length > 0 ? <div style={{ color: "#DC2626", fontSize: 11, padding: "0 2px 8px", lineHeight: 1.5 }}>⚠️ {warnings.join(" / ")}</div> : null;
-  if (rows.length === 0) return <div>{warnBox}<div style={{ fontSize: 12, color: "#9CA3AF", padding: "14px 4px" }}>약자를 입력하면 여기에 행로가 그려져요.</div></div>;
-  const H = top + rows.length * rowH + 24;
-  return (
-    <div>
-      {warnBox}
-      <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff" }}>
-        <svg viewBox={`0 0 ${W} ${H}`} width={W} style={{ maxWidth: "none", display: "block" }}>
-        <line x1={padL} y1={top - 10} x2={xOf(17)} y2={top - 10} stroke="#E5E7EB" />
-        {ROUTE_STATIONS.map((st, i) => (
-          <g key={i}>
-            <text x={xOf(i)} y={top - 18} fontSize="9.5" fill="#374151" textAnchor="middle">{st.name}</text>
-            <line x1={xOf(i)} y1={top - 6} x2={xOf(i)} y2={H - 16} stroke="#F3F4F6" />
-          </g>
-        ))}
-        {rows.map((r, i) => {
-          const y = top + i * rowH + 16;
-          if (r.isRide) {
-            const a = r.idxs.length ? xOf(r.idxs[0]) : padL;
-            const b = r.idxs.length ? xOf(r.idxs[r.idxs.length - 1]) : xOf(5);
-            const mx = (a + b) / 2;
-            const prevR = rows[i - 1];
-            const linked = prevR && prevR.group === r.group && prevR.to === r.from;
-            const py = top + (i - 1) * rowH + 16;
-            const sr = a >= b;
-            const sx = sr ? a + 14 : a - 14, sAnc = sr ? "start" : "end";
-            const ex = sr ? b - 14 : b + 14, eAnc = sr ? "end" : "start";
-            return (
-              <g key={i}>
-                {linked && <line x1={a - 2} y1={py} x2={a - 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
-                {linked && <line x1={a + 2} y1={py} x2={a + 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
-                <line x1={a} y1={y - 2} x2={b} y2={y - 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
-                <line x1={a} y1={y + 2} x2={b} y2={y + 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
-                {r.idxs.length > 0 && <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
-                {r.idxs.length > 0 && <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
-                <rect x={mx - 20} y={y - 10} width="40" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
-                <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
-              </g>
-            );
-          }
-          const pts = r.idxs.map((id) => `${xOf(id)},${y}`).join(" ");
-          const fromOut = r.from === 0 || r.from === 17;
-          const toIn = r.to === 0 || r.to === 17;
-          const mx = (xOf(r.idxs[0]) + xOf(r.idxs[r.idxs.length - 1])) / 2;
-          const xf = xOf(r.idxs[0]), xt = xOf(r.idxs[r.idxs.length - 1]);
-          const sr = xf >= xt;
-          const sx = sr ? xf + 14 : xf - 14, sAnc = sr ? "start" : "end";
-          const ex = sr ? xt - 14 : xt + 14, eAnc = sr ? "end" : "start";
-          const prev = rows[i - 1];
-          const linkedFrom = prev && !prev.isRide && !r.isRide && prev.group === r.group && prev.to === r.from;
-          return (
-            <g key={i}>
-              {linkedFrom && <line x1={xOf(r.from)} y1={top + (i - 1) * rowH + 16} x2={xOf(r.from)} y2={y} stroke="#111" strokeWidth="2.5" />}
-              <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
-              {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
-              {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
-              <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
-              <rect x={mx - 21} y={y - 10} width="42" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
-              <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
-            </g>
-          );
-        })}
-      </svg>
-      </div>
-    </div>
-  );
-}
 function ImageZoomViewer({ src, onClose }: { src: string; onClose: () => void }) {
   const wrapRef = React.useRef<any>(null);
   const stageRef = React.useRef<any>(null);
@@ -15972,7 +15895,6 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refr
 const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [workForms, setWorkForms] = React.useState<any>({});
-  const [popupRoute, setPopupRoute] = React.useState<any>(null);
   const [popupDiaImg, setPopupDiaImg] = React.useState<string>("");
   const [zoomImg, setZoomImg] = React.useState<string>("");
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
@@ -16687,27 +16609,6 @@ const getKyobunWork = (member: any, date: Date) => {
 
   // 근무표 상세 팝업: 그 날 교번 다이아의 근무행로 불러오기
   React.useEffect(() => {
-    if (!editingDate || activeTab !== "교번" || !selectedMember) { setPopupRoute(null); return; }
-    const w = getKyobunWork(selectedMember, new Date(editingDate));
-    if (!w) { setPopupRoute(null); return; }
-    const dt = getDiaDayType(w.type, new Date(editingDate));
-    if (!dt) { setPopupRoute([]); return; }
-    let cancel = false;
-    setPopupRoute(undefined);
-    (async () => {
-      const { data } = await supabase
-        .from("dia_route")
-        .select("*")
-        .eq("dia_no", String(w.dia))
-        .eq("category", dt)
-        .order("seq", { ascending: true });
-      if (cancel) return;
-      setPopupRoute(data && data.length > 0 ? rebuildRuns(data) : []);
-    })();
-    return () => { cancel = true; };
-  }, [editingDate, selectedMember, activeTab]);
-
-  React.useEffect(() => {
     if (!editingDate || activeTab !== "교번" || !selectedMember) { setPopupDiaImg(""); return; }
     const w = getKyobunWork(selectedMember, new Date(editingDate));
     if (!w) { setPopupDiaImg(""); return; }
@@ -17253,12 +17154,8 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a1a", marginBottom: 10 }}>🚉 근무행로</div>
                 {popupDiaImg ? (
                   <img src={popupDiaImg} alt="근무행로" onClick={() => setZoomImg(popupDiaImg)} style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block", cursor: "zoom-in" }} />
-                ) : popupRoute === undefined ? (
-                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>불러오는 중...</div>
-                ) : (popupRoute && popupRoute.length > 0) ? (
-                  <RouteDiagram runs={popupRoute} />
                 ) : (
-                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 미입력</div>
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 사진이 아직 없어요</div>
                 )}
               </div>
             )}
