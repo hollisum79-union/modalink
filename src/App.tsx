@@ -16473,8 +16473,20 @@ const getKyobunWork = (member: any, date: Date) => {
       const target = new Date(date);
       target.setHours(0, 0, 0, 0);
       const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+      // B안: 날짜별 시작점 이력 반영 (이력 없으면 원본 그대로)
+      let effStart = mem.start_position;
+      if (startHistory.length > 0 && mem.id != null) {
+        const _yy = target.getFullYear();
+        const _mo = String(target.getMonth() + 1).padStart(2, "0");
+        const _da = String(target.getDate()).padStart(2, "0");
+        const _dStr = `${_yy}-${_mo}-${_da}`;
+        const _hit = startHistory
+          .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= _dStr)
+          .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+        if (_hit) effStart = _hit.start_position;
+      }
       const pos =
-        ((((mem.start_position - 1 + diff) % mem.schedule_total) +
+        ((((effStart - 1 + diff) % mem.schedule_total) +
           mem.schedule_total) %
           mem.schedule_total) + 1;
       const row = rotationData.find(
