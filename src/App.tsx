@@ -16027,8 +16027,14 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     if (!w) return null;
     return (nowMin >= w.start && nowMin <= w.end) || (nowMin + 1440 >= w.start && nowMin + 1440 <= w.end);
   };
-    const doRideSearch = async () => {
-    const q = rideQ.trim();
+   
+    const openRideRoute = async (h: any) => {
+    const { data } = await supabase.from("dia_image").select("image").eq("dia_no", String(h.dia_no)).eq("category", h.category).maybeSingle();
+    if (data && data.image) setZoomImg(data.image);
+    else showToast("이 다이아의 행로 사진이 아직 없어요", "error");
+  };
+  const doRideSearch = async () => {
+const q = rideQ.trim();
     setRideSel(null);
     setRideSearched(true);
     if (!q) { setRideHits([]); return; }
@@ -18169,7 +18175,7 @@ const getKyobunWork = (member: any, date: Date) => {
             </div>
             {rideSel && (
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아</div>
+                             <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아 <span style={{ fontWeight: 600 }}>· 카드를 누르면 근무행로 사진</span></div>
                 {rideHits.filter((h: any) => h.category === rideSel).map((h: any, i: number) => {
                   const bs = badgeStyle(h.mark);
                   const runNow = rideRun[String(h.dia_no) + "|" + h.category];
@@ -18182,8 +18188,8 @@ const getKyobunWork = (member: any, date: Date) => {
                     .map((m: any) => m.name);
                   const info = getDiaInfo(h.dia_no, h.category);
                   return (
-                    <div key={i} style={{ background: off ? "#F7F7F9" : "#fff", borderRadius: 16, padding: "18px", boxShadow: off ? "none" : "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10, position: "relative" }}>
-                      {runNow === true && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A" }}>🟢 지금 운행중</span>}
+                                   <div key={i} onClick={() => openRideRoute(h)} style={{ background: off ? "#F7F7F9" : "#fff", borderRadius: 16, padding: "18px", boxShadow: off ? "none" : "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10, position: "relative", cursor: "pointer" }}>
+                    {runNow === true && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A" }}>🟢 지금 운행중</span>}
                       {runNow === false && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#E5E7EB", color: "#9CA3AF" }}>지금 운행 안 함</span>}
                       <div style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 26, fontWeight: 800, color: off ? "#B0B0B8" : "#4338CA" }}>다이아 {h.dia_no}</div>
