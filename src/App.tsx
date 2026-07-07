@@ -15800,11 +15800,47 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [rideSel, setRideSel] = React.useState<string | null>(null);
   const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
   const [rideRoutes, setRideRoutes] = React.useState<any>({});
+  const [rideRun, setRideRun] = React.useState<any>({});
   const [diaQ, setDiaQ] = React.useState("");
   const [diaNo, setDiaNo] = React.useState<string | null>(null);
   const [diaCats, setDiaCats] = React.useState<string[]>([]);
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
   const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
+  const trainWindowFromGrid = (grid: any[][], train: string): { start: number; end: number } | null => {
+    if (!grid || !grid.length) return null;
+    const toMin = (s: any): number | null => {
+      const str = String(s == null ? "" : s).trim();
+      const m = str.match(/^(\d{1,2}):(\d{2})/);
+      if (!m) return null;
+      const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+      if (isNaN(h) || isNaN(mi)) return null;
+      return h * 60 + mi; // 24:xx, 25:xx = 자정 넘김 → 1440 이상 (의도된 값)
+    };
+    const hdr = (grid[6] || []) as any[];
+    let col = -1;
+    hdr.forEach((v: any, ci: number) => { if (String(v == null ? "" : v).trim() === String(train).trim()) col = ci; });
+    if (col < 0) return null;
+    let stCol = -1, labelRowIdx = -1;
+    for (let rr = 8; rr < 14 && rr < grid.length; rr++) {
+      const lr = (grid[rr] || []) as any[];
+      lr.forEach((v: any, ci: number) => { if (String(v == null ? "" : v).indexOf("역명") >= 0) { stCol = ci; labelRowIdx = rr; } });
+      if (stCol >= 0) break;
+    }
+    const startRow = labelRowIdx >= 0 ? labelRowIdx + 1 : 11;
+    const times: number[] = [];
+    for (let r = startRow; r < grid.length; r++) {
+      const mm = toMin((grid[r] || [])[col]);
+      if (mm != null) times.push(mm);
+    }
+    if (times.length === 0) return null;
+    return { start: Math.min(...times), end: Math.max(...times) };
+  };
+  const trainRunsNow = (grid: any[][] | null, train: string, nowMin: number): boolean | null => {
+    if (!grid) return null;
+    const w = trainWindowFromGrid(grid, train);
+    if (!w) return null;
+    return (nowMin >= w.start && nowMin <= w.end) || (nowMin + 1440 >= w.start && nowMin + 1440 <= w.end);
+  };
   const doRideSearch = async () => {
     const q = rideQ.trim();
     setRideSel(null);
@@ -15819,12 +15855,12 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     }
     const { data } = await supabase.from("ride_dia").select("*").eq("train_no", q);
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
-    const sorted = (data || []).sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (a.dia_no - b.dia_no));
-    setRideHits(sorted);
+    const hits = (data || []).slice();
     const wfMap: any = {};
     const rtMap: any = {};
-    if (sorted.length > 0) {
-      const dias = Array.from(new Set(sorted.map((r: any) => String(r.dia_no))));
+    const runMap: any = {};
+    if (hits.length > 0) {
+      const dias = Array.from(new Set(hits.map((r: any) => String(r.dia_no))));
       const { data: wfs } = await supabase.from("dia_work_form").select("*").in("dia_no", dias);
       (wfs || []).forEach((w: any) => { wfMap[String(w.dia_no) + "|" + w.category] = w.work_form; });
       const { data: rts } = await supabase.from("dia_route").select("*").in("dia_no", dias);
@@ -15835,9 +15871,23 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
         grouped[k].push(r);
       });
       Object.keys(grouped).forEach((k) => { rtMap[k] = rebuildRuns(grouped[k]); });
+      // 시간표로 '지금 이 열번 운행중'인지 판단 (열번별 정확 시각, 자정 넘김 처리)
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      for (const h of hits) {
+        const key = String(h.dia_no) + "|" + h.category;
+        if (key in runMap) continue;
+        const { data: tt } = await supabase.from("dia_timetable").select("grid").eq("dia_no", String(h.dia_no)).eq("day_type", h.category).maybeSingle();
+        runMap[key] = trainRunsNow(tt ? ((tt as any).grid as any[][]) : null, q, nowMin);
+      }
     }
+    // 정렬: 구분 순 → 지금 운행중 우선(운행중 0, 모름 1, 안함 2) → 다이아번호
+    const rank = (h: any) => { const v = runMap[String(h.dia_no) + "|" + h.category]; return v === true ? 0 : (v == null ? 1 : 2); };
+    const sorted = hits.sort((a: any, b: any) => (order.indexOf(a.category) - order.indexOf(b.category)) || (rank(a) - rank(b)) || (a.dia_no - b.dia_no));
+    setRideHits(sorted);
     setRideWorkForms(wfMap);
     setRideRoutes(rtMap);
+    setRideRun(runMap);
     const cats = Array.from(new Set(sorted.map((r: any) => r.category)));
     if (cats.length === 1) setRideSel(cats[0] as string);
   };
@@ -17897,6 +17947,8 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아</div>
                 {rideHits.filter((h: any) => h.category === rideSel).map((h: any, i: number) => {
                   const bs = badgeStyle(h.mark);
+                  const runNow = rideRun[String(h.dia_no) + "|" + h.category];
+                  const off = runNow === false;
                   const todayDrivers = members
                     .filter((m: any) => {
                       const w = getKyobunWork(m, today);
@@ -17905,28 +17957,30 @@ const getKyobunWork = (member: any, date: Date) => {
                     .map((m: any) => m.name);
                   const info = getDiaInfo(h.dia_no, h.category);
                   return (
-                    <div key={i} style={{ background: "#fff", borderRadius: 16, padding: "18px", boxShadow: "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10 }}>
+                    <div key={i} style={{ background: off ? "#F7F7F9" : "#fff", borderRadius: 16, padding: "18px", boxShadow: off ? "none" : "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10, position: "relative" }}>
+                      {runNow === true && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A" }}>🟢 지금 운행중</span>}
+                      {runNow === false && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#E5E7EB", color: "#9CA3AF" }}>지금 운행 안 함</span>}
                       <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {h.dia_no}</div>
+                        <div style={{ fontSize: 26, fontWeight: 800, color: off ? "#B0B0B8" : "#4338CA" }}>다이아 {h.dia_no}</div>
                         <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{h.train_no} 열차</div>
-                        {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
+                        {rideWorkForms[String(h.dia_no) + "|" + h.category] && <div style={{ fontSize: 15, fontWeight: 700, color: off ? "#B0B0B8" : "#4F46E5", marginTop: 7 }}>{rideWorkForms[String(h.dia_no) + "|" + h.category]}</div>}
                         {bs && <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 9, marginTop: 9, ...bs }}>{h.mark}</span>}
                       </div>
                       <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #F3F4F6", textAlign: "center" }}>
                         <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>오늘 이 다이아 기관사</div>
                         {todayDrivers.length > 0
-                          ? <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>{todayDrivers.join(", ")}</div>
+                          ? <div style={{ fontSize: 16, fontWeight: 700, color: off ? "#B0B0B8" : "#1F2937" }}>{todayDrivers.join(", ")}</div>
                           : <div style={{ fontSize: 13, color: "#9CA3AF" }}>오늘은 해당 없음</div>}
                       </div>
                       {info && (info.start_time || info.end_time) && (
                         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6", display: "flex", justifyContent: "center", gap: 28 }}>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>출근</div>
-                            <div style={{ fontSize: 16, fontWeight: 700, color: "#1D4ED8" }}>{info.start_time || "-"}</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: off ? "#B0B0B8" : "#1D4ED8" }}>{info.start_time || "-"}</div>
                           </div>
                           <div style={{ textAlign: "center" }}>
                             <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>퇴근</div>
-                            <div style={{ fontSize: 16, fontWeight: 700, color: "#BE185D" }}>{info.end_time || "-"}</div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: off ? "#B0B0B8" : "#BE185D" }}>{info.end_time || "-"}</div>
                           </div>
                         </div>
                       )}
