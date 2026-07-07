@@ -35,6 +35,13 @@ async function logError(info: any) {
 
 // ── 토스트 알림 (화면 아래에서 떴다가 자동으로 사라짐) ──
 // 어디서든 showToast("메시지") 또는 showToast("실패", "error") 로 호출.
+// 사용자 시간대(한국) 기준 오늘 날짜 YYYY-MM-DD.
+// 주의: new Date().toISOString()은 UTC 기준이라 한국 아침 9시 전엔 "어제"가 나옴 (검증된 버그)
+function todayLocalStr(): string {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
 function showToast(message: string, type: "success" | "error" = "success") {
   try {
     window.dispatchEvent(
@@ -24842,7 +24849,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
 
    // 입력 폼 상태
   const [formDate, setFormDate] = useState(
-    initialDate || new Date().toISOString().split("T")[0]
+    initialDate || todayLocalStr()
   );
   const [formShift, setFormShift] = useState("주간");
   const [formFillType, setFormFillType] = useState("다이아");
@@ -24865,7 +24872,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   // 교번교체용 상태
   const [swapMembers, setSwapMembers] = useState<any[]>([]);
   const [swapDate, setSwapDate] = useState(
-    new Date().toISOString().split("T")[0]
+    todayLocalStr()
   );
   const [swapPartner, setSwapPartner] = useState<any>(null);
   const [swapSearch, setSwapSearch] = useState("");
@@ -24873,10 +24880,10 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   const [swapRotation, setSwapRotation] = useState<any[]>([]);
   const [swapStartHistory, setSwapStartHistory] = useState<any[]>([]);
   const [swapStart, setSwapStart] = useState(
-    new Date().toISOString().split("T")[0]
+    todayLocalStr()
   );
   const [swapEnd, setSwapEnd] = useState(
-    new Date().toISOString().split("T")[0]
+    todayLocalStr()
   );
   const [swapMatches, setSwapMatches] = useState<any[]>([]);
   const [swapNameSearch, setSwapNameSearch] = useState("");
@@ -27018,7 +27025,7 @@ function LogbookScreen({ goBack }: { goBack: () => void }) {
 
   // 작성 폼 상태
   const [formDate, setFormDate] = React.useState(
-    new Date().toISOString().split("T")[0]
+    todayLocalStr()
   );
   const [formSection, setFormSection] = React.useState("");
   const [formTrainNo, setFormTrainNo] = React.useState("");
@@ -27026,7 +27033,7 @@ function LogbookScreen({ goBack }: { goBack: () => void }) {
   const [formAction, setFormAction] = React.useState("");
 
   const resetForm = () => {
-    setFormDate(new Date().toISOString().split("T")[0]);
+    setFormDate(todayLocalStr());
     setFormSection("");
     setFormTrainNo("");
     setFormIssue("");
