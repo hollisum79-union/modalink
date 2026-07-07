@@ -32064,7 +32064,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         </div>
           <div
             onClick={async () => {
-              const msg = "모다링크 · 대공원승무지회\n노동자의 내일을 연결하다\nhttps://modalink.app";
+              const msg = "서울교통공사노동조합 대공원승무지회\n우리 지회 조합원 전용 앱 '모다링크'예요 📲\n내 근무표 · 예상 급여 · 공지 · 투표까지 한 곳에서.\n노동자의 내일을 연결하다\n👉 https://modalink.app";
               try {
                 if ((navigator as any).share) {
                   await (navigator as any).share({ title: "모다링크 · 대공원승무지회", text: msg });
