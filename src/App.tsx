@@ -12766,6 +12766,7 @@ function RouteInputScreen() {
     const emptyCnt = rows.filter((r: any) => !r.work_form).length;
     setAiLoadMsg(aiCat + " 사진 " + rows.length + "장 · 약어 있음 " + (rows.length - emptyCnt) + "장 · 빈 것 " + emptyCnt + "장");
   };
+
   const runAiExtract = async (onlyEmpty: boolean, oneDia?: string) => {
     const targets = aiRows.filter((r: any) => (oneDia ? r.dia_no === oneDia : (onlyEmpty ? (!r.work_form || !r.trains) : true)));
     if (targets.length === 0) { showToast("추출할 대상이 없어요", "error"); return; }
@@ -13041,14 +13042,13 @@ function RouteInputScreen() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ flex: "0 0 58px", fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
                       <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="약어 예: 대온,온도대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
-                                            {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
+                      {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
                       <button
                         onClick={() => { if (window.confirm("다이아 " + r.dia_no + " 한 장만 AI로 다시 추출해요. 이 칸의 현재 값은 AI 값으로 바뀝니다. 계속할까요?")) runAiExtract(false, r.dia_no); }}
                         disabled={aiExtracting}
                         style={{ flex: "0 0 auto", border: "1px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: aiExtracting ? 0.5 : 1 }}
                       >🤖</button>
                     </div>
-
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                       <span style={{ flex: "0 0 58px", fontSize: 11, color: "#4F46E5", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>열번</span>
                       <input value={r.trains || ""} onChange={(e) => updateAiTrain(r.dia_no, e.target.value)} placeholder="열번 예: 7306,1960,7012" inputMode="numeric" autoComplete="off" autoCorrect="off" style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #C7D2FE", borderRadius: 6, padding: "6px 8px", fontSize: 13, background: "#F5F7FF" }} />
@@ -15981,7 +15981,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites" | "phones" | "ride" | "diasearch">(null);
   const [rideQ, setRideQ] = React.useState("");
   const [rideHits, setRideHits] = React.useState<any[]>([]);
-    const [rideSel, setRideSel] = React.useState<string | null>(null);
+  const [rideSel, setRideSel] = React.useState<string | null>(null);
   const [rideSearched, setRideSearched] = React.useState(false);
   const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
   const [rideRoutes, setRideRoutes] = React.useState<any>({});
@@ -15990,7 +15990,7 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaNo, setDiaNo] = React.useState<string | null>(null);
   const [diaCats, setDiaCats] = React.useState<string[]>([]);
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
-    const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
+  const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
   const [diaImgMap, setDiaImgMap] = React.useState<any>({});
   const trainWindowFromGrid = (grid: any[][], train: string): { start: number; end: number } | null => {
     if (!grid || !grid.length) return null;
@@ -16027,14 +16027,13 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     if (!w) return null;
     return (nowMin >= w.start && nowMin <= w.end) || (nowMin + 1440 >= w.start && nowMin + 1440 <= w.end);
   };
-   
-    const openRideRoute = async (h: any) => {
+  const openRideRoute = async (h: any) => {
     const { data } = await supabase.from("dia_image").select("image").eq("dia_no", String(h.dia_no)).eq("category", h.category).maybeSingle();
     if (data && data.image) setZoomImg(data.image);
     else showToast("이 다이아의 행로 사진이 아직 없어요", "error");
   };
   const doRideSearch = async () => {
-const q = rideQ.trim();
+    const q = rideQ.trim();
     setRideSel(null);
     setRideSearched(true);
     if (!q) { setRideHits([]); return; }
@@ -16100,7 +16099,7 @@ const q = rideQ.trim();
       if (!grouped[r.category]) grouped[r.category] = [];
       grouped[r.category].push(r);
     });
-        const map: any = {};
+    const map: any = {};
     Object.keys(grouped).forEach((k) => { map[k] = rebuildRuns(grouped[k]); });
     setDiaRouteMap(map);
     // 근무행로 사진(dia_image) 불러오기 — 구분별
@@ -18139,14 +18138,13 @@ const getKyobunWork = (member: any, date: Date) => {
     };
     return (
       <div style={{ padding: "16px 16px 24px" }}>
-        <button onClick={() => { setSubScreen("menu"); setRideQ(""); setRideHits([]); setRideSel(null); setRideSearched(false); }}
- style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 메뉴화면</button>
+        <button onClick={() => { setSubScreen("menu"); setRideQ(""); setRideHits([]); setRideSel(null); setRideSearched(false); }} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 메뉴화면</button>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>편승 도우미</div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>열번을 검색하고, 오늘 내 근무를 골라보세요</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           <input
             value={rideQ}
-                        onChange={(e) => { setRideQ(e.target.value); setRideSearched(false); }}
+            onChange={(e) => { setRideQ(e.target.value); setRideSearched(false); }}
             onKeyDown={(e) => { if (e.key === "Enter") doRideSearch(); }}
             inputMode="numeric"
             placeholder="열번 입력 (예: 7012)"
@@ -18154,8 +18152,8 @@ const getKyobunWork = (member: any, date: Date) => {
           />
           <button onClick={doRideSearch} style={{ padding: "0 20px", borderRadius: 13, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>검색</button>
         </div>
-                {rideSearched && rideQ.trim() && rideHits.length === 0 && ( 
-        <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 14, padding: "20px 16px", textAlign: "center" }}>
+        {rideSearched && rideQ.trim() && rideHits.length === 0 && (
+          <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 14, padding: "20px 16px", textAlign: "center" }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#374151", marginBottom: 6 }}>{rideQ.trim()} 열번을 찾을 수 없어요</div>
             <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6 }}>
               이 열차는 <b>대공원 기관사가 운전하지 않는 열차</b>일 가능성이 높아요.
@@ -18164,7 +18162,6 @@ const getKyobunWork = (member: any, date: Date) => {
             </div>
           </div>
         )}
-
         {rideHits.length > 0 && (
           <>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#4F46E5", marginBottom: 10 }}>{rideHits[0].train_no} 은(는) {cats.length}개 근무에 있어요 — 내 근무 선택</div>
@@ -18175,7 +18172,7 @@ const getKyobunWork = (member: any, date: Date) => {
             </div>
             {rideSel && (
               <div>
-                             <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아 <span style={{ fontWeight: 600 }}>· 카드를 누르면 근무행로 사진</span></div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#9CA3AF", marginBottom: 10 }}>[{rideSel}] 소속 다이아 <span style={{ fontWeight: 600 }}>· 카드를 누르면 근무행로 사진</span></div>
                 {rideHits.filter((h: any) => h.category === rideSel).map((h: any, i: number) => {
                   const bs = badgeStyle(h.mark);
                   const runNow = rideRun[String(h.dia_no) + "|" + h.category];
@@ -18188,8 +18185,8 @@ const getKyobunWork = (member: any, date: Date) => {
                     .map((m: any) => m.name);
                   const info = getDiaInfo(h.dia_no, h.category);
                   return (
-                                   <div key={i} onClick={() => openRideRoute(h)} style={{ background: off ? "#F7F7F9" : "#fff", borderRadius: 16, padding: "18px", boxShadow: off ? "none" : "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10, position: "relative", cursor: "pointer" }}>
-                    {runNow === true && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A" }}>🟢 지금 운행중</span>}
+                    <div key={i} onClick={() => openRideRoute(h)} style={{ background: off ? "#F7F7F9" : "#fff", borderRadius: 16, padding: "18px", boxShadow: off ? "none" : "0 1px 6px rgba(0,0,0,0.05)", marginBottom: 10, position: "relative", cursor: "pointer" }}>
+                      {runNow === true && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#DCFCE7", color: "#16A34A" }}>🟢 지금 운행중</span>}
                       {runNow === false && <span style={{ position: "absolute", top: 12, right: 14, fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: "#E5E7EB", color: "#9CA3AF" }}>지금 운행 안 함</span>}
                       <div style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 26, fontWeight: 800, color: off ? "#B0B0B8" : "#4338CA" }}>다이아 {h.dia_no}</div>
@@ -18222,6 +18219,7 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
           </>
         )}
+      {zoomImg ? <ImageZoomViewer src={zoomImg} onClose={() => setZoomImg("")} /> : null}
       </div>
     );
   };
@@ -18284,7 +18282,7 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ textAlign: "center", marginBottom: 12 }}>
                   <span style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {diaNo}</span>
                 </div>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>근무행로</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>근무행로</div>
                 {diaSel && diaImgMap[diaSel] ? (
                   <img
                     src={diaImgMap[diaSel]}
@@ -18296,7 +18294,6 @@ const getKyobunWork = (member: any, date: Date) => {
                   <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 사진이 아직 없어요</div>
                 )}
                 {diaSel && diaImgMap[diaSel] && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4, textAlign: "center" }}>사진을 누르면 크게 볼 수 있어요</div>}
-
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", margin: "18px 0 8px" }}>시간 · 거리 정보</div>
                 {fields.length > 0 ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -18314,6 +18311,7 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
           </>
         )}
+      {zoomImg ? <ImageZoomViewer src={zoomImg} onClose={() => setZoomImg("")} /> : null}
       </div>
     );
   };
@@ -19072,7 +19070,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
         paddingBottom: 64,
       }}
     >
-            {/* 헤더 */}
+      {/* 헤더 */}
             {/* 헤더 (흰 배너) */}
       <div
         style={{
@@ -19083,6 +19081,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
           display: subScreen === "ride" ? "none" : "block",
         }}
       >
+
         <div
           style={{
             display: "flex",
