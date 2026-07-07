@@ -15532,8 +15532,9 @@ function StartHistoryAdmin() {
   const [이력, set이력] = React.useState<any[]>([]);
   const [선택A, set선택A] = React.useState("");
   const [선택B, set선택B] = React.useState("");
-  const [적용일, set적용일] = React.useState("");
+    const [적용일, set적용일] = React.useState("");
   const [저장중, set저장중] = React.useState(false);
+  const [이력펼침, set이력펼침] = React.useState(false);
 
   const 불러오기2 = async () => {
     const [mRes, hRes] = await Promise.all([
@@ -15618,7 +15619,7 @@ function StartHistoryAdmin() {
         type="date"
         value={적용일}
         onChange={(e) => set적용일(e.target.value)}
-        style={{ ...selStyle, WebkitAppearance: "none", appearance: "none", maxWidth: "100%" }}
+                style={{ ...selStyle, WebkitAppearance: "none", appearance: "none", maxWidth: "100%", boxSizing: "border-box" }}
       />
       <select value={선택A} onChange={(e) => set선택A(e.target.value)} style={selStyle}>
         <option value="">첫 번째 사람 선택</option>
@@ -15643,17 +15644,26 @@ function StartHistoryAdmin() {
       {변경건들.length > 0 && (
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>변경 이력</div>
-          {변경건들.map((g, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F9FAFB", borderRadius: 10, marginBottom: 6 }}>
+                   {(이력펼침 ? 변경건들 : 변경건들.slice(0, 5)).map((g, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F9FAFB", borderRadius: 10, marginBottom: 6 }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{g.note || "(메모 없음)"}</div>
                 <div style={{ fontSize: 12, color: "#6B7280" }}>{g.effective_date} 부터</div>
               </div>
-              <button onClick={() => 변경건삭제(g.note, g.effective_date)} style={{ border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>취소</button>
+                           <button onClick={() => 변경건삭제(g.note, g.effective_date)} style={{ border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>취소</button>
             </div>
           ))}
+          {변경건들.length > 5 && (
+            <button
+              onClick={() => set이력펼침(!이력펼침)}
+              style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: "1px solid #E5E7EB", background: "#F9FAFB", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+            >
+              {이력펼침 ? "접기 ▲" : `지난 이력 ${변경건들.length - 5}건 더 보기 ▼`}
+            </button>
+          )}
         </div>
       )}
+
     </div>
   );
 }
