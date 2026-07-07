@@ -46,7 +46,7 @@ function showToast(message: string, type: "success" | "error" = "success") {
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
-function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = []) {
+function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
   if (!member || rotationData.length === 0) return null;
 
   const calc = (mem: any) => {
@@ -57,8 +57,20 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: 
     const target = new Date(date);
     target.setHours(0, 0, 0, 0);
     const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+    // B안: 날짜별 시작점 이력 반영 (이력 없으면 원본 그대로)
+    let effStart = mem.start_position;
+    if (startHistory.length > 0 && mem.id != null) {
+      const _yy = target.getFullYear();
+      const _mo = String(target.getMonth() + 1).padStart(2, "0");
+      const _da = String(target.getDate()).padStart(2, "0");
+      const _dStr = `${_yy}-${_mo}-${_da}`;
+      const _hit = startHistory
+        .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= _dStr)
+        .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+      if (_hit) effStart = _hit.start_position;
+    }
     const pos =
-      ((((mem.start_position - 1 + diff) % mem.schedule_total) +
+      ((((effStart - 1 + diff) % mem.schedule_total) +
         mem.schedule_total) %
         mem.schedule_total) +
       1;
@@ -13514,9 +13526,8 @@ useEffect(() => {
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
-              { id: "workmanage", label: "교번관리", desc: "교번 교체·충당 관리" },
+              { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
               { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
-              { id: "scheduleupdate", label: "근무표 업데이트", desc: "월 근무표 반영" },
               { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
@@ -15515,6 +15526,137 @@ function DiaTimetableUpload() {
     </div>
   );
 }
+// ── B안: 교번 자리 변경(영구) 관리자 화면 ──
+function StartHistoryAdmin() {
+  const [멤버들, set멤버들] = React.useState<any[]>([]);
+  const [이력, set이력] = React.useState<any[]>([]);
+  const [선택A, set선택A] = React.useState("");
+  const [선택B, set선택B] = React.useState("");
+  const [적용일, set적용일] = React.useState("");
+  const [저장중, set저장중] = React.useState(false);
+
+  const 불러오기2 = async () => {
+    const [mRes, hRes] = await Promise.all([
+      supabase.from("members").select("id, name, employee_number, work_group, start_position, schedule_total, work_type").eq("work_type", "교번"),
+      supabase.from("kyobun_start_history").select("*").order("effective_date", { ascending: false }).order("created_at", { ascending: false }),
+    ]);
+    if (mRes.data) set멤버들((mRes.data as any[]).filter((m) => m.start_position != null).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko")));
+    if (hRes.data) set이력(hRes.data as any[]);
+  };
+  React.useEffect(() => { 불러오기2(); }, []);
+
+  const 이름 = (id: any) => {
+    const m = 멤버들.find((x) => String(x.id) === String(id));
+    return m ? m.name : "(알수없음)";
+  };
+
+  // 그 날짜 기준 유효 시작점 (이력 있으면 그 값, 없으면 원본)
+  const 유효시작점 = (mem: any, dateStr: string) => {
+    const hit = 이력
+      .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= dateStr)
+      .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+    return hit ? Number(hit.start_position) : Number(mem.start_position);
+  };
+
+  const 자리교환 = async () => {
+    if (!적용일) { showToast("적용일을 선택하세요.", "error"); return; }
+    if (!선택A || !선택B) { showToast("두 사람(또는 결원)을 모두 선택하세요.", "error"); return; }
+    if (선택A === 선택B) { showToast("같은 사람끼리는 바꿀 수 없어요.", "error"); return; }
+    const A = 멤버들.find((m) => String(m.id) === 선택A);
+    const B = 멤버들.find((m) => String(m.id) === 선택B);
+    if (!A || !B) return;
+    if (String(A.work_group) !== String(B.work_group)) {
+      showToast("소속(대공원/도봉)이 같은 사람끼리만 바꿀 수 있어요.", "error");
+      return;
+    }
+    if (!window.confirm(`${적용일}부터 [${A.name}] ↔ [${B.name}] 자리를 영구히 맞바꿉니다.\\n과거 근무표는 변하지 않아요. 진행할까요?`)) return;
+    set저장중(true);
+    const aEff = 유효시작점(A, 적용일);
+    const bEff = 유효시작점(B, 적용일);
+    const note = `${A.name} ↔ ${B.name}`;
+    const { error } = await supabase.from("kyobun_start_history").insert([
+      { member_id: A.id, effective_date: 적용일, start_position: String(bEff), note },
+      { member_id: B.id, effective_date: 적용일, start_position: String(aEff), note },
+    ]);
+    set저장중(false);
+    if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+    showToast("저장 완료! " + 적용일 + "부터 적용됩니다.");
+    set선택A(""); set선택B(""); set적용일("");
+    불러오기2();
+  };
+
+  const 변경건삭제 = async (note: string, effective_date: string) => {
+    if (!window.confirm(`[${note}] (${effective_date}~) 변경을 취소할까요?\\n그 날짜 이후 근무표가 변경 전으로 돌아갑니다.`)) return;
+    const { error } = await supabase.from("kyobun_start_history").delete().eq("note", note).eq("effective_date", effective_date);
+    if (error) { showToast("삭제 실패: " + error.message, "error"); return; }
+    showToast("취소 완료");
+    불러오기2();
+  };
+
+  // 이력을 (적용일+메모) 단위 "변경 건"으로 묶어서 표시
+  const 변경건들: { note: string; effective_date: string }[] = [];
+  이력.forEach((h) => {
+    if (!변경건들.some((g) => g.note === h.note && g.effective_date === h.effective_date))
+      변경건들.push({ note: h.note, effective_date: h.effective_date });
+  });
+
+  const selStyle: any = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, background: "#fff", marginBottom: 8 };
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EEE", borderRadius: 16, padding: 16, marginBottom: 16 }}>
+      <div style={{ fontWeight: 800, color: "#3730A3", fontSize: 15, marginBottom: 6 }}>교번 자리 변경 (영구)</div>
+      <AdminGuide
+        steps={[
+          "적용일을 고르세요 — 그날부터 두 사람의 근무 순서가 서로 맞바뀌어요",
+          "바꿀 두 사람을 고르세요 (결원 자리에 사람을 앉히려면 그 사람 ↔ 결원을 고르면 돼요)",
+          "저장하면 적용일 이후만 바뀌고, 과거 근무표·급여는 그대로예요",
+        ]}
+        tip="⚠️ 임시 교체는 여기가 아니라 조합원끼리 하는 '교번교체'를 쓰세요. 여기는 영구 변경 전용이에요. 잘못 저장했으면 아래 목록에서 취소하면 됩니다."
+      />
+      <input
+        type="date"
+        value={적용일}
+        onChange={(e) => set적용일(e.target.value)}
+        style={{ ...selStyle, WebkitAppearance: "none", appearance: "none", maxWidth: "100%" }}
+      />
+      <select value={선택A} onChange={(e) => set선택A(e.target.value)} style={selStyle}>
+        <option value="">첫 번째 사람 선택</option>
+        {멤버들.map((m) => (
+          <option key={m.id} value={m.id}>{m.name} ({m.work_group}) 시작점 {m.start_position}</option>
+        ))}
+      </select>
+      <select value={선택B} onChange={(e) => set선택B(e.target.value)} style={selStyle}>
+        <option value="">두 번째 사람(또는 결원) 선택</option>
+        {멤버들.map((m) => (
+          <option key={m.id} value={m.id}>{m.name} ({m.work_group}) 시작점 {m.start_position}</option>
+        ))}
+      </select>
+      <button
+        onClick={자리교환}
+        disabled={저장중}
+        style={{ width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", opacity: 저장중 ? 0.6 : 1 }}
+      >
+        {저장중 ? "저장 중..." : "자리 맞바꾸기 저장"}
+      </button>
+
+      {변경건들.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", marginBottom: 6 }}>변경 이력</div>
+          {변경건들.map((g, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#F9FAFB", borderRadius: 10, marginBottom: 6 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{g.note || "(메모 없음)"}</div>
+                <div style={{ fontSize: 12, color: "#6B7280" }}>{g.effective_date} 부터</div>
+              </div>
+              <button onClick={() => 변경건삭제(g.note, g.effective_date)} style={{ border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>취소</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkManageScreen() {
   const [휴무목록, set휴무목록] = React.useState<
     { id: number; dia: string; 소속: string }[]
@@ -15567,6 +15709,8 @@ function WorkManageScreen() {
 
   return (
     <div>
+      <ScheduleUpdateAdmin />
+      <StartHistoryAdmin />
       <div
         style={{
           background: "#FEF2F2",
@@ -15799,8 +15943,9 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refr
     if (user.work_group === "대공원" || user.work_group === "도봉") return;
     setSelectedMember(user);
   }, [user]);
-  const [members, setMembers] = React.useState<any[]>([]);
+ const [members, setMembers] = React.useState<any[]>([]);
   const [rotationData, setRotationData] = React.useState<any[]>([]);
+  const [startHistory, setStartHistory] = React.useState<any[]>([]);
 const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [workForms, setWorkForms] = React.useState<any>({});
@@ -16154,6 +16299,17 @@ if (data) {
     };
     fetch();
   }, []);
+
+  // B안: 날짜별 시작점 이력 불러오기
+  React.useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase
+        .from("kyobun_start_history")
+        .select("member_id, effective_date, start_position");
+      if (data) setStartHistory(data);
+    };
+    load();
+  }, []);
   // ============================================================
   // [추가 위치 1] ScheduleScreen 안에서
   // const [loadingMembers 바로 아래에 추가
@@ -16449,8 +16605,20 @@ const getKyobunWork = (member: any, date: Date) => {
       const target = new Date(date);
       target.setHours(0, 0, 0, 0);
       const diff = Math.round((target.getTime() - base.getTime()) / 86400000);
+      // B안: 날짜별 시작점 이력 반영 (이력 없으면 원본 그대로)
+      let effStart = mem.start_position;
+      if (startHistory.length > 0 && mem.id != null) {
+        const _yy = target.getFullYear();
+        const _mo = String(target.getMonth() + 1).padStart(2, "0");
+        const _da = String(target.getDate()).padStart(2, "0");
+        const _dStr = `${_yy}-${_mo}-${_da}`;
+        const _hit = startHistory
+          .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= _dStr)
+          .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+        if (_hit) effStart = _hit.start_position;
+      }
       const pos =
-        ((((mem.start_position - 1 + diff) % mem.schedule_total) +
+        ((((effStart - 1 + diff) % mem.schedule_total) +
           mem.schedule_total) %
           mem.schedule_total) + 1;
       const row = rotationData.find(
