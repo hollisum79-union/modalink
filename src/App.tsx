@@ -13136,6 +13136,7 @@ function RouteInputScreen() {
 }
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
+  const [diaTimeTab, setDiaTimeTab] = useState("편승용");
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
     if (["workmanage", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
@@ -13514,7 +13515,7 @@ useEffect(() => {
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
               { id: "workmanage", label: "교번관리", desc: "교번 교체·충당 관리" },
-              { id: "kyobundia", label: "다이아 입력", desc: "운전 다이아 등록·수정" },
+              { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
               { id: "scheduleupdate", label: "근무표 업데이트", desc: "월 근무표 반영" },
               { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
             ].map((m) => (
@@ -14039,6 +14040,14 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
         
 {activeMenu === "kyobundia" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+    <div style={{ fontSize: 16, fontWeight: 800, color: "#4338CA", marginBottom: 14 }}>🕐 다이아 시간 입력</div>
+    <div style={{ display: "flex", gap: 8, background: "#F3F4F6", padding: 5, borderRadius: 12, marginBottom: 16 }}>
+      {[["편승용", "상세 시각표"], ["급여용", "근무시간·거리"]].map(([t, s]) => (
+        <button key={t} onClick={() => setDiaTimeTab(t)} style={{ flex: 1, padding: "9px 4px", border: "none", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", background: diaTimeTab === t ? "#fff" : "transparent", color: diaTimeTab === t ? "#4F46E5" : "#6B7280", fontWeight: 700, fontSize: 13, boxShadow: diaTimeTab === t ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>{t}<span style={{ display: "block", fontSize: 10, fontWeight: 600, color: diaTimeTab === t ? "#8B8FE0" : "#9CA3AF" }}>{s}</span></button>
+      ))}
+    </div>
+    {diaTimeTab === "편승용" && <DiaTimetableUpload />}
+    {diaTimeTab === "급여용" && (<>
     <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록 (여러 장)</div>
     <AdminGuide steps={["[파일] 엑셀/CSV를 선택하면 여러 다이아가 한 번에 등록돼요", "[사진] 시간표 사진 여러 장을 선택하면 AI가 자동으로 읽어 표로 만들어요", "AI가 읽은 내용을 확인·수정한 뒤 저장하세요"]} tip="💡 AI가 읽은 값이 틀릴 수 있으니 저장 전에 꼭 확인하세요." />
         {/* ===== 엑셀(CSV) 한 번에 업로드 ===== */}
@@ -14255,6 +14264,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
         전부 저장 ({diaList.filter((x) => x.result).length}개)
       </button>
     )}
+  </>)}
   </div>
 )}
         {activeMenu === "vote" &&
@@ -15425,53 +15435,13 @@ const 유형색: { [key: string]: { bg: string; fg: string; label: string } } = 
 // ===== 관리자: 근무 관리 화면 (WorkManageScreen) - Supabase 저장 버전 =====
 // 기존 function WorkManageScreen() {...} 전체를 이걸로 교체하세요.
 
-function WorkManageScreen() {
-  const [휴무목록, set휴무목록] = React.useState<
-    { id: number; dia: string; 소속: string }[]
-  >([]);
-  const [휴무입력, set휴무입력] = React.useState("");
-
-  const [소속입력, set소속입력] = React.useState("대공원");
-    const [로딩, set로딩] = React.useState(false);
+function DiaTimetableUpload() {
   const [ttDayType, setTtDayType] = React.useState("평일");
   const [ttRegistered, setTtRegistered] = React.useState<any[]>([]);
   const loadTtRegistered = async () => { const { data } = await supabase.from("dia_timetable").select("dia_no, day_type"); setTtRegistered(data || []); };
   React.useEffect(() => { loadTtRegistered(); }, []);
   const [ttUploading, setTtUploading] = React.useState(false);
   const [ttResult, setTtResult] = React.useState("");
-
-  React.useEffect(() => {
-    불러오기();
-  }, []);
-
-  const 불러오기 = async () => {
-    const { data, error } = await supabase
-      .from("off_dias")
-      .select("*")
-      .order("created_at", { ascending: true });
-    if (!error && data) set휴무목록(data as any);
-  };
-
-  const 휴무추가 = async () => {
-    const v = 휴무입력.trim();
-    if (!v) return;
-    if (휴무목록.some((x) => x.dia === v && x.소속 === 소속입력)) {
-      showToast("이미 지정된 다이아입니다.");
-      set휴무입력("");
-      return;
-    }
-    set로딩(true);
-    const { error } = await supabase
-      .from("off_dias")
-      .insert([{ dia: v, 소속: 소속입력 }]);
-    set로딩(false);
-    if (error) {
-      showToast("저장 실패: " + error.message, "error");
-      return;
-    }
-    set휴무입력("");
-    불러오기();
-  };
   const handleTimetableUpload = (file: File) => {
     setTtUploading(true); setTtResult("");
     const ensureXLSX = () => new Promise<any>((resolve, reject) => {
@@ -15507,15 +15477,6 @@ function WorkManageScreen() {
       reader.readAsArrayBuffer(file);
     }).catch(() => { setTtUploading(false); setTtResult("엑셀 라이브러리 로드 실패"); });
   };
-  const 휴무삭제 = async (id: number) => {
-    const { error } = await supabase.from("off_dias").delete().eq("id", id);
-    if (error) {
-      showToast("삭제 실패: " + error.message, "error");
-      return;
-    }
-    불러오기();
-  };
-
   return (
     <div>
       <AdminGuide steps={["구분을 먼저 고르세요 (평일/휴일/평평/평휴/휴휴/휴평)", "그 구분의 운행시각표 엑셀(.xlsx)을 선택하세요", "업로드하면 자동으로 저장됩니다"]} tip="⚠️ 엑셀의 시트 이름이 다이아 번호여야 해요 (예: 시트명 '6' = 다이아 6). 한 파일에 여러 다이아(시트)를 넣을 수 있어요." />
@@ -15551,6 +15512,61 @@ function WorkManageScreen() {
           );
         })}
       </div>
+    </div>
+  );
+}
+function WorkManageScreen() {
+  const [휴무목록, set휴무목록] = React.useState<
+    { id: number; dia: string; 소속: string }[]
+  >([]);
+  const [휴무입력, set휴무입력] = React.useState("");
+
+  const [소속입력, set소속입력] = React.useState("대공원");
+    const [로딩, set로딩] = React.useState(false);
+
+  React.useEffect(() => {
+    불러오기();
+  }, []);
+
+  const 불러오기 = async () => {
+    const { data, error } = await supabase
+      .from("off_dias")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (!error && data) set휴무목록(data as any);
+  };
+
+  const 휴무추가 = async () => {
+    const v = 휴무입력.trim();
+    if (!v) return;
+    if (휴무목록.some((x) => x.dia === v && x.소속 === 소속입력)) {
+      showToast("이미 지정된 다이아입니다.");
+      set휴무입력("");
+      return;
+    }
+    set로딩(true);
+    const { error } = await supabase
+      .from("off_dias")
+      .insert([{ dia: v, 소속: 소속입력 }]);
+    set로딩(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    set휴무입력("");
+    불러오기();
+  };
+  const 휴무삭제 = async (id: number) => {
+    const { error } = await supabase.from("off_dias").delete().eq("id", id);
+    if (error) {
+      showToast("삭제 실패: " + error.message, "error");
+      return;
+    }
+    불러오기();
+  };
+
+  return (
+    <div>
       <div
         style={{
           background: "#FEF2F2",
