@@ -15613,7 +15613,7 @@ function StartHistoryAdmin() {
           "바꿀 두 사람을 고르세요 (결원 자리에 사람을 앉히려면 그 사람 ↔ 결원을 고르면 돼요)",
           "저장하면 적용일 이후만 바뀌고, 과거 근무표·급여는 그대로예요",
         ]}
-                tip="⚠️ 임시 교체는 여기가 아니라 조합원끼리 하는 '교번교체'를 쓰세요. 여기는 영구 변경 전용이에요. 잘못 저장했으면 아래 목록에서 취소하면 됩니다."
+        tip="⚠️ 임시 교체는 여기가 아니라 조합원끼리 하는 '교번교체'를 쓰세요. 여기는 영구 변경 전용이에요. 잘못 저장했으면 아래 목록에서 취소하면 됩니다."
       />
       <div style={{ background: "#EEF2FF", borderRadius: 12, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#3730A3", lineHeight: 1.6 }}>
         <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 신규 전입 · 퇴직 처리는 여기가 아니에요</div>
@@ -15621,7 +15621,6 @@ function StartHistoryAdmin() {
         <br />
         <b>퇴직:</b> 조합원 관리에서 그 사람 이름을 다시 "결원○○"로 되돌리면 됩니다.
       </div>
-        />
             <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", marginBottom: 4 }}>📅 적용일 — 이 날짜부터 자리가 맞바뀝니다 (아래 칸을 눌러 선택)</div>
       <input
         type="date"
