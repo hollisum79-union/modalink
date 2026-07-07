@@ -13091,16 +13091,28 @@ function RouteInputScreen() {
 }
 function TempDiaAdmin() {
   const [list, setList] = React.useState<any[]>([]);
+  const [kind, setKind] = React.useState("임시");
   const [no, setNo] = React.useState("");
-  const [wh, setWh] = React.useState("");
-  const [nh, setNh] = React.useState("");
-  const [km, setKm] = React.useState("");
+  const emptyFields = { distance_km: "", start_time: "", work_hours: "", drive_hours: "", wait_hours: "", ride_hours: "", watch_hours: "", edu_hours: "", prep_hours: "", clean_hours: "", night_hours: "" };
+  const [fields, setFields] = React.useState<any>(emptyFields);
+  const [loadedFrom, setLoadedFrom] = React.useState<number | null>(null);
+  const [photo, setPhoto] = React.useState<string | null>(null);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiError, setAiError] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+
+  const FIELD_DEFS: [string, string][] = [
+    ["distance_km", "주행키로"], ["start_time", "출근시간"], ["work_hours", "인정근무"],
+    ["drive_hours", "운전"], ["wait_hours", "대기"], ["ride_hours", "편승"],
+    ["watch_hours", "감시"], ["edu_hours", "교육"], ["prep_hours", "준비"],
+    ["clean_hours", "정리"], ["night_hours", "심야"],
+  ];
 
   const load = async () => {
     const { data } = await supabase
       .from("temp_dia")
       .select("*")
+      .order("kind", { ascending: true })
       .order("dia_no", { ascending: true });
     if (data) setList(data);
   };
@@ -13109,26 +13121,87 @@ function TempDiaAdmin() {
   const n = parseInt(no, 10);
   const validNo = !isNaN(n) && n > 0;
   const isNight = validNo && n >= 60;
-  const autoName = validNo ? "임시" + n : "";
+  const autoName = validNo ? (kind === "임시" ? "임시" + n : "변" + n) : "";
 
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff" };
+  // 변형: 번호를 넣으면 원본 다이아(kyobun_dia) 값을 불러와 미리 채움
+  React.useEffect(() => {
+    if (kind !== "변형" || !validNo) { setLoadedFrom(null); return; }
+    let cancelled = false;
+    supabase.from("kyobun_dia").select("*").eq("dia_no", n).then(({ data }: any) => {
+      if (cancelled) return;
+      const d = data && data[0];
+      if (d) {
+        setFields({
+          distance_km: String(d.distance_km ?? ""), start_time: String(d.start_time ?? ""),
+          work_hours: String(d.work_hours ?? ""), drive_hours: String(d.drive_hours ?? ""),
+          wait_hours: String(d.wait_hours ?? ""), ride_hours: String(d.ride_hours ?? ""),
+          watch_hours: String(d.watch_hours ?? ""), edu_hours: String(d.edu_hours ?? ""),
+          prep_hours: String(d.prep_hours ?? ""), clean_hours: String(d.clean_hours ?? ""),
+          night_hours: String(d.night_hours ?? ""),
+        });
+        setLoadedFrom(n);
+      } else {
+        setLoadedFrom(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [kind, no]);
+
+  const switchKind = (k: string) => {
+    setKind(k); setNo(""); setFields(emptyFields); setLoadedFrom(null); setPhoto(null); setAiError("");
+  };
+
+  const readAI = async () => {
+    if (!photo) return;
+    setAiLoading(true); setAiError("");
+    try {
+      const comma = photo.indexOf(",");
+      const meta = photo.slice(5, photo.indexOf(";"));
+      const b64 = photo.slice(comma + 1);
+      const r = await fetch("/.netlify/functions/read-dia", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: meta }) });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      const txt = (d.text || "").replace(/```json|```/g, "").trim();
+      const res = JSON.parse(txt);
+      setFields({
+        distance_km: String(res.distance_km ?? ""), start_time: String(res.start_time ?? ""),
+        work_hours: String(res.work_hours ?? ""), drive_hours: String(res.drive_hours ?? ""),
+        wait_hours: String(res.wait_hours ?? ""), ride_hours: String(res.ride_hours ?? ""),
+        watch_hours: String(res.watch_hours ?? ""), edu_hours: String(res.edu_hours ?? ""),
+        prep_hours: String(res.prep_hours ?? ""), clean_hours: String(res.clean_hours ?? ""),
+        night_hours: String(res.night_hours ?? ""),
+      });
+      if (!no && res.dia_no) setNo(String(res.dia_no));
+    } catch (err) { setAiError("읽기 실패: " + String(err)); }
+    setAiLoading(false);
+  };
 
   const add = async () => {
     if (!validNo) { showToast("번호를 입력해주세요."); return; }
-    if (list.some((r) => Number(r.dia_no) === n)) { showToast("이미 있는 번호예요 (임시" + n + ")", "error"); return; }
+    if (list.some((r) => r.kind === kind && Number(r.dia_no) === n)) {
+      showToast("이미 있는 " + kind + " 다이아예요 (" + autoName + ")", "error"); return;
+    }
     setSaving(true);
     const { error } = await supabase.from("temp_dia").insert({
-      dia_no: n,
-      name: "임시" + n,
-      is_night: isNight,
-      work_hours: parseFloat(wh) || 0,
-      night_hours: parseFloat(nh) || 0,
-      distance_km: parseFloat(km) || 0,
+      dia_no: n, name: autoName, kind: kind, is_night: isNight,
+      distance_km: parseFloat(fields.distance_km) || 0,
+      start_time: String(fields.start_time || ""),
+      work_hours: parseFloat(fields.work_hours) || 0,
+      drive_hours: parseFloat(fields.drive_hours) || 0,
+      wait_hours: parseFloat(fields.wait_hours) || 0,
+      ride_hours: parseFloat(fields.ride_hours) || 0,
+      watch_hours: parseFloat(fields.watch_hours) || 0,
+      edu_hours: parseFloat(fields.edu_hours) || 0,
+      prep_hours: parseFloat(fields.prep_hours) || 0,
+      clean_hours: parseFloat(fields.clean_hours) || 0,
+      night_hours: parseFloat(fields.night_hours) || 0,
+      photo: photo || "",
       visible: true,
     });
     setSaving(false);
     if (error) { showToast("저장 실패: " + error.message, "error"); return; }
-    setNo(""); setWh(""); setNh(""); setKm("");
+    showToast(autoName + " 저장됨!", "success");
+    setNo(""); setFields(emptyFields); setLoadedFrom(null); setPhoto(null);
     load();
   };
 
@@ -13137,69 +13210,101 @@ function TempDiaAdmin() {
     load();
   };
 
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 10px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff", fontFamily: "inherit", color: "#1F2937" };
+
   return (
     <div>
-      <AdminGuide steps={["번호를 넣으면 이름·주야가 자동으로 채워져요 (60번↑ = 야간)", "인정근무·야간·주행키로를 넣고 추가하세요", "없어진 임시다이아는 삭제 말고 '숨김'하세요 — 과거 급여·주행키로가 보존돼요"]} tip="⚠️ 정식 다이아와 번호가 같아도 서로 다른 표라 섞이지 않아요." />
+      <AdminGuide steps={["임시 또는 변형을 고르세요 — 변형은 번호를 넣으면 원본 다이아 값이 자동으로 채워져요", "행로표 사진이 있으면 AI로 읽고, 없으면 손으로 입력하세요", "없어진 다이아는 삭제 말고 '숨김'하세요 — 과거 급여·주행키로가 보존돼요"]} tip="⚠️ 정식 다이아와 번호가 같아도 서로 다른 표라 섞이지 않아요. 60번부터는 야간으로 자동 표시됩니다." />
       <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
-        임시다이아 관리
+        임시·변형 다이아 관리
       </div>
-      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
-        조합원이 근무조정에서 골라 쓸 임시다이아를 만들어요. 번호만 넣으면 이름·주야는 자동입니다.
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+        조합원이 근무조정에서 골라 쓸 임시·변형 다이아를 만들어요. 입력 항목은 정식 다이아와 같아요.
       </div>
 
-      <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <div style={{ width: 120 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>번호</div>
-            <input value={no} onChange={(e) => setNo(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="예: 61" style={inputStyle} />
+      <div style={{ display: "flex", background: "#E9E7FD", borderRadius: 12, padding: 4, marginBottom: 14 }}>
+        {["임시", "변형"].map((k) => (
+          <button key={k} onClick={() => switchKind(k)} style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: 9, fontSize: 14, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "inherit", background: kind === k ? "linear-gradient(135deg, #4F46E5, #6D28D9)" : "transparent", color: kind === k ? "#fff" : "#6B7280" }}>
+            {k} 다이아
+          </button>
+        ))}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 16, padding: 15, boxShadow: "0 2px 8px rgba(79,70,229,0.06)", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <div style={{ width: 110 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 5 }}>{kind === "임시" ? "번호" : "원본 번호"}</div>
+            <input value={no} onChange={(e) => setNo(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder={kind === "임시" ? "예: 1" : "예: 81"} style={inputStyle} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>이름 · 주야 (자동)</div>
-            <div style={{ padding: "10px 12px", borderRadius: 10, background: "#F9FAFB", fontSize: 14, fontWeight: 700, color: validNo ? "#1F2937" : "#9CA3AF", display: "flex", alignItems: "center", gap: 8, minHeight: 42, boxSizing: "border-box" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 5 }}>이름 · 주야 (자동)</div>
+            <div style={{ padding: "9px 10px", borderRadius: 10, background: "#F9FAFB", fontSize: 14, fontWeight: 800, color: validNo ? "#1F2937" : "#9CA3AF", display: "flex", alignItems: "center", gap: 7, minHeight: 40, boxSizing: "border-box" }}>
               {validNo ? (
                 <>
                   <span>{autoName}</span>
-                  <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 8, background: isNight ? "#EDE9FE" : "#DBEAFE", color: isNight ? "#6D28D9" : "#1D4ED8" }}>{isNight ? "야간" : "주간"}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 8, background: isNight ? "#EDE9FE" : "#DBEAFE", color: isNight ? "#6D28D9" : "#1D4ED8" }}>{isNight ? "야간" : "주간"}</span>
                 </>
               ) : "번호 입력 시 자동"}
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>인정근무(h)</div>
-            <input value={wh} onChange={(e) => setWh(e.target.value)} inputMode="decimal" placeholder="8.5" style={inputStyle} />
+
+        {kind === "변형" && validNo && (
+          <div style={{ background: loadedFrom === n ? "#ECFDF5" : "#FEF3C7", color: loadedFrom === n ? "#047857" : "#B45309", fontSize: 11.5, fontWeight: 700, borderRadius: 10, padding: "9px 12px", marginBottom: 10 }}>
+            {loadedFrom === n ? "✅ 원본 " + n + " 다이아 값을 불러왔어요 — 바뀐 부분만 고치세요" : "원본 " + n + " 다이아가 아직 등록 안 됐어요 — 직접 입력하거나 사진으로 읽으세요"}
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>야간(h)</div>
-            <input value={nh} onChange={(e) => setNh(e.target.value)} inputMode="decimal" placeholder="2.0" style={inputStyle} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>주행키로(km)</div>
-            <input value={km} onChange={(e) => setKm(e.target.value)} inputMode="decimal" placeholder="120" style={inputStyle} />
-          </div>
+        )}
+
+        <label style={{ display: "block", padding: 12, border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+          {photo ? "사진 다시 선택" : "📷 행로표 사진 선택 (선택사항)"}
+          <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = () => { setPhoto(String(reader.result)); setAiError(""); };
+            reader.readAsDataURL(f);
+          }} />
+        </label>
+        {photo && (<img src={photo} alt="미리보기" style={{ width: "100%", borderRadius: 12, marginBottom: 10 }} />)}
+        {photo && (
+          <button disabled={aiLoading} onClick={readAI} style={{ width: "100%", padding: 12, background: aiLoading ? "#9CA3AF" : "linear-gradient(135deg,#4F46E5,#6366F1)", color: "#fff", border: "none", borderRadius: 11, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: 10 }}>
+            {aiLoading ? "AI가 읽는 중..." : "🤖 AI로 읽기"}
+          </button>
+        )}
+        {aiError && <div style={{ color: "#DC2626", fontSize: 13, marginBottom: 10 }}>{aiError}</div>}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7, marginBottom: 12 }}>
+          {FIELD_DEFS.map(([k, label]) => (
+            <div key={k}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 3 }}>{label}</div>
+              <input value={fields[k]} onChange={(e) => setFields({ ...fields, [k]: e.target.value })} placeholder={k === "start_time" ? "06:51" : "0"} style={inputStyle} />
+            </div>
+          ))}
         </div>
-        <button onClick={add} disabled={saving || !validNo} style={{ width: "100%", marginTop: 14, padding: "12px", background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: (saving || !validNo) ? 0.5 : 1 }}>
-          {saving ? "저장 중..." : "추가하기"}
+
+        <button onClick={add} disabled={saving || !validNo} style={{ width: "100%", padding: 13, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 11, fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", opacity: (saving || !validNo) ? 0.5 : 1 }}>
+          {saving ? "저장 중..." : "이대로 저장"}
         </button>
       </div>
 
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", margin: "0 4px 10px" }}>등록된 임시다이아 ({list.length})</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", margin: "0 4px 10px" }}>등록된 임시·변형 다이아 ({list.length})</div>
       {list.length === 0 ? (
-        <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>아직 등록된 임시다이아가 없어요</div>
+        <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>아직 등록된 다이아가 없어요</div>
       ) : (
         list.map((r) => (
-          <div key={r.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 11, opacity: r.visible ? 1 : 0.5 }}>
-            <span style={{ fontSize: 11, fontWeight: 800, padding: "4px 9px", borderRadius: 8, background: r.is_night ? "#EDE9FE" : "#DBEAFE", color: r.is_night ? "#6D28D9" : "#1D4ED8", flexShrink: 0 }}>{r.is_night ? "야간" : "주간"}</span>
+          <div key={r.id} style={{ background: "#fff", borderRadius: 13, padding: "12px 13px", marginBottom: 8, display: "flex", alignItems: "center", gap: 9, opacity: r.visible ? 1 : 0.5 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 8px", borderRadius: 7, background: r.kind === "변형" ? "#FCE7F3" : "#FEF3C7", color: r.kind === "변형" ? "#BE185D" : "#B45309", flexShrink: 0 }}>{r.kind}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 8px", borderRadius: 7, background: r.is_night ? "#EDE9FE" : "#DBEAFE", color: r.is_night ? "#6D28D9" : "#1D4ED8", flexShrink: 0 }}>{r.is_night ? "야간" : "주간"}</span>
             <span style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", flexShrink: 0 }}>{r.name}</span>
-            <span style={{ fontSize: 11, color: "#9CA3AF", flex: 1 }}>인정 {r.work_hours}h · 야간 {r.night_hours}h · {r.distance_km}km</span>
-            <button onClick={() => toggle(r)} style={{ fontSize: 11, fontWeight: 700, border: "none", borderRadius: 8, padding: "7px 11px", cursor: "pointer", background: r.visible ? "#F3F4F6" : "#EEF0FF", color: r.visible ? "#6B7280" : "#4F46E5", flexShrink: 0 }}>{r.visible ? "숨김" : "표시"}</button>
+            <span style={{ fontSize: 10.5, color: "#9CA3AF", flex: 1, lineHeight: 1.45 }}>인정 {r.work_hours}h · 심야 {r.night_hours}h · {r.distance_km}km</span>
+            <button onClick={() => toggle(r)} style={{ fontSize: 11, fontWeight: 700, border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontFamily: "inherit", background: r.visible ? "#F3F4F6" : "#EEF0FF", color: r.visible ? "#6B7280" : "#4F46E5", flexShrink: 0 }}>{r.visible ? "숨김" : "표시"}</button>
           </div>
         ))
       )}
     </div>
   );
 }
+
 
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
@@ -13585,7 +13690,7 @@ useEffect(() => {
               { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
               { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
               { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
-              { id: "tempdia", label: "임시다이아 관리", desc: "임시 다이아 추가·숨김" },
+              { id: "tempdia", label: "임시·변형 다이아 관리", desc: "임시·변형 다이아 추가·숨김" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
