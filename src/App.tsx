@@ -27774,6 +27774,7 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
   const [comments, setComments] = React.useState<any[]>([]);
   const [newComment, setNewComment] = React.useState("");
     const [savingComment, setSavingComment] = React.useState(false);
+  const [cmtReply, setCmtReply] = React.useState<any>(null); // 답글 대상 { parentId, name }
   const myId = String(user?.employee_number || user?.emp_id || user?.id || user?.name || "");
   const loadComments = async (actId: any) => {
   const { data } = await supabase.from("activity_comments").select("*").eq("activity_id", actId).order("created_at", { ascending: true });
@@ -27786,14 +27787,21 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
         if (!newComment.trim() || !sel) return;
             if (!myId) { showToast("로그인 정보가 없어요.", "error"); return; }
     setSavingComment(true);
-    await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim() });
+    await supabase.from("activity_comments").insert({ activity_id: sel.id, employee_number: myId, member_name: user?.name || user?.member_name || "조합원", content: newComment.trim(), parent_id: cmtReply ? cmtReply.parentId : null, reply_to: cmtReply ? cmtReply.name : null });
     setNewComment("");
+    setCmtReply(null);
     setSavingComment(false);
     loadComments(sel.id);
   };
-    const delComment = async (id: any) => {
+    const delComment = async (m: any) => {
     if (!window.confirm("댓글을 삭제할까요?")) return;
-    await supabase.from("activity_comments").delete().eq("id", id);
+    const hasReplies = comments.some((r: any) => r.parent_id === m.id);
+    if (hasReplies) {
+      // A안: 답글이 있으면 자리는 남기고 표시만 (답글 보존)
+      await supabase.from("activity_comments").update({ deleted: true }).eq("id", m.id);
+    } else {
+      await supabase.from("activity_comments").delete().eq("id", m.id);
+    }
     loadComments(sel.id);
   };
   const toggleLike = async (act: any) => {
@@ -27870,24 +27878,49 @@ function UnionActivityScreen({ onBack, user }: { onBack: () => void; user?: any 
                 <div style={{ fontSize: 13, color: "#9CA3AF", marginBottom: 12 }}>첫 응원 댓글을 남겨보세요!</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
-                  {comments.map((c: any) => (
-                    <div key={c.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{c.member_name || "조합원"}</span>
-                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 11, color: "#9CA3AF" }}>{(c.created_at || "").slice(5, 10)}</span>
-                                                    {myId && String(c.employee_number) === myId && (
-                            <span onClick={() => delComment(c.id)} style={{ fontSize: 11, color: "#EF4444", cursor: "pointer" }}>삭제</span>
-                          )}
-                        </span>
+                  {comments.filter((c: any) => !c.parent_id).map((c: any) => {
+                    const replies = comments.filter((r: any) => r.parent_id === c.id);
+                    const renderOne = (m: any, isReply: boolean) => (
+                      <div key={m.id} style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", marginLeft: isReply ? 28 : 0 }}>
+                        {m.deleted ? (
+                          <div style={{ fontSize: 12, color: "#9CA3AF" }}>삭제된 댓글입니다</div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{m.member_name || "조합원"}</span>
+                              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 11, color: "#9CA3AF" }}>{(m.created_at || "").slice(5, 10)}</span>
+                                <span onClick={() => setCmtReply({ parentId: c.id, name: m.member_name || "조합원" })} style={{ fontSize: 11, color: "#9CA3AF", cursor: "pointer", fontWeight: 700 }}>답글</span>
+                                {myId && (String(m.employee_number) === myId || user?.is_admin) && (
+                                  <span onClick={() => delComment(m)} style={{ fontSize: 11, color: "#EF4444", cursor: "pointer" }}>삭제</span>
+                                )}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 14, color: "#374151", whiteSpace: "pre-wrap" }}>
+                              {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
+                              {m.content}
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <div style={{ fontSize: 14, color: "#374151", whiteSpace: "pre-wrap" }}>{c.content}</div>
-                    </div>
-                  ))}
+                    );
+                    return (
+                      <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {renderOne(c, false)}
+                        {replies.map((r: any) => renderOne(r, true))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {cmtReply && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "0 2px" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>↳ {cmtReply.name}님에게 답글</span>
+                  <span onClick={() => setCmtReply(null)} style={{ fontSize: 12, color: "#9CA3AF", cursor: "pointer", fontWeight: 600 }}>취소</span>
                 </div>
               )}
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="응원 한마디 남기기" style={{ flex: 1, padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
+                <input value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder={cmtReply ? "답글 남기기" : "응원 한마디 남기기"} style={{ flex: 1, padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 10, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", WebkitAppearance: "none", appearance: "none" }} />
                 <button onClick={addComment} disabled={savingComment} style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>{savingComment ? "..." : "등록"}</button>
               </div>
             </div>
