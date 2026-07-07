@@ -2793,6 +2793,15 @@ const LOGIN_FAIL_KEY = "login_fail_";
 const MAX_FAIL = 5;
 const LOCK_MINUTES = 30;
 
+const markFirstLogin = (emp: any) => {
+  if (!emp) return;
+  supabase
+    .from("members")
+    .update({ first_login_at: new Date().toISOString() })
+    .eq("employee_number", String(emp))
+    .is("first_login_at", null)
+    .then(() => {});
+};
 function LoginScreen({ onLogin, onGoRegister }) {
   const [name, setName] = useState("");
   const [empId, setEmpId] = useState("");
@@ -2933,6 +2942,7 @@ function LoginScreen({ onLogin, onGoRegister }) {
       setNeedChangePw(true);
       return;
     }
+    markFirstLogin(data.employee_number);
     onLogin({ ...data });
   };
 
@@ -2975,6 +2985,7 @@ function LoginScreen({ onLogin, onGoRegister }) {
       setPwChangeError("변경에 실패했습니다.\n잠시 후 다시 시도해주세요.");
       return;
     }
+    markFirstLogin((pendingUser || {}).employee_number || (json.member || {}).employee_number);
     onLogin({ ...pendingUser, ...(json.member || {}), is_temp_password: false });
   };
 
@@ -12500,83 +12511,6 @@ function fmtHours(n: any): string {
   const s = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
-function RouteDiagram({ runs }: { runs: any[] }) {
-  const padL = 44, step = 48, top = 50, rowH = 42;
-  const xOf = (idx: number) => padL + idx * step;
-  const W = padL + 17 * step + 40;
-  const { flat, warnings } = expandRouteRuns(runs);
-  const rows = flat.map((r) => {
-    const idxs = r.idxs || [];
-    return { train_no: r.train_no, start_time: r.start_time, end_time: r.end_time, idxs, isRide: !!r.isRide, from: idxs[0], to: idxs[idxs.length - 1], group: r.group };
-  }).filter((r) => r.idxs.length >= 2);
-  const warnBox = warnings.length > 0 ? <div style={{ color: "#DC2626", fontSize: 11, padding: "0 2px 8px", lineHeight: 1.5 }}>⚠️ {warnings.join(" / ")}</div> : null;
-  if (rows.length === 0) return <div>{warnBox}<div style={{ fontSize: 12, color: "#9CA3AF", padding: "14px 4px" }}>약자를 입력하면 여기에 행로가 그려져요.</div></div>;
-  const H = top + rows.length * rowH + 24;
-  return (
-    <div>
-      {warnBox}
-      <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff" }}>
-        <svg viewBox={`0 0 ${W} ${H}`} width={W} style={{ maxWidth: "none", display: "block" }}>
-        <line x1={padL} y1={top - 10} x2={xOf(17)} y2={top - 10} stroke="#E5E7EB" />
-        {ROUTE_STATIONS.map((st, i) => (
-          <g key={i}>
-            <text x={xOf(i)} y={top - 18} fontSize="9.5" fill="#374151" textAnchor="middle">{st.name}</text>
-            <line x1={xOf(i)} y1={top - 6} x2={xOf(i)} y2={H - 16} stroke="#F3F4F6" />
-          </g>
-        ))}
-        {rows.map((r, i) => {
-          const y = top + i * rowH + 16;
-          if (r.isRide) {
-            const a = r.idxs.length ? xOf(r.idxs[0]) : padL;
-            const b = r.idxs.length ? xOf(r.idxs[r.idxs.length - 1]) : xOf(5);
-            const mx = (a + b) / 2;
-            const prevR = rows[i - 1];
-            const linked = prevR && prevR.group === r.group && prevR.to === r.from;
-            const py = top + (i - 1) * rowH + 16;
-            const sr = a >= b;
-            const sx = sr ? a + 14 : a - 14, sAnc = sr ? "start" : "end";
-            const ex = sr ? b - 14 : b + 14, eAnc = sr ? "end" : "start";
-            return (
-              <g key={i}>
-                {linked && <line x1={a - 2} y1={py} x2={a - 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
-                {linked && <line x1={a + 2} y1={py} x2={a + 2} y2={y} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />}
-                <line x1={a} y1={y - 2} x2={b} y2={y - 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
-                <line x1={a} y1={y + 2} x2={b} y2={y + 2} stroke="#111" strokeWidth="1.2" strokeDasharray="4 3" />
-                {r.idxs.length > 0 && <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>}
-                {r.idxs.length > 0 && <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>}
-                <rect x={mx - 20} y={y - 10} width="40" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
-                <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">편승</text>
-              </g>
-            );
-          }
-          const pts = r.idxs.map((id) => `${xOf(id)},${y}`).join(" ");
-          const fromOut = r.from === 0 || r.from === 17;
-          const toIn = r.to === 0 || r.to === 17;
-          const mx = (xOf(r.idxs[0]) + xOf(r.idxs[r.idxs.length - 1])) / 2;
-          const xf = xOf(r.idxs[0]), xt = xOf(r.idxs[r.idxs.length - 1]);
-          const sr = xf >= xt;
-          const sx = sr ? xf + 14 : xf - 14, sAnc = sr ? "start" : "end";
-          const ex = sr ? xt - 14 : xt + 14, eAnc = sr ? "end" : "start";
-          const prev = rows[i - 1];
-          const linkedFrom = prev && !prev.isRide && !r.isRide && prev.group === r.group && prev.to === r.from;
-          return (
-            <g key={i}>
-              {linkedFrom && <line x1={xOf(r.from)} y1={top + (i - 1) * rowH + 16} x2={xOf(r.from)} y2={y} stroke="#111" strokeWidth="2.5" />}
-              <polyline points={pts} fill="none" stroke="#111" strokeWidth="2.5" />
-              {fromOut && <circle cx={xOf(r.from)} cy={y} r="5" fill="#111" />}
-              {toIn && <path d={`M${xOf(r.to)} ${y} l-6 -10 l12 0 z`} fill="#111" />}
-              <text x={sx} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={sAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.start_time}</text>
-              <text x={ex} y={y + 3} fontSize="8.5" fill="#6B7280" textAnchor={eAnc} stroke="#fff" strokeWidth="2" paintOrder="stroke">{r.end_time}</text>
-              <rect x={mx - 21} y={y - 10} width="42" height="20" rx="10" ry="10" fill="#fff" stroke="#111" />
-              <text x={mx} y={y + 3} fontSize="9" fill="#111" textAnchor="middle">{r.train_no || "?"}</text>
-            </g>
-          );
-        })}
-      </svg>
-      </div>
-    </div>
-  );
-}
 function ImageZoomViewer({ src, onClose }: { src: string; onClose: () => void }) {
   const wrapRef = React.useRef<any>(null);
   const stageRef = React.useRef<any>(null);
@@ -13039,15 +12973,18 @@ function RouteInputScreen() {
               <div style={{ border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden", marginBottom: 10 }}>
                 {aiRows.map((r: any, i: number) => (
                   <div key={r.dia_no} style={{ padding: "10px", borderBottom: i < aiRows.length - 1 ? "1px solid #F3F4F6" : "none" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ flex: "0 0 58px", fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
-                      <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="약어 예: 대온,온도대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <span style={{ flex: 1, fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
                       {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
                       <button
                         onClick={() => { if (window.confirm("다이아 " + r.dia_no + " 한 장만 AI로 다시 추출해요. 이 칸의 현재 값은 AI 값으로 바뀝니다. 계속할까요?")) runAiExtract(false, r.dia_no); }}
                         disabled={aiExtracting}
                         style={{ flex: "0 0 auto", border: "1px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: aiExtracting ? 0.5 : 1 }}
                       >🤖</button>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ flex: "0 0 58px", fontSize: 11, color: "#111827", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>약어</span>
+                      <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="약어 예: 대온,온도대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                       <span style={{ flex: "0 0 58px", fontSize: 11, color: "#4F46E5", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>열번</span>
@@ -15972,7 +15909,6 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refr
 const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [workForms, setWorkForms] = React.useState<any>({});
-  const [popupRoute, setPopupRoute] = React.useState<any>(null);
   const [popupDiaImg, setPopupDiaImg] = React.useState<string>("");
   const [zoomImg, setZoomImg] = React.useState<string>("");
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
@@ -15990,7 +15926,6 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaNo, setDiaNo] = React.useState<string | null>(null);
   const [diaCats, setDiaCats] = React.useState<string[]>([]);
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
-  const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
   const [diaImgMap, setDiaImgMap] = React.useState<any>({});
   const trainWindowFromGrid = (grid: any[][], train: string): { start: number; end: number } | null => {
     if (!grid || !grid.length) return null;
@@ -16086,22 +16021,13 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
 
   const doDiaSearch = async () => {
     const q = diaQ.trim();
-    setDiaSel(null); setDiaCats([]); setDiaRouteMap({});
+    setDiaSel(null); setDiaCats([]);
     if (!q) { setDiaNo(null); return; }
     setDiaNo(q);
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
     const cats = order.filter((c) => diaTable.some((r: any) => Number(r.dia_no) === Number(q) && r.day_type === c));
     setDiaCats(cats);
     if (cats.length === 1) setDiaSel(cats[0]);
-    const { data } = await supabase.from("dia_route").select("*").eq("dia_no", q);
-    const grouped: any = {};
-    (data || []).forEach((r: any) => {
-      if (!grouped[r.category]) grouped[r.category] = [];
-      grouped[r.category].push(r);
-    });
-    const map: any = {};
-    Object.keys(grouped).forEach((k) => { map[k] = rebuildRuns(grouped[k]); });
-    setDiaRouteMap(map);
     // 근무행로 사진(dia_image) 불러오기 — 구분별
     setDiaImgMap({});
     const { data: imgs } = await supabase.from("dia_image").select("category, image").eq("dia_no", q);
@@ -16697,27 +16623,6 @@ const getKyobunWork = (member: any, date: Date) => {
 
   // 근무표 상세 팝업: 그 날 교번 다이아의 근무행로 불러오기
   React.useEffect(() => {
-    if (!editingDate || activeTab !== "교번" || !selectedMember) { setPopupRoute(null); return; }
-    const w = getKyobunWork(selectedMember, new Date(editingDate));
-    if (!w) { setPopupRoute(null); return; }
-    const dt = getDiaDayType(w.type, new Date(editingDate));
-    if (!dt) { setPopupRoute([]); return; }
-    let cancel = false;
-    setPopupRoute(undefined);
-    (async () => {
-      const { data } = await supabase
-        .from("dia_route")
-        .select("*")
-        .eq("dia_no", String(w.dia))
-        .eq("category", dt)
-        .order("seq", { ascending: true });
-      if (cancel) return;
-      setPopupRoute(data && data.length > 0 ? rebuildRuns(data) : []);
-    })();
-    return () => { cancel = true; };
-  }, [editingDate, selectedMember, activeTab]);
-
-  React.useEffect(() => {
     if (!editingDate || activeTab !== "교번" || !selectedMember) { setPopupDiaImg(""); return; }
     const w = getKyobunWork(selectedMember, new Date(editingDate));
     if (!w) { setPopupDiaImg(""); return; }
@@ -17263,12 +17168,8 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a1a", marginBottom: 10 }}>🚉 근무행로</div>
                 {popupDiaImg ? (
                   <img src={popupDiaImg} alt="근무행로" onClick={() => setZoomImg(popupDiaImg)} style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block", cursor: "zoom-in" }} />
-                ) : popupRoute === undefined ? (
-                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>불러오는 중...</div>
-                ) : (popupRoute && popupRoute.length > 0) ? (
-                  <RouteDiagram runs={popupRoute} />
                 ) : (
-                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 미입력</div>
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 사진이 아직 없어요</div>
                 )}
               </div>
             )}
@@ -18227,7 +18128,6 @@ const getKyobunWork = (member: any, date: Date) => {
   const renderDiaSearch = () => {
     const order = ["평일", "휴일", "평평", "평휴", "휴평", "휴휴"];
     const info = (diaNo && diaSel) ? getDiaInfo(diaNo, diaSel) : null;
-    const runs = diaSel ? diaRouteMap[diaSel] : null;
     const hasVal = (v: any) => v !== null && v !== undefined && v !== "" && Number(v) !== 0;
     const fields: any[] = info ? [
       { label: "주행키로", show: hasVal(info.distance_km), val: `${info.distance_km} km` },
@@ -19143,7 +19043,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
             🔍 직원검색
           </button>
           <button
-            onClick={() => { setDiaQ(""); setDiaNo(null); setDiaCats([]); setDiaSel(null); setDiaRouteMap({}); setSubScreen("diasearch"); }}
+            onClick={() => { setDiaQ(""); setDiaNo(null); setDiaCats([]); setDiaSel(null); setSubScreen("diasearch"); }}
             style={{
               background: "#EEF6F2",
               border: "none",
@@ -28094,6 +27994,19 @@ function HomeCarousel({
 }) {
   // 경조사 데이터 (Supabase events에서)
   const [condolences, setCondolences] = React.useState([]);
+  const [recentJoins, setRecentJoins] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    const load = async () => {
+      const cutoff = new Date(Date.now() - 3 * 86400000).toISOString();
+      const { data } = await supabase
+        .from("members")
+        .select("name, first_login_at")
+        .gte("first_login_at", cutoff)
+        .order("first_login_at", { ascending: false });
+      setRecentJoins((data || []).filter((m: any) => m.name && !String(m.name).includes("결원")));
+    };
+    load();
+  }, []);
 const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const [myRank, setMyRank] = React.useState<any>(null);
   const [awardWinner, setAwardWinner] = React.useState<any>(null);
@@ -28587,6 +28500,17 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       )}
 
       {/* 캐러셀 컨테이너 */}
+      {recentJoins.length > 0 && (
+        <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>👋</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3" }}>
+              {recentJoins.map((m: any) => m.name + "님").join(", ")}
+            </div>
+            <div style={{ fontSize: 12, color: "#6366F1", marginTop: 2 }}>모다링크에 새로 함께하게 됐어요 🎉</div>
+          </div>
+        </div>
+      )}
       <div
         style={{ overflow: "hidden", borderRadius: 12 }}
         onTouchStart={handleTouchStart}
