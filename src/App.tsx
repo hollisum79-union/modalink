@@ -15981,7 +15981,8 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
  const [subScreen, setSubScreen] = React.useState<null | "contacts" | "compare" | "search" | "menu" | "favorites" | "phones" | "ride" | "diasearch">(null);
   const [rideQ, setRideQ] = React.useState("");
   const [rideHits, setRideHits] = React.useState<any[]>([]);
-  const [rideSel, setRideSel] = React.useState<string | null>(null);
+    const [rideSel, setRideSel] = React.useState<string | null>(null);
+  const [rideSearched, setRideSearched] = React.useState(false);
   const [rideWorkForms, setRideWorkForms] = React.useState<any>({});
   const [rideRoutes, setRideRoutes] = React.useState<any>({});
   const [rideRun, setRideRun] = React.useState<any>({});
@@ -16026,9 +16027,10 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     if (!w) return null;
     return (nowMin >= w.start && nowMin <= w.end) || (nowMin + 1440 >= w.start && nowMin + 1440 <= w.end);
   };
-  const doRideSearch = async () => {
+    const doRideSearch = async () => {
     const q = rideQ.trim();
     setRideSel(null);
+    setRideSearched(true);
     if (!q) { setRideHits([]); return; }
     if (members.length === 0) {
       const { data: mem } = await supabase
@@ -18131,13 +18133,14 @@ const getKyobunWork = (member: any, date: Date) => {
     };
     return (
       <div style={{ padding: "16px 16px 24px" }}>
-        <button onClick={() => { setSubScreen("menu"); setRideQ(""); setRideHits([]); setRideSel(null); }} style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 메뉴화면</button>
+        <button onClick={() => { setSubScreen("menu"); setRideQ(""); setRideHits([]); setRideSel(null); setRideSearched(false); }}
+ style={{ background: "none", border: "none", color: "#6366F1", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, padding: 0 }}>← 메뉴화면</button>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 4 }}>편승 도우미</div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>열번을 검색하고, 오늘 내 근무를 골라보세요</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           <input
             value={rideQ}
-            onChange={(e) => setRideQ(e.target.value)}
+                        onChange={(e) => { setRideQ(e.target.value); setRideSearched(false); }}
             onKeyDown={(e) => { if (e.key === "Enter") doRideSearch(); }}
             inputMode="numeric"
             placeholder="열번 입력 (예: 7012)"
@@ -18145,8 +18148,8 @@ const getKyobunWork = (member: any, date: Date) => {
           />
           <button onClick={doRideSearch} style={{ padding: "0 20px", borderRadius: 13, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>검색</button>
         </div>
-                {rideQ.trim() && rideHits.length === 0 && (
-          <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 14, padding: "20px 16px", textAlign: "center" }}>
+                {rideSearched && rideQ.trim() && rideHits.length === 0 && ( 
+        <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 14, padding: "20px 16px", textAlign: "center" }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#374151", marginBottom: 6 }}>{rideQ.trim()} 열번을 찾을 수 없어요</div>
             <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6 }}>
               이 열차는 <b>대공원 기관사가 운전하지 않는 열차</b>일 가능성이 높아요.
