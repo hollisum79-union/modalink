@@ -2793,6 +2793,15 @@ const LOGIN_FAIL_KEY = "login_fail_";
 const MAX_FAIL = 5;
 const LOCK_MINUTES = 30;
 
+const markFirstLogin = (emp: any) => {
+  if (!emp) return;
+  supabase
+    .from("members")
+    .update({ first_login_at: new Date().toISOString() })
+    .eq("employee_number", String(emp))
+    .is("first_login_at", null)
+    .then(() => {});
+};
 function LoginScreen({ onLogin, onGoRegister }) {
   const [name, setName] = useState("");
   const [empId, setEmpId] = useState("");
@@ -2933,6 +2942,7 @@ function LoginScreen({ onLogin, onGoRegister }) {
       setNeedChangePw(true);
       return;
     }
+    markFirstLogin(data.employee_number);
     onLogin({ ...data });
   };
 
@@ -2975,6 +2985,7 @@ function LoginScreen({ onLogin, onGoRegister }) {
       setPwChangeError("변경에 실패했습니다.\n잠시 후 다시 시도해주세요.");
       return;
     }
+    markFirstLogin((pendingUser || {}).employee_number || (json.member || {}).employee_number);
     onLogin({ ...pendingUser, ...(json.member || {}), is_temp_password: false });
   };
 
@@ -27983,6 +27994,19 @@ function HomeCarousel({
 }) {
   // 경조사 데이터 (Supabase events에서)
   const [condolences, setCondolences] = React.useState([]);
+  const [recentJoins, setRecentJoins] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    const load = async () => {
+      const cutoff = new Date(Date.now() - 3 * 86400000).toISOString();
+      const { data } = await supabase
+        .from("members")
+        .select("name, first_login_at")
+        .gte("first_login_at", cutoff)
+        .order("first_login_at", { ascending: false });
+      setRecentJoins((data || []).filter((m: any) => m.name && !String(m.name).includes("결원")));
+    };
+    load();
+  }, []);
 const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const [myRank, setMyRank] = React.useState<any>(null);
   const [awardWinner, setAwardWinner] = React.useState<any>(null);
@@ -28476,6 +28500,17 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       )}
 
       {/* 캐러셀 컨테이너 */}
+      {recentJoins.length > 0 && (
+        <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>👋</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3" }}>
+              {recentJoins.map((m: any) => m.name + "님").join(", ")}
+            </div>
+            <div style={{ fontSize: 12, color: "#6366F1", marginTop: 2 }}>모다링크에 새로 함께하게 됐어요 🎉</div>
+          </div>
+        </div>
+      )}
       <div
         style={{ overflow: "hidden", borderRadius: 12 }}
         onTouchStart={handleTouchStart}
