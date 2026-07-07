@@ -32353,6 +32353,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               </div>
             </div>
           </div>
+          {homeTotalKm > 0 && (
+            <div style={{ background: "#F4F3FF", color: "#4F46E5", fontSize: 11, fontWeight: 800, padding: "5px 10px", borderRadius: 9, whiteSpace: "nowrap" }}>
+              🌍 지구 {(homeTotalKm / 40075).toFixed(1)}바퀴
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
             <div style={{ fontSize: 19, fontWeight: 900, color: "#1F2937", letterSpacing: -0.5 }}>
               {homeTotalKm.toLocaleString("ko-KR")}
