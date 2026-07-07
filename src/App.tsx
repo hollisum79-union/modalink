@@ -309,6 +309,7 @@ function computeNetPay(input: any) {
     hfRecords = [], diaTable = [], holidays = [], dedRates = null,
     memberInfo = null, rotationData = [], dutyRecords = [],
     swapData = [], allMembers = [], allowSettings = [], hiddenItems = [],
+    startHistory = [],
   } = input;
 
     const row = salaryTable.find((r: any) => Number(r.hobong) === Number(hobong));
@@ -357,7 +358,7 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
         .map((r: any) => r.work_date)
     );
     for (let i = 1; i <= dcount; i++) {
-      const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData, swapData, allMembers);
+      const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
       if (String(w.dia).startsWith("대기")) {
@@ -495,8 +496,8 @@ function estimateAdjustPay(records: any[], hourlyWage: number, diaTable: any[], 
   total += hourlyWage * (within8s * 1.5 + over8s * 2.0);
   return Math.round(total);
 }
-function getTodayWorkInfo(member: any, rotationData: any[], diaTable: any[], holidays: string[], date = new Date(), swapData: any[] = [], allMembers: any[] = []) {
-  const work = calcKyobunWork(member, date, rotationData, swapData, allMembers);
+function getTodayWorkInfo(member: any, rotationData: any[], diaTable: any[], holidays: string[], date = new Date(), swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
+  const work = calcKyobunWork(member, date, rotationData, swapData, allMembers, startHistory);
   if (!work) return null;
 
   const isHol = (d: Date) => {
@@ -21887,6 +21888,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   const [memberInfo, setMemberInfo] = React.useState<any>(null);
   const [swapData, setSwapData] = React.useState<any[]>([]);
   const [allMembers, setAllMembers] = React.useState<any[]>([]);
+  const [startHistory, setStartHistory] = React.useState<any[]>([]);
   const [dedRates, setDedRates] = React.useState<any>(null);
   const [overtimeHour, setOvertimeHour] = React.useState<number>(0);
   const [overtimeMin, setOvertimeMin] = React.useState<number>(0);
@@ -21923,6 +21925,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         dutyRes,
         swapRes,
         allMemRes,
+        shRes,
       ] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
@@ -21939,6 +21942,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
         supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
+        supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
    ]);
 
       if (salaryRes.data) setSalaryTable(salaryRes.data);
@@ -21960,6 +21964,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       if (dutyRes.data) setDutyRecords(dutyRes.data);
       setSwapData(swapRes.data || []);
       setAllMembers(allMemRes.data || []);
+      setStartHistory(shRes.data || []);
 
             fetch("/.netlify/functions/read-holidays?year=" + ty)
         .then((r) => r.json())
@@ -22153,7 +22158,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     );
     let sum = 0;
     for (let i = 1; i <= dd; i++) {
-      const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers);
+      const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
       if (String(w.dia).startsWith("대기")) {
@@ -22182,7 +22187,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const dutyDates = new Set((dutyRecords || []).filter((r: any) => r.work_shift === "야간").map((r: any) => r.work_date));
     let cnt = 0;
     for (let i = 1; i <= dd; i++) {
-      const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers);
+      const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
       if (String(w.dia).startsWith("대기")) {
@@ -24410,12 +24415,13 @@ function DistanceScreen({ onBack, user }) {
   const loadAll = async () => {
     if (!user?.employee_number) return;
     setComputing(true);
-    const [meRes, rotRes, diaRes, swapRes, allMemRes] = await Promise.all([
+    const [meRes, rotRes, diaRes, swapRes, allMemRes, shRes] = await Promise.all([
       supabase.from("members").select("base_distance_km, base_distance_date, work_type, work_group, start_position, schedule_total, tongsang_base_date, tongsang_base_dia").eq("employee_number", user.employee_number).maybeSingle(),
       supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
       supabase.from("kyobun_dia").select("dia_no, distance_km"),
       supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`),
       supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
+      supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
     ]);
     const me = meRes.data || {};
     const rotationData = rotRes.data || [];
@@ -24483,7 +24489,7 @@ function DistanceScreen({ onBack, user }) {
         if (adjustByDate[ds]) {
           diaNo = adjustByDate[ds];
         } else if (me.work_type === "교번") {
-        const w = calcKyobunWork(member, new Date(d), rotationData, swapData, allMembers);
+        const w = calcKyobunWork(member, new Date(d), rotationData, swapData, allMembers, shRes.data || []);
           if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
         } else if (me.work_type === "통상") {
           const w = calcTongsangWork(member, new Date(d), tsHolidays);
@@ -24643,6 +24649,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   const [swapSearch, setSwapSearch] = useState("");
 // 교번교체 매칭용: 순환표 + 기간
   const [swapRotation, setSwapRotation] = useState<any[]>([]);
+  const [swapStartHistory, setSwapStartHistory] = useState<any[]>([]);
   const [swapStart, setSwapStart] = useState(
     new Date().toISOString().split("T")[0]
   );
@@ -24691,6 +24698,16 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       if (data) setSwapRotation(data);
     };
     loadRotation();
+  }, []);
+
+  React.useEffect(() => {
+    const loadSH = async () => {
+      const { data } = await supabase
+        .from("kyobun_start_history")
+        .select("member_id, effective_date, start_position");
+      if (data) setSwapStartHistory(data);
+    };
+    loadSH();
   }, []);
   // 기관사 명단 불러오기 (교번교체 상대 선택용)
   useEffect(() => {
@@ -25207,9 +25224,9 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                     for (let d = new Date(fromR); d <= toR; d.setDate(d.getDate() + 1)) {
                       const dd = new Date(d);
                       const isEdge = dd < sR || dd > eR;
-                      const theirW = calcKyobunWork(requester, dd, swapRotation);
+                      const theirW = calcKyobunWork(requester, dd, swapRotation, [], [], swapStartHistory);
                       if (!isEdge && theirW && cntR[theirW.type] !== undefined) cntR[theirW.type]++;
-                      daysR.push({ label: `${dd.getMonth() + 1}/${dd.getDate()}`, mine: fmtR(calcKyobunWork(meR, dd, swapRotation)), theirs: fmtR(theirW), edge: isEdge });
+                      daysR.push({ label: `${dd.getMonth() + 1}/${dd.getDate()}`, mine: fmtR(calcKyobunWork(meR, dd, swapRotation, [], [], swapStartHistory)), theirs: fmtR(theirW), edge: isEdge });
                     }
                   }
                   return (
@@ -25458,7 +25475,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                 const countTypes = (member: any) => {
                   const c: any = { 주간: 0, 야간: 0, 비번: 0, 휴무: 0 };
                   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-                    const w = calcKyobunWork(member, new Date(d), swapRotation);
+                    const w = calcKyobunWork(member, new Date(d), swapRotation, [], [], swapStartHistory);
                     if (w && c[w.type] !== undefined) c[w.type]++;
                   }
                   return c;
@@ -25467,7 +25484,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                   a.주간 === b.주간 && a.야간 === b.야간 && a.비번 === b.비번 && a.휴무 === b.휴무;
 
                                                                 const startsWithBibeon = (member: any) => {
-                  const w = calcKyobunWork(member, new Date(s), swapRotation);
+                  const w = calcKyobunWork(member, new Date(s), swapRotation, [], [], swapStartHistory);
                   return !!(w && w.type === "비번");
                 };
 
@@ -25488,8 +25505,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                 };
                 const samePattern = (member: any) => {
                   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-                    const mine = calcKyobunWork(me, new Date(d), swapRotation);
-                    const theirs = calcKyobunWork(member, new Date(d), swapRotation);
+                    const mine = calcKyobunWork(me, new Date(d), swapRotation, [], [], swapStartHistory);
+                    const theirs = calcKyobunWork(member, new Date(d), swapRotation, [], [], swapStartHistory);
                     if (workKind(mine) !== workKind(theirs)) return false;
                   }
                   return true;
@@ -25497,7 +25514,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
 
                if (swapMode === "oneday") {
                   const isStandby = (w: any) => !!(w && String(w.dia).startsWith("대기"));
-                  const myW = calcKyobunWork(me, new Date(s), swapRotation);
+                  const myW = calcKyobunWork(me, new Date(s), swapRotation, [], [], swapStartHistory);
                   const myKind = workKind(myW);
                   if (myKind !== "주" && myKind !== "야") {
                     showToast("그 날은 주간/야간 근무가 아니라 하루 교체 대상이 아니에요", "error");
@@ -25510,7 +25527,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                   const matchedOne = swapMembers
                     .filter((m) => String(m.employee_number) !== String(user?.employee_number))
                     .filter((m) => m.work_group === swapStation)
-                    .map((m) => ({ member: m, theirW: calcKyobunWork(m, new Date(s), swapRotation) }))
+                    .map((m) => ({ member: m, theirW: calcKyobunWork(m, new Date(s), swapRotation, [], [], swapStartHistory) }))
                     .filter((x) => workKind(x.theirW) === myKind)
                     .filter((x) => !isStandby(x.theirW))
                     .map((x) => ({ member: x.member, myDia: myW, theirDia: x.theirW }));
@@ -25634,8 +25651,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                         const isEdge = dd < s || dd > e;
                         days.push({
                           label: `${dd.getMonth() + 1}/${dd.getDate()}`,
-                          mine: fmt(calcKyobunWork(me, dd, swapRotation)),
-                          theirs: fmt(calcKyobunWork(x.member, dd, swapRotation)),
+                          mine: fmt(calcKyobunWork(me, dd, swapRotation, [], [], swapStartHistory)),
+                          theirs: fmt(calcKyobunWork(x.member, dd, swapRotation, [], [], swapStartHistory)),
                           edge: isEdge,
                         });
                       }
@@ -30104,6 +30121,9 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         const { data: allMembers } = await supabase
           .from("members")
           .select("employee_number, work_group, start_position, schedule_total");
+        const { data: shData } = await supabase
+          .from("kyobun_start_history")
+          .select("member_id, effective_date, start_position");
         const leaveDates = new Set((lvData || []).map((r: any) => r.used_date));
         const adjustByDate: any = {};
         const tempKmByDate: any = {};
@@ -30145,7 +30165,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
           if (adjustByDate[ds]) {
             diaNo = adjustByDate[ds];
           } else if (me.work_type === "교번") {
-           const w = calcKyobunWork(member, new Date(d), homeRotation, swapData || [], allMembers || []);
+           const w = calcKyobunWork(member, new Date(d), homeRotation, swapData || [], allMembers || [], shData || []);
             if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
           } else if (me.work_type === "통상") {
             const w = calcTongsangWork(member, new Date(d), tsHolidays);
@@ -30185,6 +30205,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       memberInfo: { ...d.memberInfo, employee_number: user.employee_number },
       rotationData: homeRotation,
       swapData: d.swapData || [],
+      startHistory: d.startHistory || [],
       allMembers: d.allMembers || [],
       allowSettings: d.allowSettings || [],
       hiddenItems: s.hidden_items || [],
@@ -30276,7 +30297,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const ty = now.getFullYear();
       const tm = String(now.getMonth() + 1).padStart(2, "0");
       const tEnd = new Date(ty, now.getMonth() + 1, 0).getDate();
-     const [salaryRes, wtRes, meRes, hfRes, settingsRes, dedRes, sbRes, lvRes, dutyRes, swapRes, allMemRes, allowRes] = await Promise.all([
+     const [salaryRes, wtRes, meRes, hfRes, settingsRes, dedRes, sbRes, lvRes, dutyRes, swapRes, allMemRes, allowRes, shRes] = await Promise.all([
         supabase.from("salary_table").select("*").order("hobong", { ascending: true }),
         supabase.from("worktype_pay_settings").select("*"),
         emp ? supabase.from("members").select("grade, pay_step, start_position, schedule_total, work_group, work_type, tongsang_wage, bojeon_gasan, dependents_count, children_count")
@@ -30290,6 +30311,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
          supabase.from("members").select("employee_number, work_group, start_position, schedule_total, bojeon_gasan"),  
          supabase.from("allowance_settings").select("name, visible"),
+         supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
      ]);
       let homeNightCount = 0;
       const sb = sbRes.data;
@@ -30330,6 +30352,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         swapData: swapRes.data || [],
         allMembers: allMemRes.data || [],
         allowSettings: allowRes.data || [],
+        startHistory: shRes.data || [],
       });
     };
     loadHomeWork();
@@ -32106,6 +32129,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   memberInfo: { ...d.memberInfo, employee_number: user.employee_number },
                   rotationData: homeRotation,
                   swapData: d.swapData || [],
+                  startHistory: d.startHistory || [],
                   allMembers: d.allMembers || [],
                   allowSettings: d.allowSettings || [],
                   hiddenItems: s.hidden_items || [],
@@ -32127,7 +32151,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             
           </div>
        {(() => {
-            let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays, new Date(), homeSalaryData?.swapData || [], homeSalaryData?.allMembers || []) : null;
+            let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays, new Date(), homeSalaryData?.swapData || [], homeSalaryData?.allMembers || [], homeSalaryData?.startHistory || []) : null;
             if (homeTodayAdjust && homeTodayAdjust.memo) {
               const _m = String(homeTodayAdjust.memo).match(/다이아\s*(\d+)/);
               if (_m) {
