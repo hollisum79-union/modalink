@@ -12766,9 +12766,8 @@ function RouteInputScreen() {
     const emptyCnt = rows.filter((r: any) => !r.work_form).length;
     setAiLoadMsg(aiCat + " 사진 " + rows.length + "장 · 약어 있음 " + (rows.length - emptyCnt) + "장 · 빈 것 " + emptyCnt + "장");
   };
-
-  const runAiExtract = async (onlyEmpty: boolean) => {
-    const targets = aiRows.filter((r: any) => (onlyEmpty ? (!r.work_form || !r.trains) : true));
+  const runAiExtract = async (onlyEmpty: boolean, oneDia?: string) => {
+    const targets = aiRows.filter((r: any) => (oneDia ? r.dia_no === oneDia : (onlyEmpty ? (!r.work_form || !r.trains) : true)));
     if (targets.length === 0) { showToast("추출할 대상이 없어요", "error"); return; }
     setAiExtracting(true);
     setAiProgress({ done: 0, total: targets.length });
@@ -13042,8 +13041,14 @@ function RouteInputScreen() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ flex: "0 0 58px", fontSize: 12, color: "#111827", fontWeight: 700 }}>다이아 {r.dia_no}</span>
                       <input value={r.work_form} onChange={(e) => updateAiRow(r.dia_no, e.target.value)} placeholder="약어 예: 대온,온도대" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #D1D5DB", borderRadius: 6, padding: "6px 8px", fontSize: 13 }} />
-                      {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
+                                            {r.fromAI ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#16A34A", background: "#DCFCE7", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>AI</span> : (r.existing ? <span style={{ flex: "0 0 auto", fontSize: 10, color: "#6B7280", background: "#F3F4F6", padding: "2px 6px", borderRadius: 5, fontWeight: 700 }}>기존</span> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#9CA3AF", padding: "2px 6px" }}>—</span>)}
+                      <button
+                        onClick={() => { if (window.confirm("다이아 " + r.dia_no + " 한 장만 AI로 다시 추출해요. 이 칸의 현재 값은 AI 값으로 바뀝니다. 계속할까요?")) runAiExtract(false, r.dia_no); }}
+                        disabled={aiExtracting}
+                        style={{ flex: "0 0 auto", border: "1px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: aiExtracting ? 0.5 : 1 }}
+                      >🤖</button>
                     </div>
+
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                       <span style={{ flex: "0 0 58px", fontSize: 11, color: "#4F46E5", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>열번</span>
                       <input value={r.trains || ""} onChange={(e) => updateAiTrain(r.dia_no, e.target.value)} placeholder="열번 예: 7306,1960,7012" inputMode="numeric" autoComplete="off" autoCorrect="off" style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #C7D2FE", borderRadius: 6, padding: "6px 8px", fontSize: 13, background: "#F5F7FF" }} />
