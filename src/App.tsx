@@ -32027,10 +32027,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", marginTop: 8, background: "rgba(255,255,255,0.15)", borderRadius: 11, padding: "7px 4px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "space-around", background: "rgba(255,255,255,0.15)", borderRadius: 11, padding: "7px 4px" }}>
           <span
             onClick={() => { setAboutInitialTab("members"); setScreen("about"); }}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer" }}
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", whiteSpace: "nowrap" }}
           >
             조합원 <b style={{ fontSize: 14, color: "#fff" }}>{memberCount}</b>명
           </span>
@@ -32048,18 +32049,35 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   setShowAppUserModal(true);
                 });
             }}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: user?.is_admin ? "pointer" : "default" }}
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: user?.is_admin ? "pointer" : "default", whiteSpace: "nowrap" }}
           >
             앱이용 <b style={{ fontSize: 14, color: "#C4B5FD" }}>{appUserCount}</b>명
           </span>
           <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
           <span
             onClick={() => setShowOnlineModal(true)}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}
           >
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ADE80", display: "inline-block" }} />
             접속중 <b style={{ fontSize: 14, color: "#4ADE80" }}>{onlineCount}</b>명
           </span>
+        </div>
+          <div
+            onClick={async () => {
+              const msg = "모다링크 · 대공원승무지회\n노동자의 내일을 연결하다\nhttps://modalink.app";
+              try {
+                if ((navigator as any).share) {
+                  await (navigator as any).share({ title: "모다링크 · 대공원승무지회", text: msg });
+                } else {
+                  await navigator.clipboard.writeText(msg);
+                  showToast("초대 링크가 복사됐어요");
+                }
+              } catch (e) {}
+            }}
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.22)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 11, padding: "8px 11px", color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            📨 초대
+          </div>
         </div>
       </div>
 
