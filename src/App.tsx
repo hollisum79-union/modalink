@@ -13089,6 +13089,118 @@ function RouteInputScreen() {
     </div>
   );
 }
+function TempDiaAdmin() {
+  const [list, setList] = React.useState<any[]>([]);
+  const [no, setNo] = React.useState("");
+  const [wh, setWh] = React.useState("");
+  const [nh, setNh] = React.useState("");
+  const [km, setKm] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from("temp_dia")
+      .select("*")
+      .order("dia_no", { ascending: true });
+    if (data) setList(data);
+  };
+  React.useEffect(() => { load(); }, []);
+
+  const n = parseInt(no, 10);
+  const validNo = !isNaN(n) && n > 0;
+  const isNight = validNo && n >= 60;
+  const autoName = validNo ? "임시" + n : "";
+
+  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff" };
+
+  const add = async () => {
+    if (!validNo) { showToast("번호를 입력해주세요."); return; }
+    if (list.some((r) => Number(r.dia_no) === n)) { showToast("이미 있는 번호예요 (임시" + n + ")", "error"); return; }
+    setSaving(true);
+    const { error } = await supabase.from("temp_dia").insert({
+      dia_no: n,
+      name: "임시" + n,
+      is_night: isNight,
+      work_hours: parseFloat(wh) || 0,
+      night_hours: parseFloat(nh) || 0,
+      distance_km: parseFloat(km) || 0,
+      visible: true,
+    });
+    setSaving(false);
+    if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+    setNo(""); setWh(""); setNh(""); setKm("");
+    load();
+  };
+
+  const toggle = async (r: any) => {
+    await supabase.from("temp_dia").update({ visible: !r.visible }).eq("id", r.id);
+    load();
+  };
+
+  return (
+    <div>
+      <AdminGuide steps={["번호를 넣으면 이름·주야가 자동으로 채워져요 (60번↑ = 야간)", "인정근무·야간·주행키로를 넣고 추가하세요", "없어진 임시다이아는 삭제 말고 '숨김'하세요 — 과거 급여·주행키로가 보존돼요"]} tip="⚠️ 정식 다이아와 번호가 같아도 서로 다른 표라 섞이지 않아요." />
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>
+        임시다이아 관리
+      </div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
+        조합원이 근무조정에서 골라 쓸 임시다이아를 만들어요. 번호만 넣으면 이름·주야는 자동입니다.
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div style={{ width: 120 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>번호</div>
+            <input value={no} onChange={(e) => setNo(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="예: 61" style={inputStyle} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>이름 · 주야 (자동)</div>
+            <div style={{ padding: "10px 12px", borderRadius: 10, background: "#F9FAFB", fontSize: 14, fontWeight: 700, color: validNo ? "#1F2937" : "#9CA3AF", display: "flex", alignItems: "center", gap: 8, minHeight: 42, boxSizing: "border-box" }}>
+              {validNo ? (
+                <>
+                  <span>{autoName}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 8, background: isNight ? "#EDE9FE" : "#DBEAFE", color: isNight ? "#6D28D9" : "#1D4ED8" }}>{isNight ? "야간" : "주간"}</span>
+                </>
+              ) : "번호 입력 시 자동"}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>인정근무(h)</div>
+            <input value={wh} onChange={(e) => setWh(e.target.value)} inputMode="decimal" placeholder="8.5" style={inputStyle} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>야간(h)</div>
+            <input value={nh} onChange={(e) => setNh(e.target.value)} inputMode="decimal" placeholder="2.0" style={inputStyle} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>주행키로(km)</div>
+            <input value={km} onChange={(e) => setKm(e.target.value)} inputMode="decimal" placeholder="120" style={inputStyle} />
+          </div>
+        </div>
+        <button onClick={add} disabled={saving || !validNo} style={{ width: "100%", marginTop: 14, padding: "12px", background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: (saving || !validNo) ? 0.5 : 1 }}>
+          {saving ? "저장 중..." : "추가하기"}
+        </button>
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", margin: "0 4px 10px" }}>등록된 임시다이아 ({list.length})</div>
+      {list.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>아직 등록된 임시다이아가 없어요</div>
+      ) : (
+        list.map((r) => (
+          <div key={r.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 11, opacity: r.visible ? 1 : 0.5 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, padding: "4px 9px", borderRadius: 8, background: r.is_night ? "#EDE9FE" : "#DBEAFE", color: r.is_night ? "#6D28D9" : "#1D4ED8", flexShrink: 0 }}>{r.is_night ? "야간" : "주간"}</span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", flexShrink: 0 }}>{r.name}</span>
+            <span style={{ fontSize: 11, color: "#9CA3AF", flex: 1 }}>인정 {r.work_hours}h · 야간 {r.night_hours}h · {r.distance_km}km</span>
+            <button onClick={() => toggle(r)} style={{ fontSize: 11, fontWeight: 700, border: "none", borderRadius: 8, padding: "7px 11px", cursor: "pointer", background: r.visible ? "#F3F4F6" : "#EEF0FF", color: r.visible ? "#6B7280" : "#4F46E5", flexShrink: 0 }}>{r.visible ? "숨김" : "표시"}</button>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaTimeTab, setDiaTimeTab] = useState("편승용");
@@ -13465,6 +13577,7 @@ useEffect(() => {
         {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "salarytable" && <SalaryTableScreen />}
         {activeMenu === "routeinput" && <RouteInputScreen />}
+        {activeMenu === "tempdia" && <TempDiaAdmin />}
         {activeMenu === "workgroup" && (
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
@@ -13472,6 +13585,7 @@ useEffect(() => {
               { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
               { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
               { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
+              { id: "tempdia", label: "임시다이아 관리", desc: "임시 다이아 추가·숨김" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
@@ -32353,16 +32467,18 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               </div>
             </div>
           </div>
-          {homeTotalKm > 0 && (
-            <div style={{ background: "#F4F3FF", color: "#4F46E5", fontSize: 11, fontWeight: 800, padding: "5px 10px", borderRadius: 9, whiteSpace: "nowrap" }}>
-              🌍 지구 {(homeTotalKm / 40075).toFixed(1)}바퀴
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {homeTotalKm > 0 && (
+              <div style={{ background: "#F4F3FF", color: "#4F46E5", fontSize: 11, fontWeight: 800, padding: "5px 10px", borderRadius: 9, whiteSpace: "nowrap" }}>
+                🌍 지구 {(homeTotalKm / 40075).toFixed(1)}바퀴
+              </div>
+            )}
+            <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+              <div style={{ fontSize: 19, fontWeight: 900, color: "#1F2937", letterSpacing: -0.5 }}>
+                {homeTotalKm.toLocaleString("ko-KR")}
+              </div>
+              <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>km</span>
             </div>
-          )}
-          <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-            <div style={{ fontSize: 19, fontWeight: 900, color: "#1F2937", letterSpacing: -0.5 }}>
-              {homeTotalKm.toLocaleString("ko-KR")}
-            </div>
-            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>km</span>
           </div>
         </div>
 
