@@ -13186,15 +13186,15 @@ function TempDiaAdmin() {
       dia_no: n, name: autoName, kind: kind, is_night: isNight,
       distance_km: parseFloat(fields.distance_km) || 0,
       start_time: String(fields.start_time || ""),
-      work_hours: parseFloat(fields.work_hours) || 0,
-      drive_hours: parseFloat(fields.drive_hours) || 0,
-      wait_hours: parseFloat(fields.wait_hours) || 0,
-      ride_hours: parseFloat(fields.ride_hours) || 0,
-      watch_hours: parseFloat(fields.watch_hours) || 0,
-      edu_hours: parseFloat(fields.edu_hours) || 0,
-      prep_hours: parseFloat(fields.prep_hours) || 0,
-      clean_hours: parseFloat(fields.clean_hours) || 0,
-      night_hours: parseFloat(fields.night_hours) || 0,
+      work_hours: toDecimalHours(fields.work_hours),
+      drive_hours: toDecimalHours(fields.drive_hours),
+      wait_hours: toDecimalHours(fields.wait_hours),
+      ride_hours: toDecimalHours(fields.ride_hours),
+      watch_hours: toDecimalHours(fields.watch_hours),
+      edu_hours: toDecimalHours(fields.edu_hours),
+      prep_hours: toDecimalHours(fields.prep_hours),
+      clean_hours: toDecimalHours(fields.clean_hours),
+      night_hours: toDecimalHours(fields.night_hours),
       photo: photo || "",
       visible: true,
     });
@@ -13208,6 +13208,22 @@ function TempDiaAdmin() {
   const toggle = async (r: any) => {
     await supabase.from("temp_dia").update({ visible: !r.visible }).eq("id", r.id);
     load();
+  };
+
+  // 숫자만 치면 06:53:00 형태로 자동 포맷 (6자리 기준)
+  const fmtTime = (v: string): string => {
+    const d = v.replace(/[^0-9]/g, "").slice(0, 6);
+    if (d.length <= 2) return d;
+    if (d.length <= 4) return d.slice(0, 2) + ":" + d.slice(2);
+    return d.slice(0, 2) + ":" + d.slice(2, 4) + ":" + d.slice(4);
+  };
+  // HH:MM:SS → 소수 시간 (저장·계산용). 7.5 같은 소수 직접 입력도 인식
+  const toDecimalHours = (v: string): number => {
+    if (!v) return 0;
+    if (/^\d*\.?\d+$/.test(v)) return parseFloat(v) || 0;
+    const p = v.split(":").map((x) => parseInt(x, 10));
+    if (p.some((x) => isNaN(x))) return 0;
+    return Math.round(((p[0] || 0) + (p[1] || 0) / 60 + (p[2] || 0) / 3600) * 100) / 100;
   };
 
   const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 10px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff", fontFamily: "inherit", color: "#1F2937" };
@@ -13274,12 +13290,32 @@ function TempDiaAdmin() {
         {aiError && <div style={{ color: "#DC2626", fontSize: 13, marginBottom: 10 }}>{aiError}</div>}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7, marginBottom: 12 }}>
-          {FIELD_DEFS.map(([k, label]) => (
-            <div key={k}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 3 }}>{label}</div>
-              <input value={fields[k]} onChange={(e) => setFields({ ...fields, [k]: e.target.value })} placeholder={k === "start_time" ? "06:51" : "0"} style={inputStyle} />
-            </div>
-          ))}
+          {FIELD_DEFS.map(([k, label]) => {
+            const isKm = k === "distance_km";
+            const isClock = k === "start_time";
+            const dec = !isKm && !isClock ? toDecimalHours(fields[k]) : 0;
+            return (
+              <div key={k}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", marginBottom: 3 }}>{label}</div>
+                <input
+                  value={fields[k]}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const v = isKm || raw.includes(".") ? raw : fmtTime(raw);
+                    setFields({ ...fields, [k]: v });
+                  }}
+                  inputMode={isKm ? "decimal" : "numeric"}
+                  placeholder={isClock ? "065300" : "0"}
+                  style={inputStyle}
+                />
+                {!isKm && !isClock && (
+                  <div style={{ fontSize: 10, fontWeight: 800, color: fields[k] ? "#059669" : "#D1D5DB", marginTop: 3, minHeight: 13 }}>
+                    {fields[k] ? "→ " + dec + "h로 저장" : "—"}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <button onClick={add} disabled={saving || !validNo} style={{ width: "100%", padding: 13, background: "linear-gradient(135deg,#10B981,#059669)", color: "#fff", border: "none", borderRadius: 11, fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", opacity: (saving || !validNo) ? 0.5 : 1 }}>
@@ -25917,266 +25953,16 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
             )}         
           </div>
         ) : activeTab === "휴무충당" && holidayMode === "신청" ? (
-          // ─────── 휴무충당 신청 모드 ───────
-          <>
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: 20,
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
-                marginBottom: 12,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 800,
-                  color: "#1F2937",
-                  marginBottom: 16,
-                }}
-              >
-                📨 휴무충당 신청
-              </div>
-
-              {/* 날짜 */}
-              <div style={{ marginBottom: 14 }}>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#374151",
-                    marginBottom: 7,
-                  }}
-                >
-                  신청 날짜
-                </div>
-                <input
-                  type="date"
-                  value={formDate}
-                  onChange={(e) => setFormDate(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: "1.5px solid #E5E7EB",
-                    fontSize: 14,
-                    outline: "none",
-                    boxSizing: "border-box",
-                    fontFamily: "inherit",
-                    color: "#1F2937",
-                    background: "#fff",
-                    maxWidth: "100%",
-                  }}
-                />
-              </div>
-
-              {/* 주간/야간 */}
-              <div style={{ marginBottom: 14 }}>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#374151",
-                    marginBottom: 7,
-                  }}
-                >
-                  근무 종류
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["주간", "야간"].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setFormShift(s)}
-                      style={{
-                        flex: 1,
-                        padding: "10px 0",
-                        borderRadius: 10,
-                        border:
-                          formShift === s
-                            ? "2px solid #4F46E5"
-                            : "1.5px solid #E5E7EB",
-                        background: formShift === s ? "#EEF0FF" : "#fff",
-                        color: formShift === s ? "#4F46E5" : "#6B7280",
-                        fontWeight: formShift === s ? 700 : 500,
-                        fontSize: 13,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 신청 버튼 */}
-              <button
-                onClick={handleRequestSubmit}
-                style={{
-                  width: "100%",
-                  padding: "14px",
-                  borderRadius: 12,
-                  border: "none",
-                  background:
-                    "linear-gradient(135deg, #4F46E5 0%, #6D28D9 100%)",
-                  color: "#fff",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                📨 신청하기
-              </button>
+          // ─────── 휴무충당 신청 모드 (개발 중) ───────
+          <div style={{ background: "#fff", borderRadius: 20, padding: "40px 20px", boxShadow: "0 2px 8px rgba(79,70,229,0.06)", textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🚧</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 8 }}>휴무충당 신청은 준비 중이에요</div>
+            <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
+              곧 앱에서 바로 신청할 수 있도록 개발하고 있어요.
+              <br />
+              그때까지는 휴무충당 근무 후 <b style={{ color: "#4F46E5" }}>기록</b> 탭에 입력해주세요.
             </div>
-
-            {/* 신청 목록 */}
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: 20,
-                padding: "20px",
-                boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 800,
-                  color: "#1F2937",
-                  marginBottom: 16,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <span>📋 내 신청</span>
-                <span
-                  style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 500 }}
-                >
-                  총 {requests.length}건
-                </span>
-              </div>
-
-              {loading ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: 30,
-                    color: "#9CA3AF",
-                    fontSize: 13,
-                  }}
-                >
-                  불러오는 중...
-                </div>
-              ) : requests.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: 30,
-                    color: "#9CA3AF",
-                    fontSize: 13,
-                  }}
-                >
-                  아직 신청이 없어요 📝
-                </div>
-              ) : (
-                requests.map((r) => (
-                  <div
-                    key={r.id}
-                    style={{
-                      padding: "12px 0",
-                      borderBottom: "1px solid #F3F4F6",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          marginBottom: 4,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: "#1F2937",
-                          }}
-                        >
-                          {r.request_date}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "2px 8px",
-                            borderRadius: 6,
-                            background:
-                              shiftColors[r.work_shift]?.bg || "#E5E7EB",
-                            color:
-                              shiftColors[r.work_shift]?.color || "#374151",
-                          }}
-                        >
-                          {r.work_shift}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: "2px 8px",
-                            borderRadius: 6,
-                            background: statusInfo[r.status]?.bg || "#E5E7EB",
-                            color: statusInfo[r.status]?.color || "#374151",
-                          }}
-                        >
-                          {statusInfo[r.status]?.label || r.status}
-                        </span>
-                      </div>
-                      {r.memo && (
-                        <div style={{ fontSize: 12, color: "#6B7280" }}>
-                          {r.memo}
-                        </div>
-                      )}
-                      {r.admin_memo && (
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#991B1B",
-                            marginTop: 4,
-                            fontStyle: "italic",
-                          }}
-                        >
-                          관리자: {r.admin_memo}
-                        </div>
-                      )}
-                    </div>
-                    {r.status === "pending" && (
-                      <button
-                        onClick={() => handleRequestCancel(r.id)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#EF4444",
-                          fontSize: 18,
-                          cursor: "pointer",
-                          padding: 4,
-                        }}
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </>
+          </div>
         ) : (
           // ─────── 대기충당/지정근무/지원근무/휴무충당 기록 모드 ───────
           <>
