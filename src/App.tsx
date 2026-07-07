@@ -15989,7 +15989,8 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaNo, setDiaNo] = React.useState<string | null>(null);
   const [diaCats, setDiaCats] = React.useState<string[]>([]);
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
-  const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
+    const [diaRouteMap, setDiaRouteMap] = React.useState<any>({});
+  const [diaImgMap, setDiaImgMap] = React.useState<any>({});
   const trainWindowFromGrid = (grid: any[][], train: string): { start: number; end: number } | null => {
     if (!grid || !grid.length) return null;
     const toMin = (s: any): number | null => {
@@ -16091,9 +16092,15 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
       if (!grouped[r.category]) grouped[r.category] = [];
       grouped[r.category].push(r);
     });
-    const map: any = {};
+        const map: any = {};
     Object.keys(grouped).forEach((k) => { map[k] = rebuildRuns(grouped[k]); });
     setDiaRouteMap(map);
+    // 근무행로 사진(dia_image) 불러오기 — 구분별
+    setDiaImgMap({});
+    const { data: imgs } = await supabase.from("dia_image").select("category, image").eq("dia_no", q);
+    const imap: any = {};
+    (imgs || []).forEach((r: any) => { if (r.image) imap[r.category] = r.image; });
+    setDiaImgMap(imap);
   };
 
   const [searchList, setSearchList] = React.useState<any[]>([]);
@@ -18138,9 +18145,17 @@ const getKyobunWork = (member: any, date: Date) => {
           />
           <button onClick={doRideSearch} style={{ padding: "0 20px", borderRadius: 13, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>검색</button>
         </div>
-        {rideQ.trim() && rideHits.length === 0 && (
-          <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>{rideQ.trim()} 열번을 찾을 수 없어요</div>
+                {rideQ.trim() && rideHits.length === 0 && (
+          <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 14, padding: "20px 16px", textAlign: "center" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#374151", marginBottom: 6 }}>{rideQ.trim()} 열번을 찾을 수 없어요</div>
+            <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6 }}>
+              이 열차는 <b>대공원 기관사가 운전하지 않는 열차</b>일 가능성이 높아요.
+              <br />(다른 사업소 담당이거나, 아직 등록되지 않은 열번일 수 있어요)
+              <br />열번을 다시 한번 확인해보세요.
+            </div>
+          </div>
         )}
+
         {rideHits.length > 0 && (
           <>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#4F46E5", marginBottom: 10 }}>{rideHits[0].train_no} 은(는) {cats.length}개 근무에 있어요 — 내 근무 선택</div>
@@ -18260,12 +18275,19 @@ const getKyobunWork = (member: any, date: Date) => {
                 <div style={{ textAlign: "center", marginBottom: 12 }}>
                   <span style={{ fontSize: 26, fontWeight: 800, color: "#4338CA" }}>다이아 {diaNo}</span>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>근무행로</div>
-                {runs && runs.length > 0 ? (
-                  <RouteDiagram runs={runs} />
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>근무행로</div>
+                {diaSel && diaImgMap[diaSel] ? (
+                  <img
+                    src={diaImgMap[diaSel]}
+                    onClick={() => setZoomImg(diaImgMap[diaSel])}
+                    style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", cursor: "pointer" }}
+                    alt="근무행로"
+                  />
                 ) : (
-                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 미입력</div>
+                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 사진이 아직 없어요</div>
                 )}
+                {diaSel && diaImgMap[diaSel] && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4, textAlign: "center" }}>사진을 누르면 크게 볼 수 있어요</div>}
+
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", margin: "18px 0 8px" }}>시간 · 거리 정보</div>
                 {fields.length > 0 ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -19041,7 +19063,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
         paddingBottom: 64,
       }}
     >
-      {/* 헤더 */}
+            {/* 헤더 */}
             {/* 헤더 (흰 배너) */}
       <div
         style={{
@@ -19049,9 +19071,9 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
           padding: "calc(env(safe-area-inset-top) + 14px) 16px 14px",
           borderBottom: "1px solid #EEF0F3",
           flexShrink: 0,
+          display: subScreen === "ride" ? "none" : "block",
         }}
       >
-
         <div
           style={{
             display: "flex",
