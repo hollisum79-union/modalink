@@ -13111,7 +13111,7 @@ function TempDiaAdmin() {
   const isNight = validNo && n >= 60;
   const autoName = validNo ? "임시" + n : "";
 
-  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff" };
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff" };
 
   const add = async () => {
     if (!validNo) { showToast("번호를 입력해주세요."); return; }
