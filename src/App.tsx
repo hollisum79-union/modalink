@@ -27995,6 +27995,7 @@ function HomeCarousel({
   // 경조사 데이터 (Supabase events에서)
   const [condolences, setCondolences] = React.useState([]);
   const [recentJoins, setRecentJoins] = React.useState<any[]>([]);
+  const [joinPopup, setJoinPopup] = React.useState(false);
   React.useEffect(() => {
     const load = async () => {
       const cutoff = new Date(Date.now() - 3 * 86400000).toISOString();
@@ -28501,13 +28502,30 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
 
       {/* 캐러셀 컨테이너 */}
       {recentJoins.length > 0 && (
-        <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10 }}>
+        <div onClick={() => setJoinPopup(true)} style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
           <span style={{ fontSize: 20 }}>👋</span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3" }}>
-              {recentJoins.map((m: any) => m.name + "님").join(", ")}
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: "#818CF8", marginBottom: 3 }}>서울교통공사노동조합 대공원승무지회</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3", lineHeight: 1.45 }}>
+              {recentJoins.slice(0, 3).map((m: any) => m.name + "님").join(", ")}
+              {recentJoins.length > 3 ? ` 외 ${recentJoins.length - 3}명` : ""}
             </div>
             <div style={{ fontSize: 12, color: "#6366F1", marginTop: 2 }}>모다링크에 새로 함께하게 됐어요 🎉</div>
+          </div>
+        </div>
+      )}
+      {joinPopup && (
+        <div onClick={() => setJoinPopup(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "70vh", overflowY: "auto", boxSizing: "border-box" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#818CF8", marginBottom: 2 }}>서울교통공사노동조합 대공원승무지회</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>👋 새로 함께하게 된 조합원 ({recentJoins.length}명)</div>
+            {recentJoins.map((m: any, i: number) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 2px", borderBottom: i < recentJoins.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#3730A3" }}>{m.name}님</span>
+                <span style={{ fontSize: 12, color: "#9CA3AF" }}>{m.first_login_at ? `${new Date(m.first_login_at).getMonth() + 1}/${new Date(m.first_login_at).getDate()} 가입` : ""}</span>
+              </div>
+            ))}
+            <button onClick={() => setJoinPopup(false)} style={{ width: "100%", marginTop: 14, padding: "12px 0", borderRadius: 12, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>닫기</button>
           </div>
         </div>
       )}
