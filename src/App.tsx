@@ -13133,11 +13133,11 @@ function TempDiaAdmin() {
       if (d) {
         setFields({
           distance_km: String(d.distance_km ?? ""), start_time: String(d.start_time ?? ""),
-          work_hours: String(d.work_hours ?? ""), drive_hours: String(d.drive_hours ?? ""),
-          wait_hours: String(d.wait_hours ?? ""), ride_hours: String(d.ride_hours ?? ""),
-          watch_hours: String(d.watch_hours ?? ""), edu_hours: String(d.edu_hours ?? ""),
-          prep_hours: String(d.prep_hours ?? ""), clean_hours: String(d.clean_hours ?? ""),
-          night_hours: String(d.night_hours ?? ""),
+          work_hours: decToTime(d.work_hours), drive_hours: decToTime(d.drive_hours),
+          wait_hours: decToTime(d.wait_hours), ride_hours: decToTime(d.ride_hours),
+          watch_hours: decToTime(d.watch_hours), edu_hours: decToTime(d.edu_hours),
+          prep_hours: decToTime(d.prep_hours), clean_hours: decToTime(d.clean_hours),
+          night_hours: decToTime(d.night_hours),
         });
         setLoadedFrom(n);
       } else {
@@ -13165,11 +13165,11 @@ function TempDiaAdmin() {
       const res = JSON.parse(txt);
       setFields({
         distance_km: String(res.distance_km ?? ""), start_time: String(res.start_time ?? ""),
-        work_hours: String(res.work_hours ?? ""), drive_hours: String(res.drive_hours ?? ""),
-        wait_hours: String(res.wait_hours ?? ""), ride_hours: String(res.ride_hours ?? ""),
-        watch_hours: String(res.watch_hours ?? ""), edu_hours: String(res.edu_hours ?? ""),
-        prep_hours: String(res.prep_hours ?? ""), clean_hours: String(res.clean_hours ?? ""),
-        night_hours: String(res.night_hours ?? ""),
+        work_hours: decToTime(res.work_hours), drive_hours: decToTime(res.drive_hours),
+        wait_hours: decToTime(res.wait_hours), ride_hours: decToTime(res.ride_hours),
+        watch_hours: decToTime(res.watch_hours), edu_hours: decToTime(res.edu_hours),
+        prep_hours: decToTime(res.prep_hours), clean_hours: decToTime(res.clean_hours),
+        night_hours: decToTime(res.night_hours),
       });
       if (!no && res.dia_no) setNo(String(res.dia_no));
     } catch (err) { setAiError("읽기 실패: " + String(err)); }
@@ -13210,6 +13210,20 @@ function TempDiaAdmin() {
     load();
   };
 
+  // 저장된 소수(3.96)를 화면용 시간(03:57:36)으로. 이미 시간 형태면 그대로
+  const decToTime = (x: any): string => {
+    const s = String(x ?? "");
+    if (s === "") return "";
+    if (s.includes(":")) return s;
+    const f = parseFloat(s);
+    if (!f) return "";
+    const total = Math.round(f * 3600);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    const p = (v: number) => String(v).padStart(2, "0");
+    return p(h) + ":" + p(m) + ":" + p(sec);
+  };
   // 숫자만 치면 06:53:00 형태로 자동 포맷 (6자리 기준)
   const fmtTime = (v: string): string => {
     const d = v.replace(/[^0-9]/g, "").slice(0, 6);
