@@ -32401,7 +32401,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
           <span
             onClick={() => {
-              if (!user?.is_admin) return;
               supabase
                 .from("members")
                 .select("name, employee_number, first_login_at, is_app_user")
@@ -32413,7 +32412,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   setShowAppUserModal(true);
                 });
             }}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: user?.is_admin ? "pointer" : "default", whiteSpace: "nowrap" }}
+            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", whiteSpace: "nowrap" }}
           >
             앱이용 <b style={{ fontSize: 14, color: "#C4B5FD" }}>{appUserCount}</b>명
           </span>
@@ -32886,16 +32885,18 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     <input value={appUserSearch} onChange={(e) => setAppUserSearch(e.target.value)} placeholder="이름 검색" style={{ flex: 1, minWidth: 0, border: "none", background: "none", outline: "none", fontSize: 13, fontFamily: "inherit", color: "#1F2937" }} />
                   </div>
                 </div>
+                {user?.is_admin && (
                 <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 11, padding: 3, marginBottom: 8 }}>
                   <button onClick={() => setAppUserTab("on")} style={{ flex: 1, textAlign: "center", padding: 8, borderRadius: 9, fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "inherit", background: appUserTab === "on" ? "#4F46E5" : "transparent", color: appUserTab === "on" ? "#fff" : "#6B7280" }}>이용중 {totalUsers}</button>
                   <button onClick={() => setAppUserTab("off")} style={{ flex: 1, textAlign: "center", padding: 8, borderRadius: 9, fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "inherit", background: appUserTab === "off" ? "#4F46E5" : "transparent", color: appUserTab === "off" ? "#fff" : "#6B7280" }}>미이용 {totalNon}</button>
                 </div>
+                )}
                 {appUserTab === "off" && (
                   <div style={{ background: "#FFFBEB", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, color: "#B45309", lineHeight: 1.5, marginBottom: 8 }}>
                     📨 아직 앱을 안 쓰는 조합원이에요 — 안내문·초대 링크로 권해보세요!
                   </div>
                 )}
-                <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 8 }}>{q ? `검색 결과 ${items.length}명` : appUserTab === "on" ? "최근 가입순" : "가나다순"}</div>
+                <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 8 }}>{q ? `검색 결과 ${items.length}명` : !user?.is_admin ? `이용중 ${totalUsers}명 · 최근 가입순` : appUserTab === "on" ? "최근 가입순" : "가나다순"}</div>
                 <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
                   {items.length === 0 ? (
                     <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "26px 0" }}>{q ? "검색 결과가 없어요" : "명단이 비어있어요"}</div>
