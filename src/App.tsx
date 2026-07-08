@@ -12670,9 +12670,9 @@ function ImageZoomViewer({ src, onClose }: { src: string; onClose: () => void })
   }, [src]);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(10,12,25,0.94)", zIndex: 3000, display: "flex", flexDirection: "column", touchAction: "none" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", color: "#fff", flex: "0 0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px", color: "#fff", flex: "0 0 auto" }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>🚉 근무행로</span>
-        <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>✕</button>
+        <button onClick={onClose} style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", fontSize: 19, cursor: "pointer", flexShrink: 0 }}>✕</button>
       </div>
       <div ref={wrapRef} style={{ flex: 1, overflow: "hidden", position: "relative" }}>
         <div ref={stageRef} style={{ position: "absolute", top: 0, left: 0, transformOrigin: "0 0", willChange: "transform" }}>
