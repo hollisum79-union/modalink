@@ -32405,6 +32405,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               supabase
                 .from("members")
                 .select("name, employee_number, first_login_at, is_app_user")
+                .eq("is_union", true)
                 .then(({ data }) => {
                   setAppUserList((data || []).filter((m: any) => m.name && !String(m.name).includes("결원")));
                   setAppUserTab("on");
