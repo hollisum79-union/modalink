@@ -28194,6 +28194,7 @@ function HomeCarousel({
   onCondolenceClick,
   onActivityClick,
   onScheduleClick,
+  onTipNavigate,
   upcomingEvents = [],
   user,
 }: {
@@ -28203,10 +28204,19 @@ function HomeCarousel({
   onCondolenceClick: () => void;
   onActivityClick?: () => void;
   onScheduleClick?: () => void;
+  onTipNavigate?: (s: string) => void;
   upcomingEvents?: any[];
   user?: any;
 }) {
   // 경조사 데이터 (Supabase events에서)
+  // 일정 없을 때 보여줄 모다링크 팁 (app_tips에서 랜덤 1개)
+  const [homeTip, setHomeTip] = React.useState<any>(null);
+  React.useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("app_tips").select("*").eq("visible", true);
+      if (data && data.length) setHomeTip(data[Math.floor(Math.random() * data.length)]);
+    })();
+  }, []);
   const [condolences, setCondolences] = React.useState([]);
   const [recentJoins, setRecentJoins] = React.useState<any[]>([]);
   const [joinPopup, setJoinPopup] = React.useState(false);
@@ -28641,16 +28651,26 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           </div>
   );
 
+  const tipMode = upcomingEvents.length === 0 && !!homeTip;
   const scheduleCard = (
     <div
-      onClick={onScheduleClick}
+      onClick={() => {
+        if (tipMode) {
+          if (homeTip.screen && onTipNavigate) onTipNavigate(homeTip.screen);
+        } else if (onScheduleClick) onScheduleClick();
+      }}
       style={{ minWidth: "100%", boxSizing: "border-box", background: "#fff", border: "1px solid #ECECF3", borderLeft: "4px solid #4F46E5", borderRadius: 12, padding: "12px 14px", height: 158, overflow: "hidden", cursor: "pointer" }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#312E81" }}>📅 지회·조합 일정</span>
-        <span style={{ fontSize: 11, color: "#4F46E5" }}>더보기 ›</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#312E81" }}>{tipMode ? "💡 알고 계셨나요?" : "📅 지회·조합 일정"}</span>
+        <span style={{ fontSize: 11, color: "#4F46E5" }}>{tipMode ? (homeTip.screen ? "써보기 ›" : "") : "더보기 ›"}</span>
       </div>
-      {upcomingEvents.length === 0 ? (
+      {tipMode ? (
+        <>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#EEF0FF", color: "#4F46E5", fontSize: 11, fontWeight: 800, borderRadius: 8, padding: "4px 9px", marginBottom: 10 }}>{homeTip.feature}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#1F2937", lineHeight: 1.65 }}>{homeTip.tip}</div>
+        </>
+      ) : upcomingEvents.length === 0 ? (
         <div style={{ fontSize: 12, color: "#9CA3AF", padding: "4px 0" }}>예정된 일정이 없어요</div>
       ) : (
         upcomingEvents.slice(0, 3).map((ev: any, i: number) => {
@@ -32762,6 +32782,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           onActivityClick={() => setScreen("unionActivity")}
           onCondolenceClick={() => { setBoardTab("경조사"); setScreen("board"); }}
           onScheduleClick={() => setScreen("unionSchedule")}
+          onTipNavigate={(s) => setScreen(s === "ride" ? "schedule" : s)}
           upcomingEvents={upcomingEvents}
           user={user}
         />
