@@ -7496,6 +7496,7 @@ const [showAddCat, setShowAddCat] = useState(false);
 
   // 업로드 입력값
   const [upFile, setUpFile] = useState(null);
+  const [upFiles, setUpFiles] = useState<any[]>([]); // 여러 개 한꺼번에 (음원 일괄 등록용)
   const [upName, setUpName] = useState("");
   const [upCat, setUpCat] = useState("agreement");
   const [upDesc, setUpDesc] = useState("");
@@ -7504,6 +7505,39 @@ const [showAddCat, setShowAddCat] = useState(false);
 
   // 파일 업로드 처리
   const handleUpload = async () => {
+    // 여러 개 한꺼번에 (음원 일괄 등록) — 파일명이 제목이 됨
+    if (!editingFile && upFiles.length > 1) {
+      setUploading(true);
+      try {
+        const catLabel = allCats.find((c) => c.id === upCat)?.label || "";
+        const rows: any[] = [];
+        for (const f of upFiles) {
+          const safeName = Date.now() + "_" + Math.random().toString(36).slice(2, 6) + "_" + f.name.replace(/[^a-zA-Z0-9.]/g, "_");
+          const path = upCat + "/" + safeName;
+          const { error: upErr } = await supabase.storage.from("archive").upload(path, f);
+          if (upErr) throw upErr;
+          rows.push({
+            name: f.name.replace(/\.[^/.]+$/, ""),
+            category_id: upCat,
+            category_label: catLabel,
+            path: path,
+            size: (f.size / 1024 / 1024).toFixed(1) + "MB",
+            description: null,
+          });
+        }
+        const { data: inserted, error: dbErr } = await supabase.from("archive_files").insert(rows).select();
+        if (dbErr) throw dbErr;
+        if (inserted) setDbFiles((prev) => [...inserted, ...prev]);
+        showToast(upFiles.length + "개 자료가 등록되었습니다.");
+        setUpFiles([]); setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
+        setShowUpload(false);
+      } catch (err: any) {
+        showToast("저장 실패: " + err.message, "error");
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
     // 수정 중이면 파일 없이도 OK(기존 파일 유지). 새로 올리기면 파일 필수.
     if (!editingFile && !upFile) { showToast("PDF 또는 음원 파일을 선택해주세요."); return; }
     if (!upName.trim()) { showToast("자료 제목을 입력해주세요."); return; }
@@ -7557,7 +7591,7 @@ const [showAddCat, setShowAddCat] = useState(false);
         showToast("자료가 등록되었습니다.");
       }
 
-      setUpFile(null); setUpName(""); setUpDesc(""); setUpCat("agreement");
+      setUpFile(null); setUpFiles([]); setUpName(""); setUpDesc(""); setUpCat("agreement");
       setEditingFile(null);
       setShowUpload(false);
     } catch (err) {
@@ -7701,7 +7735,7 @@ const [showAddCat, setShowAddCat] = useState(false);
               }}
             >
               {selectedCat ? (
-                "PDF 파일 목록"
+                "자료 목록"
               ) : (
                 <span>
                   문서와 자료 ·{" "}
@@ -7715,7 +7749,7 @@ const [showAddCat, setShowAddCat] = useState(false);
         </div>
 {isAdmin && !selectedCat && (
           <button
-            onClick={() => { setEditingFile(null); setUpName(""); setUpCat("agreement"); setUpDesc(""); setUpFile(null); setShowUpload(true); }}
+            onClick={() => { setEditingFile(null); setUpName(""); setUpCat("agreement"); setUpDesc(""); setUpFile(null); setUpFiles([]); setShowUpload(true); }}
             style={{
               width: "100%",
               marginBottom: 12,
@@ -7882,7 +7916,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                         width: 42,
                         height: 42,
                         borderRadius: 12,
-                        background: "#FEE2E2",
+                        background: isAudioFile(file) ? "#EEF0FF" : "#FEE2E2",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -7891,12 +7925,12 @@ const [showAddCat, setShowAddCat] = useState(false);
                     >
                       <span
                         style={{
-                          fontSize: 12,
+                          fontSize: isAudioFile(file) ? 18 : 12,
                           fontWeight: 900,
                           color: "#EF4444",
                         }}
                       >
-                        PDF
+                        {isAudioFile(file) ? "🎵" : "PDF"}
                       </span>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -8050,7 +8084,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                     <div
                       style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}
                     >
-                                            PDF {fileCount}개
+                                            자료 {fileCount}개
                     </div>
                   </div>
                   {cat.id.startsWith("cat_") && (
@@ -8091,7 +8125,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                     : currentCat?.files ?? []
                   ).length
                 }
-                개의 PDF 파일
+                개의 자료
               </div>
               {dbFiles.filter((f) => f.category_id === selectedCat).map((file, i) => (
                 <div
@@ -8116,7 +8150,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                       width: 44,
                       height: 44,
                       borderRadius: 12,
-                      background: "#FEE2E2",
+                      background: isAudioFile(file) ? "#EEF0FF" : "#FEE2E2",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -8125,12 +8159,12 @@ const [showAddCat, setShowAddCat] = useState(false);
                   >
                     <span
                       style={{
-                        fontSize: 13,
+                        fontSize: isAudioFile(file) ? 18 : 13,
                         fontWeight: 900,
                         color: "#EF4444",
                       }}
                     >
-                      PDF
+                      {isAudioFile(file) ? "🎵" : "PDF"}
                     </span>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -8258,7 +8292,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                   marginTop: 4,
                 }}
               >
-                💡 파일은 PDF 형식으로만 제공됩니다. 클릭하면 바로 열립니다.
+                💡 PDF는 새 창으로 열리고, 음원은 클릭하면 바로 재생됩니다.
               </div>
             </>
          ))}
@@ -8293,18 +8327,29 @@ const [showAddCat, setShowAddCat] = useState(false);
             </div>
 
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-              PDF 파일{editingFile ? " · 새로 고를 때만 교체 (안 고르면 기존 유지)" : ""}
+              PDF·음원 파일{editingFile ? " · 새로 고를 때만 교체 (안 고르면 기존 유지)" : " · 여러 개 선택 가능"}
             </div>
             <input
               type="file"
               accept="application/pdf,audio/*,.mp3,.m4a,.wav"
+                                     multiple
                                      onChange={(e) => {
-                const f = e.target.files?.[0] || null;
+                const list = Array.from(e.target.files || []);
+                if (list.length > 1) {
+                  // 여러 개 선택 → 파일명이 제목이 됨 (음원 일괄 등록)
+                  setUpFiles(list as any[]);
+                  setUpFile(null);
+                  setUpName("");
+                  setUpDesc("");
+                  return;
+                }
+                setUpFiles([]);
+                const f = list[0] || null;
                 setUpFile(f);
                 if (f && !upName.trim()) {
                   setUpName(f.name.replace(/\.[^/.]+$/, ""));
                 }
-                if (f) {
+                if (f && !/\.(mp3|m4a|wav|aac|ogg)$/i.test(f.name)) {
                   setAiReading(true);
                   const reader = new FileReader();
                   reader.onload = async () => {
@@ -8333,7 +8378,13 @@ const [showAddCat, setShowAddCat] = useState(false);
               }}
               style={{ width: "100%", marginBottom: 14, fontSize: 13 }}
             />
+            {upFiles.length > 1 && (
+              <div style={{ background: "#EEF0FF", color: "#4F46E5", fontSize: 12, fontWeight: 700, borderRadius: 8, padding: "8px 10px", marginBottom: 14 }}>
+                🎵 {upFiles.length}개 파일 선택됨 — 각 파일명이 제목으로 저장돼요
+              </div>
+            )}
 
+            {upFiles.length <= 1 && (<>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
               제목
             </div>
@@ -8351,6 +8402,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                 marginBottom: 14,
               }}
             />
+            </>)}
 
             <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
               분류
