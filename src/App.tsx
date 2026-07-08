@@ -31026,6 +31026,16 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     loadNotices();
   }, []);
   const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  // 홈 식당 카드용 실제 메뉴 (소속별)
+  const [homeMenus, setHomeMenus] = useState<any[]>([]);
+  React.useEffect(() => {
+    const st = user?.work_group === "도봉" ? "도봉" : "대공원";
+    supabase
+      .from("canteen")
+      .select("*")
+      .eq("station", st)
+      .then((res) => setHomeMenus(res.data || []));
+  }, [user?.work_group, screen]);
   React.useEffect(() => {
     const loadUpcoming = async () => {
       const t = new Date();
@@ -32364,18 +32374,38 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   ];
 
   const nowHour = new Date().getHours();
-  const currentMealKey =
-    nowHour >= 6 && nowHour < 10
-      ? "아침"
-      : nowHour >= 10 && nowHour < 15
-      ? "점심"
-      : nowHour >= 15 && nowHour < 20
-      ? "저녁"
-      : null;
-  const currentMealEmoji = { 아침: "🌅", 점심: "☀️", 저녁: "🌙" };
-  const todayMenu = currentMealKey
-    ? dummyCanteen["대공원"][currentMealKey]
-    : null;
+  const currentMealEmoji: any = { 아침: "🌅", 점심: "☀️", 저녁: "🌙" };
+  // 표시할 끼니 결정 (밤 20시~새벽 6시엔 다음 아침 미리보기)
+  let homeMealKey = "아침";
+  let homeMealPreview = false;
+  let homeMealOffset = 0;
+  if (nowHour >= 6 && nowHour < 10) {
+    homeMealKey = "아침";
+  } else if (nowHour >= 10 && nowHour < 15) {
+    homeMealKey = "점심";
+  } else if (nowHour >= 15 && nowHour < 20) {
+    homeMealKey = "저녁";
+  } else {
+    homeMealKey = "아침";
+    homeMealPreview = true;
+    homeMealOffset = nowHour >= 20 ? 1 : 0;
+  }
+  const _mealDate = new Date();
+  _mealDate.setDate(_mealDate.getDate() + homeMealOffset);
+  const homeMealDateKey =
+    _mealDate.getMonth() + 1 + "/" + _mealDate.getDate();
+  const _mealRow = homeMenus.find(
+    (m: any) =>
+      m.meal_type === homeMealKey &&
+      String(m.menu_date) === String(homeMealDateKey)
+  );
+  const homeMealItems =
+    _mealRow && _mealRow.items && _mealRow.items[0]
+      ? String(_mealRow.items[0])
+          .split(",")
+          .map((x: string) => x.trim())
+          .filter(Boolean)
+      : [];
 
   return (
     <div
@@ -33156,15 +33186,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                {currentMealKey && (
-                  <span style={{ fontSize: 14 }}>
-                    {currentMealEmoji[currentMealKey]}
-                  </span>
-                )}
+                <span style={{ fontSize: 14 }}>
+                  {currentMealEmoji[homeMealKey]}
+                </span>
                 <span
                   style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}
                 >
-                  {currentMealKey ? `${currentMealKey} 메뉴` : "식당 메뉴"}
+                  {homeMealPreview ? `${homeMealKey} 미리보기` : `${homeMealKey} 메뉴`}
                 </span>
               </div>
               <span
@@ -33174,11 +33202,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 전체 ›
               </span>
             </div>
-            {todayMenu ? (
+            {homeMealItems.length > 0 ? (
               <>
-                {todayMenu.items
-                  .filter((_, i) => i < 4)
-                  .map((item, i) => (
+                {homeMealItems
+                  .filter((_: string, i: number) => i < 4)
+                  .map((nm: string, i: number) => (
                     <div
                       key={i}
                       style={{
@@ -33199,7 +33227,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                           flexShrink: 0,
                         }}
                       />
-                      {item.name.split(" / ")[0]}
+                      {nm.split(" / ")[0]}
                     </div>
                   ))}
               </>
@@ -33212,9 +33240,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   marginBottom: 4,
                 }}
               >
-                현재 운영 중인
+                {homeMealPreview ? "다음 메뉴가" : "오늘 등록된 메뉴가"}
                 <br />
-                                식당이 없습니다
+                아직 없어요
               </div>
             )}
               </>
