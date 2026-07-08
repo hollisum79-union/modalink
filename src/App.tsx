@@ -12670,9 +12670,9 @@ function ImageZoomViewer({ src, onClose }: { src: string; onClose: () => void })
   }, [src]);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(10,12,25,0.94)", zIndex: 3000, display: "flex", flexDirection: "column", touchAction: "none" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", color: "#fff", flex: "0 0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px", color: "#fff", flex: "0 0 auto" }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>🚉 근무행로</span>
-        <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>✕</button>
+        <button onClick={onClose} style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", fontSize: 19, cursor: "pointer", flexShrink: 0 }}>✕</button>
       </div>
       <div ref={wrapRef} style={{ flex: 1, overflow: "hidden", position: "relative" }}>
         <div ref={stageRef} style={{ position: "absolute", top: 0, left: 0, transformOrigin: "0 0", willChange: "transform" }}>
@@ -31210,6 +31210,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [appUserList, setAppUserList] = useState<any[]>([]);
   const [showAppUserModal, setShowAppUserModal] = useState(false);
+  const [appUserTab, setAppUserTab] = useState("on"); // 이용중 | 미이용
+  const [appUserSearch, setAppUserSearch] = useState("");
   const [swapReqCount, setSwapReqCount] = useState(0);
 
   useEffect(() => {
@@ -32402,11 +32404,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               if (!user?.is_admin) return;
               supabase
                 .from("members")
-                .select("name, employee_number")
-                .eq("is_app_user", true)
-                .order("name", { ascending: true })
+                .select("name, employee_number, first_login_at, is_app_user")
                 .then(({ data }) => {
-                  setAppUserList(data || []);
+                  setAppUserList((data || []).filter((m: any) => m.name && !String(m.name).includes("결원")));
+                  setAppUserTab("on");
+                  setAppUserSearch("");
                   setShowAppUserModal(true);
                 });
             }}
@@ -32846,39 +32848,73 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         )}
-        {showAppUserModal && (
-          <div
-            onClick={() => setShowAppUserModal(false)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-          >
+        {showAppUserModal && (() => {
+          const q = appUserSearch.trim();
+          const norm = (s: any) => String(s || "");
+          const users = appUserList
+            .filter((m: any) => m.is_app_user)
+            .filter((m: any) => !q || norm(m.name).includes(q))
+            .sort((a: any, b: any) => norm(b.first_login_at).localeCompare(norm(a.first_login_at)));
+          const nonUsers = appUserList
+            .filter((m: any) => !m.is_app_user)
+            .filter((m: any) => !q || norm(m.name).includes(q))
+            .sort((a: any, b: any) => norm(a.name).localeCompare(norm(b.name), "ko"));
+          const totalUsers = appUserList.filter((m: any) => m.is_app_user).length;
+          const totalNon = appUserList.length - totalUsers;
+          const nowMs = Date.now();
+          const isNew = (m: any) => m.first_login_at && nowMs - new Date(m.first_login_at).getTime() < 7 * 86400000;
+          const dateLabel = (m: any) => {
+            if (!m.first_login_at) return "";
+            const d = new Date(m.first_login_at);
+            return `${d.getMonth() + 1}/${d.getDate()} 가입`;
+          };
+          const items = appUserTab === "on" ? users : nonUsers;
+          return (
             <div
-              onClick={(e) => e.stopPropagation()}
-              style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 360, maxHeight: "70vh", overflowY: "auto", padding: 20 }}
+              onClick={() => setShowAppUserModal(false)}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <span style={{ fontSize: 16, fontWeight: 800, color: "#1F2937" }}>앱 이용자 {appUserList.length}명</span>
-                <button
-                  onClick={() => setShowAppUserModal(false)}
-                  style={{ background: "#F3F4F6", border: "none", borderRadius: 10, padding: "6px 12px", fontSize: 13, fontWeight: 700, color: "#6B7280", cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  닫기
-                </button>
-              </div>
-              {appUserList.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "20px 0" }}>
-                  앱 이용자가 없습니다
-                </div>
-              ) : (
-                appUserList.map((au, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: i < appUserList.length - 1 ? "1px solid #F3F4F6" : "none" }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#C4B5FD" }} />
-                    <span style={{ fontSize: 14, fontWeight: 600, color: "#1F2937" }}>{au.name || "조합원"}</span>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 360, maxHeight: "76vh", display: "flex", flexDirection: "column", padding: "18px 16px" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", flexShrink: 0 }}>📲 앱 현황</span>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, background: "#F4F3FF", borderRadius: 10, padding: "7px 10px" }}>
+                    <span style={{ fontSize: 12 }}>🔍</span>
+                    <input value={appUserSearch} onChange={(e) => setAppUserSearch(e.target.value)} placeholder="이름 검색" style={{ flex: 1, minWidth: 0, border: "none", background: "none", outline: "none", fontSize: 13, fontFamily: "inherit", color: "#1F2937" }} />
                   </div>
-                ))
-              )}
+                </div>
+                <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 11, padding: 3, marginBottom: 8 }}>
+                  <button onClick={() => setAppUserTab("on")} style={{ flex: 1, textAlign: "center", padding: 8, borderRadius: 9, fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "inherit", background: appUserTab === "on" ? "#4F46E5" : "transparent", color: appUserTab === "on" ? "#fff" : "#6B7280" }}>이용중 {totalUsers}</button>
+                  <button onClick={() => setAppUserTab("off")} style={{ flex: 1, textAlign: "center", padding: 8, borderRadius: 9, fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", fontFamily: "inherit", background: appUserTab === "off" ? "#4F46E5" : "transparent", color: appUserTab === "off" ? "#fff" : "#6B7280" }}>미이용 {totalNon}</button>
+                </div>
+                {appUserTab === "off" && (
+                  <div style={{ background: "#FFFBEB", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, color: "#B45309", lineHeight: 1.5, marginBottom: 8 }}>
+                    📨 아직 앱을 안 쓰는 조합원이에요 — 안내문·초대 링크로 권해보세요!
+                  </div>
+                )}
+                <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 8 }}>{q ? `검색 결과 ${items.length}명` : appUserTab === "on" ? "최근 가입순" : "가나다순"}</div>
+                <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+                  {items.length === 0 ? (
+                    <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "26px 0" }}>{q ? "검색 결과가 없어요" : "명단이 비어있어요"}</div>
+                  ) : (
+                    items.map((m: any, i: number) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 6px", background: appUserTab === "on" && isNew(m) ? "#F8F7FF" : "transparent", borderRadius: appUserTab === "on" && isNew(m) ? 10 : 0, borderBottom: appUserTab === "on" && isNew(m) ? "none" : "1px solid #F3F4F6" }}>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: appUserTab === "on" ? "#C4B5FD" : "#E5E7EB", flexShrink: 0 }} />
+                        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: "#1F2937" }}>{m.name || "조합원"}</span>
+                        {appUserTab === "on" && isNew(m) && <span style={{ fontSize: 10, fontWeight: 800, color: "#fff", background: "#4F46E5", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>NEW</span>}
+                        {appUserTab === "on" && dateLabel(m) !== "" && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>{dateLabel(m)}</span>}
+                        {appUserTab === "off" && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#B45309", background: "#FEF3C7", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>미가입</span>}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div onClick={() => setShowAppUserModal(false)} style={{ textAlign: "center", marginTop: 12, fontSize: 13, color: "#9CA3AF", cursor: "pointer" }}>닫기</div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         {swapReqCount > 0 && (
           <div
            onClick={() => { setAdjustInitTab("교번교체"); setAdjustReturn("home"); setScreen("workAdjust"); }}
