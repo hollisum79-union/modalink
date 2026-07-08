@@ -33100,6 +33100,26 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                         {appUserTab === "on" && isNew(m) && <span style={{ fontSize: 10, fontWeight: 800, color: "#fff", background: "#4F46E5", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>NEW</span>}
                         {appUserTab === "on" && dateLabel(m) !== "" && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>{dateLabel(m)}</span>}
                         {appUserTab === "off" && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#B45309", background: "#FEF3C7", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>미가입</span>}
+                        {appUserTab === "off" && (
+                          <span
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const nm = m.name || "";
+                              const msg = `${nm ? nm + "님, " : ""}서울교통공사노동조합 대공원승무지회\n우리 지회 조합원 전용 앱 '모다링크'예요 📲\n내 근무표 · 예상 급여 · 공지 · 투표까지 한 곳에서.\n노동자의 내일을 연결하다\n👉 https://modalink.app`;
+                              try {
+                                if ((navigator as any).share) {
+                                  await (navigator as any).share({ title: "모다링크 · 대공원승무지회", text: msg });
+                                } else {
+                                  await navigator.clipboard.writeText(msg);
+                                  showToast("초대 문구가 복사됐어요");
+                                }
+                              } catch (err) {}
+                            }}
+                            style={{ fontSize: 10.5, fontWeight: 800, color: "#4F46E5", background: "#EEF2FF", borderRadius: 6, padding: "3px 8px", flexShrink: 0, cursor: "pointer" }}
+                          >
+                            📨 초대
+                          </span>
+                        )}
                       </div>
                     ))
                   )}
@@ -33166,13 +33186,28 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                   <span onClick={(e) => { e.stopPropagation(); setScreen("vote"); }} style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", cursor: "pointer" }}>진행 중인 투표</span>
-                  <span onClick={(e) => { e.stopPropagation(); setScreen("canteen"); }} style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>🍴 식당 ›</span>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#1F2937", lineHeight: 1.4, marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{activeVote.title}</div>
                 <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>참여기간 ~ {activeVote.deadline}</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5", marginBottom: 4 }}>참여율 {voteStats.total > 0 ? Math.round((voteStats.voted / voteStats.total) * 100) : 0}%<span style={{ fontSize: 11, fontWeight: 700, marginLeft: 6, color: voteStats.mine ? "#16A34A" : "#DC2626" }}>{voteStats.mine ? " ✓참여" : " 미참여"}</span></div>
                 <div style={{ background: "#F3F4F6", borderRadius: 10, height: 6, overflow: "hidden" }}>
                   <div style={{ height: "100%", background: "linear-gradient(90deg, #4F46E5, #6D28D9)", borderRadius: 10, width: `${voteStats.total > 0 ? Math.round((voteStats.voted / voteStats.total) * 100) : 0}%` }} />
+                </div>
+                <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 10, paddingTop: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#1F2937" }}>{currentMealEmoji[homeMealKey]} {homeMealPreview ? `${homeMealKey} 미리보기` : homeMealKey}</span>
+                    <span onClick={(e) => { e.stopPropagation(); setScreen("canteen"); }} style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, cursor: "pointer" }}>식당 ›</span>
+                  </div>
+                  {homeMealItems.length > 0 ? (
+                    homeMealItems.filter((_: string, i: number) => i < 2).map((nm: string, i: number) => (
+                      <div key={i} style={{ fontSize: 11, color: "#6B7280", display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                        <div style={{ width: 3, height: 3, borderRadius: "50%", background: "#4F46E5", flexShrink: 0 }} />
+                        {nm.split(" / ")[0]}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>{homeMealPreview ? "다음 메뉴 준비 중" : "오늘 메뉴 준비 중"}</div>
+                  )}
                 </div>
               </>
             ) : (
