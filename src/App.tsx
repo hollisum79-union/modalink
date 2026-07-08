@@ -13178,10 +13178,35 @@ function RouteInputScreen() {
     </div>
   );
 }
+// 앱 전체 기능 프리셋 — 골라서 자동 채움 (문구는 고쳐 써도 됨)
+const TIP_PRESETS: [string, string, string | null][] = [
+  ["📅 내 근무표", "내 교번 근무가 자동 계산돼요. 이번 달 근무를 한눈에 확인하세요.", "schedule"],
+  ["🔄 교번교체", "근무표에서 동료와 근무를 맞바꿀 수 있어요. 요청하고 수락하면 급여까지 자동 반영!", "schedule"],
+  ["₩ 예상 급여", "이번 달 예상 급여를 미리 볼 수 있어요. 홈 첫 카드에서 바로 확인!", "salary"],
+  ["🌴 연차·기타휴가", "반차·반반차까지 내 잔여일수가 자동으로 계산돼요.", "leave"],
+  ["🎁 복지 혜택", "조합원이 받을 수 있는 복지 제도를 한곳에 모아뒀어요.", "welfare"],
+  ["🚆 무사고 주행키로", "내 무사고 주행거리가 매일 자동으로 쌓여요. 지구 몇 바퀴 돌았는지 확인해보세요.", "distance"],
+  ["📝 근무조정", "대기충당·지원근무를 가계부처럼 기록하면 급여와 주행키로에 자동 반영돼요.", "workAdjust"],
+  ["🚇 편승 도우미", "열번만 검색하면 그 열차의 기관사와 출·퇴근 시간이 바로 나와요.", "ride"],
+  ["📢 공지사항", "중요 공지는 상단에 고정되고 푸시 알림으로도 와요.", "noticeList"],
+  ["💬 자유게시판", "조합원끼리 소통해요. 댓글에 답글도 달 수 있어요.", "board"],
+  ["🕵️ 익명 제보", "이름 없이 안전하게 목소리를 전할 수 있어요. 지회가 확인하고 답합니다.", "anonymous"],
+  ["🗳️ 설문·투표", "지회 의사결정에 앱에서 바로 참여하세요. 새 투표는 알림으로 알려드려요.", "vote"],
+  ["📄 자료실", "취업규칙·보수규정을 빠른검색 핀으로 바로 찾을 수 있어요.", "archive"],
+  ["🎵 노동가요", "자료실 노동가요에서 곡을 누르면 바로 재생돼요.", "archive"],
+  ["🍚 식당 메뉴", "오늘 구내식당 식단을 홈에서 바로 확인할 수 있어요.", "canteen"],
+  ["👥 조합활동", "지회 활동 소식을 사진으로 보고, 댓글과 좋아요로 함께해요.", "unionActivity"],
+  ["📆 지회·조합 일정", "다가오는 지회 일정을 홈에서 D-Day로 알려드려요.", "unionSchedule"],
+  ["🏆 활동 포인트", "댓글·투표·현장활동에 참여하면 포인트가 쌓여요. 매월 TOP3를 뽑아요!", null],
+  ["🔔 알림 설정", "마이페이지에서 공지·교번교체 등 알림을 항목별로 켜고 끌 수 있어요.", "mySettings"],
+  ["🎮 해방역 게임", "홈의 지회 엠블럼을 빠르게 두 번 탭해보세요. 해방역 레이스가 시작됩니다!", null],
+];
+
 function TipAdmin() {
   const [list, setList] = React.useState<any[]>([]);
   const [feat, setFeat] = React.useState("");
   const [tipText, setTipText] = React.useState("");
+  const [tipScreen, setTipScreen] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
 
   const load = async () => {
@@ -13193,10 +13218,10 @@ function TipAdmin() {
   const add = async () => {
     if (!feat.trim() || !tipText.trim()) { showToast("배지와 팁 문구를 입력해주세요."); return; }
     setSaving(true);
-    const { error } = await supabase.from("app_tips").insert({ feature: feat.trim(), tip: tipText.trim(), screen: null, visible: true });
+    const { error } = await supabase.from("app_tips").insert({ feature: feat.trim(), tip: tipText.trim(), screen: tipScreen, visible: true });
     setSaving(false);
     if (error) { showToast("저장 실패: " + error.message, "error"); return; }
-    setFeat(""); setTipText("");
+    setFeat(""); setTipText(""); setTipScreen(null);
     load();
   };
 
@@ -13222,6 +13247,21 @@ function TipAdmin() {
       </div>
 
       <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>기능 골라서 자동 채우기</div>
+        <select
+          value=""
+          onChange={(e) => {
+            const p = TIP_PRESETS[Number(e.target.value)];
+            if (!p) return;
+            setFeat(p[0]); setTipText(p[1]); setTipScreen(p[2]);
+          }}
+          style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", background: "#F8F7FF", fontFamily: "inherit", color: "#1F2937", marginBottom: 12, WebkitAppearance: "none", appearance: "none" }}
+        >
+          <option value="">📋 앱 기능 목록에서 선택… (고르면 아래가 채워져요)</option>
+          {TIP_PRESETS.map((p, i) => (
+            <option key={i} value={i}>{p[0]}</option>
+          ))}
+        </select>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>배지 (예: 🚇 편승 도우미)</div>
         <input value={feat} onChange={(e) => setFeat(e.target.value)} placeholder="🚇 편승 도우미" style={{ ...inputStyle, marginBottom: 10 }} />
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>팁 문구</div>
