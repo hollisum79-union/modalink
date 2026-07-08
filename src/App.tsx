@@ -572,62 +572,6 @@ function EmblemImg({ style }: any) {
   );
 }
 
-const menus = [
-  {
-    id: "notice",
-    label: "공지사항",
-    sub: "새로운 소식 확인하기",
-    icon: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z",
-  },
-  {
-    id: "schedule",
-    label: "근무표",
-    sub: "이번 달 근무 확인",
-    icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-  },
-  {
-    id: "agreement",
-    label: "합의서 및 규정",
-    sub: "협약·규정 열람하기",
-    icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-  },
-  {
-    id: "canteen",
-    label: "식당메뉴",
-    sub: "오늘의 메뉴 확인",
-    icon: "M6 2v6a2 2 0 002 2v12M6 2C6 2 5 4 5 7s1 3 1 3M18 2v20M14 2v6a2 2 0 002 2",
-  },
-  {
-    id: "archive",
-    label: "자료실",
-    sub: "합의서·사규",
-    icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z",
-  },
-  {
-    id: "vote",
-    label: "설문·투표",
-    sub: "참여하고 의견 전달",
-    icon: "M3 10h18M3 10V6a2 2 0 012-2h14a2 2 0 012 2v4M3 10l2 10h14l2-10M10 6V4m4 2V4M12 14v2m0 0h-2m2 0h2",
-  },
-  {
-    id: "board",
-    label: "자유게시판",
-    sub: "조합원과 소통하기",
-    icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
-  },
-  {
-    id: "welfare",
-    label: "복지혜택",
-    sub: "복지 제도 안내",
-    icon: "M20 12v10H4V12M22 7H2v5h20V7zM12 22V7M12 7a2 2 0 01-2-2c0-1.5 2-4 2-4s2 2.5 2 4a2 2 0 01-2 2z",
-  },
-  {
-    id: "inquiry",
-    label: "문의하기",
-    sub: "1:1 문의 및 요청",
-    icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-  },
-];
 
 const dummyNotices = [
   {
@@ -761,104 +705,6 @@ const dummyPosts = [
   },
 ];
 
-const dummyCanteen = {
-  대공원: {
-    아침: {
-      time: "07:00 ~ 09:00",
-      items: [
-        { category: "주식", name: "쌀밥 / 잡곡밥" },
-        { category: "국", name: "된장찌개" },
-        { category: "주찬", name: "계란후라이" },
-        { category: "부찬", name: "깍두기, 배추김치" },
-        { category: "후식", name: "요거트" },
-      ],
-    },
-    점심: {
-      time: "11:30 ~ 13:30",
-      items: [
-        { category: "주식", name: "쌀밥 / 잡곡밥" },
-        { category: "국", name: "육개장" },
-        { category: "주찬", name: "돼지불고기" },
-        { category: "부찬", name: "시금치나물, 콩자반, 깍두기" },
-        { category: "후식", name: "과일 (사과)" },
-      ],
-    },
-    저녁: {
-      time: "17:00 ~ 19:00",
-      items: [
-        { category: "주식", name: "쌀밥 / 잡곡밥" },
-        { category: "국", name: "미역국" },
-        { category: "주찬", name: "생선까스" },
-        { category: "부찬", name: "감자조림, 배추김치" },
-        { category: "후식", name: "아이스크림" },
-      ],
-    },
-  },
-  도봉: {
-    아침: {
-      time: "07:00 ~ 09:00",
-      items: [
-        { category: "주식", name: "쌀밥 / 현미밥" },
-        { category: "국", name: "콩나물국" },
-        { category: "주찬", name: "햄구이" },
-        { category: "부찬", name: "총각김치, 무생채" },
-        { category: "후식", name: "우유" },
-      ],
-    },
-    점심: {
-      time: "11:30 ~ 13:30",
-      items: [
-        { category: "주식", name: "쌀밥 / 현미밥" },
-        { category: "국", name: "순두부찌개" },
-        { category: "주찬", name: "닭갈비" },
-        { category: "부찬", name: "고사리나물, 깍두기, 배추김치" },
-        { category: "후식", name: "과일 (귤)" },
-      ],
-    },
-    저녁: {
-      time: "17:00 ~ 19:00",
-      items: [
-        { category: "주식", name: "쌀밥 / 현미밥" },
-        { category: "국", name: "부대찌개" },
-        { category: "주찬", name: "고등어구이" },
-        { category: "부찬", name: "도라지무침, 배추김치" },
-        { category: "후식", name: "빙과" },
-      ],
-    },
-  },
-  신풍: {
-    아침: {
-      time: "07:00 ~ 09:00",
-      items: [
-        { category: "주식", name: "쌀밥 / 보리밥" },
-        { category: "국", name: "시금치된장국" },
-        { category: "주찬", name: "두부조림" },
-        { category: "부찬", name: "배추김치, 열무김치" },
-        { category: "후식", name: "두유" },
-      ],
-    },
-    점심: {
-      time: "11:30 ~ 13:30",
-      items: [
-        { category: "주식", name: "쌀밥 / 보리밥" },
-        { category: "국", name: "김치찌개" },
-        { category: "주찬", name: "제육볶음" },
-        { category: "부찬", name: "숙주나물, 장조림, 깍두기" },
-        { category: "후식", name: "과일 (바나나)" },
-      ],
-    },
-    저녁: {
-      time: "17:00 ~ 19:00",
-      items: [
-        { category: "주식", name: "쌀밥 / 보리밥" },
-        { category: "국", name: "북어국" },
-        { category: "주찬", name: "돈까스" },
-        { category: "부찬", name: "브로콜리무침, 배추김치" },
-        { category: "후식", name: "요거트" },
-      ],
-    },
-  },
-};
 
 // ── 호봉 자동산정 함수 ──
 // ── 임시 비밀번호 생성 함수 ──
@@ -2483,14 +2329,6 @@ function CanteenScreen({ onBack, user }) {
   const stationColor = { 대공원: "#4F46E5", 도봉: "#0EA5E9", 신풍: "#10B981" };
   const stationPrice = { 대공원: "4,000원", 도봉: "3,500원", 신풍: "3,500원" };
   const displayPrice = info?.price || stationPrice[station] || "";
-  const categoryColor = {
-    주식: "#4F46E5",
-    국: "#0EA5E9",
-    주찬: "#10B981",
-    부찬: "#F59E0B",
-    후식: "#EC4899",
-  };
-
   const meals = [
     {
       key: "아침",
@@ -2648,7 +2486,6 @@ function CanteenScreen({ onBack, user }) {
           </div>
         )}
         {meals.map((meal) => {
-          const menuData = dummyCanteen[station][meal.key];
           return (
             <div key={meal.key} style={{ marginBottom: 12 }}>
               <div
@@ -2727,48 +2564,6 @@ function CanteenScreen({ onBack, user }) {
                     </div>
                   ));
                 })()}
-                {false && menuData.items.map((item, i) => (
-
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 14,
-                      padding: "13px 18px",
-                      borderBottom:
-                        i < menuData.items.length - 1
-                          ? "1px solid #F3F4F6"
-                          : "none",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 48,
-                        height: 24,
-                        borderRadius: 6,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
-                        background: `${categoryColor[item.category]}18`,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: categoryColor[item.category],
-                        }}
-                      >
-                        {item.category}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: 14, color: "#1F2937", flex: 1 }}>
-                      {item.name}
-                    </span>
-                  </div>
-                ))}
               </div>
             </div>
           );
@@ -8853,7 +8648,6 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
   const [orgTab, setOrgTab] = useState("지회");
   const [tab, setTab] = useState(initialTab);
   const [members, setMembers] = useState([]);
-  const [kickTarget, setKickTarget] = useState(null);
   const [contactTarget, setContactTarget] = useState(null);
   const [stationFilter, setStationFilter] = useState("전체");
   const [memberCount, setMemberCount] = useState(0);
@@ -9781,124 +9575,6 @@ function AboutScreen({ onBack, initialTab = "intro", user }) {
           </>
         ) : (
           <>
-            {kickTarget && (
-              <div
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  background: "rgba(0,0,0,0.5)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 999,
-                  padding: 24,
-                }}
-              >
-                <div
-                  style={{
-                    background: "#fff",
-                    borderRadius: 20,
-                    padding: "28px 24px",
-                    width: "100%",
-                    maxWidth: 360,
-                  }}
-                >
-                  <div style={{ textAlign: "center", marginBottom: 16 }}>
-                    <div style={{ fontSize: 40, marginBottom: 8 }}>⚠️</div>
-                    <div
-                      style={{
-                        fontSize: 16,
-                        fontWeight: 800,
-                        color: "#1F2937",
-                        marginBottom: 8,
-                      }}
-                    >
-                      방출 확인
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 14,
-                        color: "#6B7280",
-                        lineHeight: 1.7,
-                      }}
-                    >
-                      <strong style={{ color: "#EF4444" }}>
-                        {kickTarget.name}
-                      </strong>{" "}
-                      조합원을 방출하시겠습니까?
-                      <br />
-                      방출 즉시 앱 접근이 차단되며
-                      <br />
-                      다시 가입 승인을 받아야 합니다.
-                      <br />
-                      <br />
-                      <span style={{ color: "#EF4444", fontWeight: 700 }}>
-                        ⚠️ 당사자의 모든 개인정보 및<br />
-                        데이터는 복구 불능으로 즉시 폐기됩니다.
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={() => setKickTarget(null)}
-                      style={{
-                        flex: 1,
-                        padding: "12px",
-                        background: "#F3F4F6",
-                        color: "#6B7280",
-                        border: "none",
-                        borderRadius: 12,
-                        fontSize: 14,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={async () => {
-                        // 방출 - DB에서 복구 불능 삭제 (★ id 기준: 동명이인 오삭제 방지)
-                        try {
-                          const { error } = await supabase
-                            .from("members")
-                            .delete()
-                            .eq("id", kickTarget.id);
-                          if (error) throw error;
-                          setMembers((prev) =>
-                            prev.filter((m) => m.id !== kickTarget.id)
-                          );
-                          setKickTarget(null);
-                        } catch (e: any) {
-                          showToast("방출에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
-                          logError({
-                            message: "조합원 방출 실패: " + (e?.message || String(e)),
-                            stack: e?.stack,
-                            screen: "조합원관리(방출)",
-                            userId: getUserId(user),
-                            userName: user?.name,
-                          });
-                        }
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: "12px",
-                        background: "#EF4444",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 12,
-                        fontSize: 14,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      ⛔ 방출
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
             {contactTarget && (
               <div
                 style={{
@@ -20073,7 +19749,7 @@ function MySettingsScreen({
           }
 
           if (changed) {
-            const newNextDate = nextDate.toISOString().slice(0, 10);
+            const newNextDate = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`;
             setEditPayStep(currentStep);
             setEditPayStepNextDate(newNextDate);
             // DB에도 저장
@@ -24191,7 +23867,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
   }, [historyModal]);
 
     const [useDate, setUseDate] = React.useState(
-    initialDate || new Date().toISOString().slice(0, 10)
+    initialDate || todayLocalStr()
   );
   const [useDays, setUseDays] = React.useState("1");
  const [useMemo, setUseMemo] = React.useState("");
@@ -24284,7 +23960,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
     }
     // 3. 모달 닫기
     setUseModal(null);
-    setUseDate(new Date().toISOString().slice(0, 10));
+    setUseDate(todayLocalStr());
     setUseDays("1");
     setUseMemo("");
     showToast(`${item.label} ${days}일 사용 처리되었습니다.`);
@@ -30945,8 +30621,9 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const now = new Date();
       const y = now.getFullYear();
       const m = now.getMonth();
-      const firstDay = new Date(y, m, 1).toISOString().split("T")[0];
-      const lastDay = new Date(y, m + 1, 0).toISOString().split("T")[0];
+      const firstDay = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+      const _last = new Date(y, m + 1, 0).getDate();
+      const lastDay = `${y}-${String(m + 1).padStart(2, "0")}-${String(_last).padStart(2, "0")}`;
 
       // 이번 달 work_adjust 기록 수
       const { count: adjCount } = await supabase
