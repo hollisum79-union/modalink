@@ -7417,8 +7417,13 @@ const [showAddCat, setShowAddCat] = useState(false);
       });
   }, []);
 
-  // 코드 6개 + DB 추가분 합치기
-  const allCats = [...archiveCategories, ...extraCats];
+  // 지회 분류(DB 추가분)를 맨 위로 — 지회 앱이니까 우리 자료가 먼저 (우선순위 정렬)
+  const catPriority = ["대공원승무지회", "승무본부", "노동조합 회의내용"];
+  const sortedExtra = [...extraCats].sort((a: any, b: any) => {
+    const ia = catPriority.indexOf(a.label); const ib = catPriority.indexOf(b.label);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  const allCats = [...sortedExtra, ...archiveCategories];
 
   const currentCat = allCats.find((c) => c.id === selectedCat);
 
@@ -7472,12 +7477,20 @@ const [showAddCat, setShowAddCat] = useState(false);
         })
       : [];
 
- const handleFileOpen = async (file) => {
-    if (file.url) {
-      window.open(file.url, "_blank");
-    } else if (file.path) {
+ // 음원 파일 재생 (노동가요 등)
+  const [playingFile, setPlayingFile] = useState<any>(null);
+  const isAudioFile = (file: any) => /\.(mp3|m4a|wav|aac|ogg)$/i.test(String(file?.path || file?.name || ""));
+  const handleFileOpen = async (file) => {
+    let url = file.url || "";
+    if (!url && file.path) {
       const { data } = supabase.storage.from("archive").getPublicUrl(file.path);
-      if (data?.publicUrl) window.open(data.publicUrl, "_blank");
+      url = data?.publicUrl || "";
+    }
+    if (!url) return;
+    if (isAudioFile(file)) {
+      setPlayingFile({ name: file.name, url }); // 앱 안에서 바로 재생
+    } else {
+      window.open(url, "_blank");
     }
   };
 
@@ -7492,7 +7505,7 @@ const [showAddCat, setShowAddCat] = useState(false);
   // 파일 업로드 처리
   const handleUpload = async () => {
     // 수정 중이면 파일 없이도 OK(기존 파일 유지). 새로 올리기면 파일 필수.
-    if (!editingFile && !upFile) { showToast("PDF 파일을 선택해주세요."); return; }
+    if (!editingFile && !upFile) { showToast("PDF 또는 음원 파일을 선택해주세요."); return; }
     if (!upName.trim()) { showToast("자료 제목을 입력해주세요."); return; }
     setUploading(true);
     try {
@@ -7619,6 +7632,18 @@ const [showAddCat, setShowAddCat] = useState(false);
         paddingBottom: 80,
       }}
     >
+      {playingFile && (
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 78, zIndex: 1000, display: "flex", justifyContent: "center", padding: "0 12px", pointerEvents: "none" }}>
+          <div style={{ width: "100%", maxWidth: 406, background: "#1F2937", borderRadius: 16, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.35)", pointerEvents: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 13 }}>🎵</span>
+              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{playingFile.name}</span>
+              <span onClick={() => setPlayingFile(null)} style={{ fontSize: 14, color: "#9CA3AF", cursor: "pointer", padding: "0 4px", fontWeight: 700 }}>✕</span>
+            </div>
+            <audio src={playingFile.url} controls autoPlay style={{ width: "100%", height: 36 }} />
+          </div>
+        </div>
+      )}
       <div
         style={{
           background:
@@ -8272,7 +8297,7 @@ const [showAddCat, setShowAddCat] = useState(false);
             </div>
             <input
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,audio/*,.mp3,.m4a,.wav"
                                      onChange={(e) => {
                 const f = e.target.files?.[0] || null;
                 setUpFile(f);
@@ -28021,6 +28046,7 @@ const dummyCondolences = [
 // 포인트/경조사 조건부 고정 카드 (홈 본문) - 경조사 있으면 경조사, 없으면 포인트
 function PointCondolenceCard({ user, onCondolenceClick }: any) {
   const [condolences, setCondolences] = React.useState<any[]>([]);
+  const [showAllCond, setShowAllCond] = React.useState(false);
   const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const [myRank, setMyRank] = React.useState<any>(null);
 
@@ -28052,18 +28078,38 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
 
   if (condolences.length > 0) {
     return (
-      <div onClick={onCondolenceClick} style={{ background: "#fff", border: "1px solid #ECECF3", borderLeft: "4px solid #7C3AED", borderRadius: 16, padding: 12, cursor: "pointer", minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-          <span style={{ fontSize: 14 }}>💐</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>경조사</span>
+      <>
+      <div style={{ background: "#fff", border: "1px solid #ECECF3", borderRadius: 16, padding: 12, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 14 }}>💐</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1F2937" }}>경조사</span>
+          </div>
+          <span onClick={() => setShowAllCond(true)} style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>전체 ›</span>
         </div>
-        {condolences.slice(0, 3).map((c, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 0", fontSize: 12, color: "#1F2937" }}>
-            <span style={{ background: c.type === "결혼" ? "#EC4899" : "#6B7280", color: "#fff", fontSize: 9, fontWeight: 600, borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>{c.type}</span>
-            <span style={{ flex: 1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+        {condolences.slice(0, 4).map((c, i) => (
+          <div key={i} style={{ fontSize: 12, color: "#374151", marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#4F46E5", flexShrink: 0 }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.type} · {c.name}</span>
           </div>
         ))}
       </div>
+      {showAllCond && (
+        <div onClick={() => setShowAllCond(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "70vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>💐 경조사 ({condolences.length})</div>
+            {condolences.map((c, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", borderRadius: 6, padding: "2px 7px", flexShrink: 0 }}>{c.type}</span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{c.name}</span>
+                <span style={{ fontSize: 11, color: "#9CA3AF" }}>{String(c.date || "").slice(5)}</span>
+              </div>
+            ))}
+            <div onClick={() => setShowAllCond(false)} style={{ textAlign: "center", marginTop: 14, fontSize: 13, color: "#9CA3AF", cursor: "pointer" }}>닫기</div>
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 
