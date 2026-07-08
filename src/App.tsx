@@ -10375,6 +10375,64 @@ function MemberManageScreen({ user }: any) {
   };
 
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [vacantNum, setVacantNum] = useState("");
+
+  // 다음 빈 결원 번호 추천 (예: 결원03)
+  const nextVacantNum = () => {
+    const nums = members
+      .map((x: any) => {
+        const mt = String(x.name || "").match(/결원\s*0*(\d+)/);
+        return mt ? parseInt(mt[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return String(next).padStart(2, "0");
+  };
+
+  // 결원 처리 (퇴사·전출): 이름만 결원○○로, 자리(start_position)·사번은 유지
+  const handleConvertVacant = async (m: any, numStr: string) => {
+    const clean = String(numStr || "").replace(/[^0-9]/g, "");
+    if (!clean) {
+      showToast("결원 번호를 입력하세요.", "error");
+      return;
+    }
+    const padded = clean.padStart(2, "0");
+    const vacantName = "결원" + padded;
+    // 중복 방지
+    const dup = members.some(
+      (x: any) =>
+        x.id !== m.id &&
+        String(x.name || "").replace(/\s/g, "") === vacantName
+    );
+    if (dup) {
+      showToast(`${vacantName}은(는) 이미 있는 번호예요.`, "error");
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("members")
+        .update({ name: vacantName, is_union: false, is_app_user: false })
+        .eq("id", m.id);
+      if (error) throw error;
+      // 로그인 계정 삭제 (돌아오지 않는 사람)
+      fetch("/.netlify/functions/delete-credential", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employee_number: m.employee_number }),
+      }).catch(() => {});
+      setDeleteTarget(null);
+      setVacantNum("");
+      loadMembers();
+      showToast(`${vacantName}(으)로 처리했어요 — 자리는 유지됩니다.`);
+    } catch (e: any) {
+      showToast("결원 처리에 실패했어요. 다시 시도해주세요.", "error");
+      logError({
+        message: "결원 처리 실패: " + (e?.message || String(e)),
+        stack: e?.stack,
+        screen: "조합원관리(결원처리)",
+      });
+    }
+  };
 
   const handleDelete = async (m) => {
     try {
@@ -10387,6 +10445,7 @@ function MemberManageScreen({ user }: any) {
         body: JSON.stringify({ employee_number: m.employee_number }),
       }).catch(() => {});
       setDeleteTarget(null);
+      setVacantNum("");
       loadMembers();
     } catch (e: any) {
       showToast("삭제에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
@@ -10606,28 +10665,30 @@ function MemberManageScreen({ user }: any) {
             >
               수정
             </button>
-            {m.is_union !== true &&
-              !(m.name || "").includes("결원") &&
+            {!(m.name || "").includes("결원") &&
               !(
                 user &&
                 String(m.employee_number) === String(user.employee_number)
               ) && (
               <button
-                onClick={() => setDeleteTarget(m)}
+                onClick={() => {
+                  setVacantNum(nextVacantNum());
+                  setDeleteTarget(m);
+                }}
                 style={{
                   flex: 1,
                   padding: "7px",
                   borderRadius: 6,
                   border: "none",
-                  background: "#FEE2E2",
-                  color: "#EF4444",
+                  background: "#F3F4F6",
+                  color: "#6B7280",
                   fontSize: 12,
                   fontWeight: 700,
                   cursor: "pointer",
                   fontFamily: "inherit",
                 }}
               >
-                삭제
+                정리
               </button>
             )}
           </div>
@@ -10858,54 +10919,60 @@ function MemberManageScreen({ user }: any) {
           >
             <div
               style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background: "#FEE2E2",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 16px",
-                fontSize: 26,
-              }}
-            >
-              ⚠️
-            </div>
-            <div
-              style={{
                 fontSize: 16,
                 fontWeight: 800,
                 color: "#1F2937",
-                marginBottom: 8,
+                marginBottom: 6,
+                textAlign: "center",
               }}
             >
-              조합원 삭제
+              인원 정리
             </div>
             <div
               style={{
-                fontSize: 14,
+                fontSize: 13,
                 color: "#6B7280",
                 lineHeight: 1.6,
-                marginBottom: 20,
+                marginBottom: 16,
+                textAlign: "center",
               }}
             >
               <strong style={{ color: "#1F2937" }}>{deleteTarget.name}</strong>{" "}
               (사번 {deleteTarget.employee_number}) 님을
               <br />
-              명단에서 완전히 삭제할까요?
-              <br />
-              <span style={{ fontSize: 12, color: "#EF4444" }}>
-                삭제하면 되돌릴 수 없습니다.
-              </span>
-              <br />
-              <br />
-              <span style={{ fontSize: 11.5, color: "#B45309", background: "#FFFBEB", borderRadius: 8, padding: "8px 10px", display: "block", lineHeight: 1.6, textAlign: "left" }}>
-                ⚠️ 이 사람이 교번 자리를 갖고 있었다면, 삭제 대신 이름을 "결원○○"으로 되돌리는 게 자리·정원 보존에 안전해요. 자리 자체를 없앨 때만 삭제하세요.
-              </span>
+              어떻게 처리할까요?
             </div>
+
+            {/* 결원 처리 (퇴사·전출) */}
+            <div style={{ border: "1.5px solid #C7D2FE", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "left" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 10 }}>결원 처리 (퇴사·전출)</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: "#6B7280" }}>결원 번호</span>
+                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, background: "#F3F4F6", borderRadius: 8, padding: "8px 12px" }}>
+                  <span style={{ fontSize: 14, color: "#9CA3AF" }}>결원</span>
+                  <input
+                    value={vacantNum}
+                    onChange={(e) => setVacantNum(e.target.value.replace(/[^0-9]/g, ""))}
+                    inputMode="numeric"
+                    placeholder="03"
+                    style={{ width: 56, fontSize: 15, fontWeight: 700, border: "none", background: "none", outline: "none", color: "#1F2937", fontFamily: "inherit" }}
+                  />
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 12, lineHeight: 1.5 }}>
+                근무표에 "결원{(vacantNum || "").padStart(2, "0")}"으로 표시 · 계정 삭제 · 사번·자리 보존
+              </div>
+              <button
+                onClick={() => handleConvertVacant(deleteTarget, vacantNum)}
+                style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                결원{(vacantNum || "").padStart(2, "0")}으로 처리
+              </button>
+            </div>
+
             <div style={{ display: "flex", gap: 10 }}>
               <button
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => { setDeleteTarget(null); setVacantNum(""); }}
                 style={{
                   flex: 1,
                   padding: "12px",
@@ -10922,23 +10989,28 @@ function MemberManageScreen({ user }: any) {
                 취소
               </button>
               <button
-                onClick={() => handleDelete(deleteTarget)}
+                onClick={() => {
+                  if (window.confirm(`${deleteTarget.name} 님을 명단에서 완전히 삭제할까요?\n자리(정원)까지 없어지며 되돌릴 수 없어요.`)) {
+                    handleDelete(deleteTarget);
+                  }
+                }}
                 style={{
                   flex: 1,
                   padding: "12px",
                   borderRadius: 10,
                   border: "none",
-                  background: "#EF4444",
-                  color: "#fff",
-                  fontSize: 14,
+                  background: "#FEE2E2",
+                  color: "#EF4444",
+                  fontSize: 13,
                   fontWeight: 700,
                   cursor: "pointer",
                   fontFamily: "inherit",
                 }}
               >
-                삭제
+                완전 삭제
               </button>
             </div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, textAlign: "center" }}>완전 삭제 = 자리까지 없앰 (정원 줄일 때만)</div>
           </div>
         </div>
       )}
