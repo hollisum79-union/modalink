@@ -13178,6 +13178,78 @@ function RouteInputScreen() {
     </div>
   );
 }
+function TipAdmin() {
+  const [list, setList] = React.useState<any[]>([]);
+  const [feat, setFeat] = React.useState("");
+  const [tipText, setTipText] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const load = async () => {
+    const { data } = await supabase.from("app_tips").select("*").order("id", { ascending: true });
+    if (data) setList(data);
+  };
+  React.useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!feat.trim() || !tipText.trim()) { showToast("배지와 팁 문구를 입력해주세요."); return; }
+    setSaving(true);
+    const { error } = await supabase.from("app_tips").insert({ feature: feat.trim(), tip: tipText.trim(), screen: null, visible: true });
+    setSaving(false);
+    if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+    setFeat(""); setTipText("");
+    load();
+  };
+
+  const toggle = async (r: any) => {
+    await supabase.from("app_tips").update({ visible: !r.visible }).eq("id", r.id);
+    load();
+  };
+
+  const del = async (r: any) => {
+    if (!window.confirm('"' + r.feature + '" 팁을 삭제할까요?')) return;
+    await supabase.from("app_tips").delete().eq("id", r.id);
+    load();
+  };
+
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff", fontFamily: "inherit", color: "#1F2937" };
+  const onCount = list.filter((r) => r.visible).length;
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>홈 팁 관리</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+        일정이 없을 때 홈 캐러셀에 도는 "알고 계셨나요?" 팁이에요. 켜진 팁 {onCount}개만 번갈아 나와요.
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>배지 (예: 🚇 편승 도우미)</div>
+        <input value={feat} onChange={(e) => setFeat(e.target.value)} placeholder="🚇 편승 도우미" style={{ ...inputStyle, marginBottom: 10 }} />
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>팁 문구</div>
+        <textarea value={tipText} onChange={(e) => setTipText(e.target.value)} placeholder="열번만 검색하면 그 열차의 기관사와 시간이 나와요." rows={2} style={{ ...inputStyle, resize: "none" }} />
+        <button onClick={add} disabled={saving} style={{ width: "100%", marginTop: 12, padding: 12, background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: saving ? 0.5 : 1 }}>
+        {saving ? "저장 중..." : "팁 추가"}
+        </button>
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", margin: "0 4px 10px" }}>전체 팁 ({list.length})</div>
+      {list.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "24px 0" }}>등록된 팁이 없어요</div>
+      ) : (
+        list.map((r) => (
+          <div key={r.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10, opacity: r.visible ? 1 : 0.45 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginBottom: 3 }}>{r.feature}</div>
+              <div style={{ fontSize: 12.5, color: "#374151", lineHeight: 1.5 }}>{r.tip}</div>
+            </div>
+            <button onClick={() => toggle(r)} style={{ fontSize: 11, fontWeight: 700, border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontFamily: "inherit", background: r.visible ? "#EEF0FF" : "#F3F4F6", color: r.visible ? "#4F46E5" : "#6B7280", flexShrink: 0 }}>{r.visible ? "켜짐" : "꺼짐"}</button>
+            <button onClick={() => del(r)} style={{ fontSize: 11, fontWeight: 700, border: "none", borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontFamily: "inherit", background: "#FEE2E2", color: "#EF4444", flexShrink: 0 }}>삭제</button>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 function TempDiaAdmin() {
   const [list, setList] = React.useState<any[]>([]);
   const [kind, setKind] = React.useState("임시");
@@ -13550,6 +13622,14 @@ useEffect(() => {
       badge: 0,
     },
     {
+      id: "hometips",
+      label: "홈 팁 관리",
+      icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0013 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
+      color: "#8B5CF6",
+      bg: "#F3E8FF",
+      badge: 0,
+    },
+    {
       id: "unionschedule",
       label: "지회·조합 일정",
       icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
@@ -13813,6 +13893,7 @@ useEffect(() => {
         {activeMenu === "ranking" && <PointRankingAdmin />}
         {activeMenu === "field" && <FieldActivityAdmin />}
         {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
+        {activeMenu === "hometips" && <TipAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
@@ -28209,14 +28290,16 @@ function HomeCarousel({
   user?: any;
 }) {
   // 경조사 데이터 (Supabase events에서)
-  // 일정 없을 때 보여줄 모다링크 팁 (app_tips에서 랜덤 1개)
-  const [homeTip, setHomeTip] = React.useState<any>(null);
+  // 일정 없을 때 보여줄 모다링크 팁 — 켜진 것만 섞어두고, 캐러셀이 돌 때마다 다음 팁
+  const [homeTips, setHomeTips] = React.useState<any[]>([]);
+  const [tipIdx, setTipIdx] = React.useState(0);
   React.useEffect(() => {
     (async () => {
       const { data } = await supabase.from("app_tips").select("*").eq("visible", true);
-      if (data && data.length) setHomeTip(data[Math.floor(Math.random() * data.length)]);
+      if (data && data.length) setHomeTips([...data].sort(() => Math.random() - 0.5));
     })();
   }, []);
+  const homeTip = homeTips.length > 0 ? homeTips[tipIdx % homeTips.length] : null;
   const [condolences, setCondolences] = React.useState([]);
   const [recentJoins, setRecentJoins] = React.useState<any[]>([]);
   const [joinPopup, setJoinPopup] = React.useState(false);
@@ -28321,6 +28404,10 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
     loadAward();
   }, []);
     const [index, setIndex] = React.useState(1);
+  // 팁 카드 슬라이드에 도착할 때마다 다음 팁으로 교체
+  React.useEffect(() => {
+    if (index === 2) setTipIdx((v) => v + 1);
+  }, [index]);
   const [actSlide, setActSlide] = React.useState(0);
   const [photoRound, setPhotoRound] = React.useState(0);
   const prevSlideRef = React.useRef(0);
