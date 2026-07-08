@@ -10225,7 +10225,7 @@ const dummyPendingMembers = [
   },
 ];
 // ── 조합원 명단 관리 (관리자용) ──
-function MemberManageScreen() {
+function MemberManageScreen({ user }: any) {
   const [members, setMembers] = useState([]);
   const [search, setSearch] = useState("");
   const [unionFilter, setUnionFilter] = useState("전체");
@@ -10271,16 +10271,73 @@ function MemberManageScreen() {
       is_union: form.is_union === true,
     };
     if (form.id) {
+      const orig = members.find((mm: any) => mm.id === form.id);
+      const wasUnion = orig?.is_union === true;
+      const nowUnion = form.is_union === true;
+      const isSelf =
+        user && String(form.employee_number) === String(user.employee_number);
+
+      // 본인 계정 보호: 관리자가 자기 자신을 비조합원으로 바꾸지 못하게
+      if (isSelf && !nowUnion) {
+        showToast("본인 계정은 비조합원으로 바꿀 수 없어요.", "error");
+        return;
+      }
+      // 조합원 → 비조합원 전환 시 확인 (앱 로그인 차단됨)
+      if (wasUnion && !nowUnion) {
+        if (
+          !window.confirm(
+            `${payload.name} 님을 비조합원으로 바꿉니다.\n앱 로그인이 차단돼요.\n(근무·자리·급여 기록은 그대로 유지됩니다)\n\n계속할까요?`
+          )
+        )
+          return;
+      }
+
+      const updatePayload = {
+        ...payload,
+        ...(nowUnion ? {} : { is_app_user: false }),
+      };
+
       supabase
         .from("members")
-        .update(payload)
+        .update(updatePayload)
         .eq("id", form.id)
         .then(({ error }) => {
           if (error) {
             showToast("저장 실패: " + error.message, "error");
-          } else {
+            return;
+          }
+          const done = () => {
             setForm(null);
             loadMembers();
+          };
+          if (!nowUnion) {
+            // 비조합원: 로그인 계정 삭제 (앱 차단)
+            fetch("/.netlify/functions/delete-credential", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                employee_number: payload.employee_number,
+              }),
+            })
+              .then((r) => r.json())
+              .catch(() => {})
+              .then(done);
+          } else if (nowUnion && !wasUnion) {
+            // 비조합원 → 조합원 복구: 로그인 계정 재생성 (임시 비번)
+            fetch("/.netlify/functions/set-credential", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                employee_number: payload.employee_number,
+                password: "union0000",
+                is_temp_password: true,
+              }),
+            })
+              .then((r) => r.json())
+              .catch(() => {})
+              .then(done);
+          } else {
+            done();
           }
         });
     } else {
@@ -10323,6 +10380,12 @@ function MemberManageScreen() {
     try {
       const { error } = await supabase.from("members").delete().eq("id", m.id);
       if (error) throw error;
+      // 로그인 계정도 함께 정리 (있으면 삭제, 없으면 무시)
+      fetch("/.netlify/functions/delete-credential", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employee_number: m.employee_number }),
+      }).catch(() => {});
       setDeleteTarget(null);
       loadMembers();
     } catch (e: any) {
@@ -10543,23 +10606,30 @@ function MemberManageScreen() {
             >
               수정
             </button>
-            <button
-              onClick={() => setDeleteTarget(m)}
-              style={{
-                flex: 1,
-                padding: "7px",
-                borderRadius: 6,
-                border: "none",
-                background: "#FEE2E2",
-                color: "#EF4444",
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              삭제
-            </button>
+            {m.is_union !== true &&
+              !(m.name || "").includes("결원") &&
+              !(
+                user &&
+                String(m.employee_number) === String(user.employee_number)
+              ) && (
+              <button
+                onClick={() => setDeleteTarget(m)}
+                style={{
+                  flex: 1,
+                  padding: "7px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "#FEE2E2",
+                  color: "#EF4444",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                삭제
+              </button>
+            )}
           </div>
           <button
             onClick={() => handleResetPw(m)}
@@ -10820,12 +10890,17 @@ function MemberManageScreen() {
               }}
             >
               <strong style={{ color: "#1F2937" }}>{deleteTarget.name}</strong>{" "}
-              (사번 {deleteTarget.employee_number}) 조합원을
+              (사번 {deleteTarget.employee_number}) 님을
               <br />
-              명단에서 삭제할까요?
+              명단에서 완전히 삭제할까요?
               <br />
               <span style={{ fontSize: 12, color: "#EF4444" }}>
                 삭제하면 되돌릴 수 없습니다.
+              </span>
+              <br />
+              <br />
+              <span style={{ fontSize: 11.5, color: "#B45309", background: "#FFFBEB", borderRadius: 8, padding: "8px 10px", display: "block", lineHeight: 1.6, textAlign: "left" }}>
+                ⚠️ 이 사람이 교번 자리를 갖고 있었다면, 삭제 대신 이름을 "결원○○"으로 되돌리는 게 자리·정원 보존에 안전해요. 자리 자체를 없앨 때만 삭제하세요.
               </span>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
@@ -13935,7 +14010,7 @@ useEffect(() => {
         {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
         {activeMenu === "hometips" && <TipAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
-        {activeMenu === "memberlist" && <MemberManageScreen />}
+        {activeMenu === "memberlist" && <MemberManageScreen user={user} />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "worktime" && <WorkTimeAdmin />}
         {activeMenu === "deduction" && <DeductionAdmin />}
@@ -20059,11 +20134,11 @@ function MySettingsScreen({
                 textAlign: "left",
               }}
             >
-              ⚠️ 탈퇴 즉시 모든 개인정보 및 데이터는
+              ⚠️ 앱 로그인 계정이 <strong>삭제</strong>되고 로그아웃돼요.
               <br />
-              <strong>복구 불능으로 즉시 폐기</strong>됩니다.
+              조합원 자격·근무 기록은 유지됩니다.
               <br />
-              재가입 시 관리자 승인을 다시 받아야 합니다.
+              다시 이용하려면 관리자 승인이 필요해요.
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -20084,7 +20159,22 @@ function MySettingsScreen({
                 취소
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
+                  try {
+                    if (user?.employee_number) {
+                      await fetch("/.netlify/functions/delete-credential", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          employee_number: user.employee_number,
+                        }),
+                      });
+                      await supabase
+                        .from("members")
+                        .update({ is_app_user: false })
+                        .eq("employee_number", user.employee_number);
+                    }
+                  } catch (e) {}
                   setShowWithdrawModal(false);
                   onLogout();
                 }}
