@@ -10282,6 +10282,11 @@ function MemberManageScreen({ user }: any) {
         showToast("본인 계정은 비조합원으로 바꿀 수 없어요.", "error");
         return;
       }
+      // 🔒 지회장(owner) 계정 보호
+      if (orig?.is_owner && !nowUnion) {
+        showToast("지회장 계정은 비조합원으로 바꿀 수 없어요.", "error");
+        return;
+      }
       // 조합원 → 비조합원 전환 시 확인 (앱 로그인 차단됨)
       if (wasUnion && !nowUnion) {
         if (
@@ -10458,6 +10463,25 @@ function MemberManageScreen({ user }: any) {
   };
 
   const toggleAdmin = async (m) => {
+    // 🔒 지회장(owner) 계정은 권한 회수 불가
+    if (m.is_owner && m.is_admin) {
+      showToast("지회장 계정의 관리자 권한은 해제할 수 없어요.", "error");
+      return;
+    }
+    // 🔒 마지막 관리자는 해제 불가 (전원 잠금 방지)
+    if (m.is_admin) {
+      const adminCount = members.filter((x: any) => x.is_admin).length;
+      if (adminCount <= 1) {
+        showToast("마지막 관리자는 해제할 수 없어요.", "error");
+        return;
+      }
+    }
+    // ✅ 부여/회수 확인창
+    const giving = !m.is_admin;
+    const msg = giving
+      ? `${m.name} 님에게 관리자 권한을 부여합니다.\n공지·투표는 물론 급여·근무·조합원 명단(삭제 포함)까지 모두 관리할 수 있게 돼요.\n\n계속할까요?`
+      : `${m.name} 님의 관리자 권한을 해제합니다.\n\n계속할까요?`;
+    if (!window.confirm(msg)) return;
     try {
       const { error } = await supabase
         .from("members")
@@ -10465,6 +10489,7 @@ function MemberManageScreen({ user }: any) {
         .eq("id", m.id);
       if (error) throw error;
       loadMembers();
+      showToast(giving ? `${m.name} 님이 관리자가 됐어요.` : `${m.name} 님의 관리자 권한을 해제했어요.`);
     } catch (e: any) {
       showToast("권한 변경에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
       logError({
@@ -10610,6 +10635,20 @@ function MemberManageScreen({ user }: any) {
                   {m.name}
                 </span>
                 <span style={{ fontSize: 12, color: "#9CA3AF" }}>{m.role}</span>
+                {m.is_owner && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: "#6B7280",
+                      background: "#F3F4F6",
+                      borderRadius: 4,
+                      padding: "2px 6px",
+                    }}
+                  >
+                    지회장
+                  </span>
+                )}
                 {m.is_admin && (
                   <span
                     style={{
@@ -10666,6 +10705,7 @@ function MemberManageScreen({ user }: any) {
               수정
             </button>
             {!(m.name || "").includes("결원") &&
+              !m.is_owner &&
               !(
                 user &&
                 String(m.employee_number) === String(user.employee_number)
