@@ -1645,7 +1645,7 @@ function HaebangRaceGame({ onBack, user }: any) {
           <div style={{textAlign:"center",fontSize:11.5,color:"#A5B4FC",marginBottom:10}}>공 45개가 섞이다 6개가 나와요 · 재미로 즐겨주세요</div>
           {lottoSeed !== null ? (
             <>
-              <DrawMachine mode="lotto" seed={lottoSeed} onFinish={(nums: string[]) => setLottoNums(nums)} />
+              <DrawMachine mode="lotto" seed={lottoSeed} onProgress={(label: string) => setLottoNums((prev: string[]) => [...prev, label])} onFinish={() => {}} />
               <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",minHeight:40,marginTop:10}}>
                 {lottoNums.map((n: string, i: number) => {
                   const num = parseInt(n,10);
