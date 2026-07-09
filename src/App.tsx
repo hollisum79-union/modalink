@@ -1064,11 +1064,176 @@ function BoardWrite({ onBack, onSubmit, user, editPost }: any) {
 }
 
 
+// ── 🎱 추첨기 (파친코 핀볼 물리 · 시드 결정론 · 목업 이식) ──
+// mode="event": names 서바이벌, 최후 1인 당첨 → onFinish(winnerLabel)
+// mode="lotto": 1~45 중 6개 → onFinish(numbers[])
+// 같은 seed = 항상 같은 결과 (검증용 재현 가능)
+function DrawMachine({ mode, names = [], seed, onProgress, onFinish }: any) {
+  const cvRef = React.useRef<any>(null);
+  const stRef = React.useRef<any>({});
+  React.useEffect(() => {
+    const cv = cvRef.current; if (!cv) return;
+    const ctx = cv.getContext("2d");
+    const W = 360, H = 330, CX = 180, CY = 160, R = 125;
+    const JETS = [0, Math.PI];
+    let _rs = (seed >>> 0) || 1;
+    const rng = () => { _rs = (_rs + 0x6D2B79F5) >>> 0; let t = _rs; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const lottoColor = (n: number) => n <= 10 ? { h: 46, s: 95, l: 55 } : n <= 20 ? { h: 210, s: 85, l: 52 } : n <= 30 ? { h: 2, s: 80, l: 52 } : n <= 40 ? { h: 220, s: 8, l: 45 } : { h: 135, s: 65, l: 40 };
+    const EVT = [238, 262, 199, 160, 32, 346, 280];
+    let balls: any[] = mode === "lotto"
+      ? Array.from({ length: 45 }, (_, i) => ({ label: String(i + 1), col: lottoColor(i + 1), r: 11 }))
+      : names.map((nm: string, i: number) => ({ label: nm, col: { h: EVT[i % 7], s: 75, l: 55 }, r: 15 }));
+    balls = balls.map((b: any) => { const a = rng() * Math.PI * 2, d = rng() * (R - b.r - 8); return { ...b, x: CX + Math.cos(a) * d, y: CY + Math.sin(a) * d, vx: (rng() - 0.5) * 3, vy: (rng() - 0.5) * 3, out: false }; });
+    let phase = "mix", tick = 0, exiting: any = null, drawnCnt = 0, suckT = 0;
+    let drumA = 0, drumW = 0.02, targetW = 0.062;
+    const alive = () => balls.filter((b: any) => !b.out);
+    const speedByRemain = () => { const r = alive().length; if (mode === "lotto") return drawnCnt >= 5 ? 0.020 : 0.034; if (r <= 3) return 0.012; if (r <= 5) return 0.018; if (r <= 10) return 0.026; return 0.032; };
+    const pegs = () => { const out: any[] = []; for (let k = 0; k < 3; k++) { const a1 = drumA + k * Math.PI * 2 / 3; out.push([CX + Math.cos(a1) * R * 0.25, CY + Math.sin(a1) * R * 0.25]); const a2 = drumA + Math.PI / 3 + k * Math.PI * 2 / 3; out.push([CX + Math.cos(a2) * R * 0.55, CY + Math.sin(a2) * R * 0.55]); } return out; };
+    let timers: any[] = [];
+    const later = (fn: any, ms: number) => timers.push(setTimeout(fn, ms));
+    const drawBall = (b: any, scale = 1) => {
+      const r = b.r * scale;
+      const g = ctx.createRadialGradient(b.x - r * 0.35, b.y - r * 0.4, r * 0.12, b.x, b.y, r);
+      g.addColorStop(0, `hsl(${b.col.h},${b.col.s}%,${Math.min(88, b.col.l + 28)}%)`);
+      g.addColorStop(0.55, `hsl(${b.col.h},${b.col.s}%,${b.col.l}%)`);
+      g.addColorStop(1, `hsl(${b.col.h},${b.col.s}%,${Math.max(18, b.col.l - 22)}%)`);
+      ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+      ctx.beginPath(); ctx.ellipse(b.x - r * 0.35, b.y - r * 0.45, r * 0.3, r * 0.15, -0.6, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.fill();
+      if (mode === "lotto") {
+        ctx.beginPath(); ctx.arc(b.x, b.y, r * 0.56, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,0.94)"; ctx.fill();
+        ctx.fillStyle = "#1F2937"; ctx.font = `900 ${r * 0.6}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(b.label, b.x, b.y + 0.5);
+      } else {
+        ctx.fillStyle = "#fff"; ctx.font = `900 ${Math.max(7, r * 0.62)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(b.label).slice(0, 3), b.x, b.y + 1);
+      }
+    };
+    const drawMachine = (open: boolean) => {
+      const bg = ctx.createRadialGradient(CX, CY, 10, CX, CY, R + 60); bg.addColorStop(0, "rgba(129,140,248,0.18)"); bg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      ctx.beginPath(); ctx.arc(CX, CY, R + 5, 0, Math.PI * 2); ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 10; ctx.stroke();
+      const rim = ctx.createLinearGradient(CX - R, CY - R, CX + R, CY + R);
+      rim.addColorStop(0, "rgba(255,255,255,0.95)"); rim.addColorStop(0.5, "rgba(199,210,254,0.35)"); rim.addColorStop(1, "rgba(129,140,248,0.7)");
+      ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.strokeStyle = rim; ctx.lineWidth = 5; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(CX - R * 0.42, CY - R * 0.5, R * 0.34, R * 0.13, -0.7, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.fill();
+      for (const [px, py] of pegs()) {
+        const pg = ctx.createRadialGradient(px - 2, py - 2, 1, px, py, 7);
+        pg.addColorStop(0, "rgba(255,255,255,0.95)"); pg.addColorStop(1, "rgba(129,140,248,0.7)");
+        ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fillStyle = pg; ctx.fill();
+      }
+      for (const ja of JETS) {
+        const nx = CX + Math.cos(ja) * (R + 2), ny = CY + Math.sin(ja) * (R + 2);
+        ctx.save(); ctx.translate(nx, ny); ctx.rotate(ja);
+        ctx.fillStyle = "#818CF8"; ctx.beginPath(); (ctx as any).roundRect(-6, -11, 14, 22, 4); ctx.fill(); ctx.restore();
+        if (phase === "mix" || phase === "suck" || phase === "mixwait") {
+          for (let i = 0; i < 3; i++) {
+            const off = ((tick * 4) + i * 18) % 50;
+            const sx = CX + Math.cos(ja) * (R - 8 - off), sy = CY + Math.sin(ja) * (R - 8 - off);
+            const ex2 = CX + Math.cos(ja) * (R - 20 - off), ey2 = CY + Math.sin(ja) * (R - 20 - off);
+            ctx.strokeStyle = `rgba(165,180,252,${0.4 - off / 140})`; ctx.lineWidth = 2.2;
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex2, ey2); ctx.stroke();
+          }
+        }
+      }
+      ctx.fillStyle = "#3730A3"; ctx.beginPath(); (ctx as any).roundRect(CX - 70, CY + R + 16, 140, 16, 8); ctx.fill();
+      ctx.fillStyle = "#4338CA"; ctx.beginPath(); (ctx as any).roundRect(CX - 46, CY + R + 3, 92, 15, 6); ctx.fill();
+      ctx.fillStyle = open ? "#F59E0B" : "#64748B";
+      ctx.beginPath(); (ctx as any).roundRect(CX - 15, CY + R - 4, 30, 26, 7); ctx.fill();
+    };
+    const ballOut = (b: any) => {
+      b.out = true; drawnCnt++;
+      if (onProgress) onProgress(b.label, alive().length);
+      if (mode === "lotto") {
+        if (drawnCnt >= 6) { phase = "done"; if (onFinish) onFinish(balls.filter((x: any) => x.out).map((x: any) => x.label)); return; }
+        targetW = speedByRemain(); phase = "mixwait"; later(() => { if (phase === "mixwait") phase = "suck"; }, 5000);
+        requestAnimationFrame(step);
+      } else {
+        targetW = speedByRemain();
+        const remain = alive().length;
+        if (remain === 1) { phase = "done"; if (onFinish) onFinish(alive()[0].label); return; }
+        const delay = remain <= 3 ? 6000 : remain <= 5 ? 4000 : remain <= 10 ? 2500 : 1500;
+        phase = "mixwait"; later(() => { if (phase === "mixwait") phase = "suck"; }, delay);
+        requestAnimationFrame(step);
+      }
+    };
+    const step = () => {
+      if (stRef.current.dead) return;
+      tick++;
+      if (phase !== "idle" && phase !== "done") { drumW += (targetW - drumW) * 0.02; drumA += drumW; }
+      ctx.clearRect(0, 0, W, H);
+      const open = phase === "suck";
+      if (open) suckT++; else if (phase !== "out") suckT = 0;
+      const suckBoost = 1 + Math.min(3, suckT / 180);
+      drawMachine(open);
+      const act = alive(); const F = pegs();
+      for (const b of act) {
+        if (b === exiting) continue;
+        b.vy += 0.16;
+        if (phase === "mix" || phase === "suck" || phase === "mixwait") {
+          const blow = drumW / 0.032;
+          const ballA = Math.atan2(b.y - CY, b.x - CX); const dC = Math.hypot(b.x - CX, b.y - CY);
+          for (const ja of JETS) {
+            let da = ballA - ja; if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2;
+            if (Math.abs(da) < 0.75 && dC > R * 0.3) {
+              const power = (2.0 + rng() * 1.6) * blow * (dC / R);
+              b.vx -= Math.cos(ja) * power; b.vy -= Math.sin(ja) * power;
+              b.vx += (rng() - 0.5) * 1.2 * blow; b.vy += (rng() - 0.5) * 1.2 * blow;
+            }
+          }
+          const sp = Math.hypot(b.vx, b.vy); if (sp > 10) { b.vx *= 10 / sp; b.vy *= 10 / sp; }
+        }
+        if (open) { b.vx += (CX - b.x) * 0.0007 * suckBoost; b.vy += (CY + R - b.y) * 0.0011 * suckBoost; }
+        b.x += b.vx; b.y += b.vy;
+        const dx = b.x - CX, dy = b.y - CY, d = Math.hypot(dx, dy);
+        const nearGap = open && b.y > CY + R - 42 && Math.abs(b.x - CX) < 16;
+        if (d > R - b.r && !nearGap) {
+          const nx = dx / d, ny = dy / d; b.x = CX + nx * (R - b.r); b.y = CY + ny * (R - b.r);
+          const dot = b.vx * nx + b.vy * ny; b.vx -= 1.9 * dot * nx; b.vy -= 1.9 * dot * ny;
+          if (b.y > CY + R * 0.4 && !open) {
+            const wallV = drumW * (R - b.r);
+            b.vx = b.vx * 0.9 + (-ny) * wallV * 22 * 0.1; b.vy = b.vy * 0.9 + (nx) * wallV * 22 * 0.1;
+          } else { b.vx *= 0.97; b.vy *= 0.97; }
+        }
+        for (const [px, py] of F) {
+          const ddx = b.x - px, ddy = b.y - py, dd = Math.hypot(ddx, ddy);
+          if (dd < b.r + 6 && dd > 0) {
+            const nx2 = ddx / dd, ny2 = ddy / dd;
+            b.x = px + nx2 * (b.r + 6); b.y = py + ny2 * (b.r + 6);
+            const dot2 = b.vx * nx2 + b.vy * ny2;
+            b.vx -= 2.05 * dot2 * nx2; b.vy -= 2.05 * dot2 * ny2;
+            b.vx += (rng() - 0.5) * 0.8; b.vy += (rng() - 0.5) * 0.8;
+          }
+        }
+        if (open && nearGap && d > R - b.r && !exiting) { exiting = b; b.vx = 0; b.vy = 2.6; phase = "out"; }
+      }
+      for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) {
+        const a = act[i], c = act[j]; if (a === exiting || c === exiting) continue;
+        const dx2 = c.x - a.x, dy2 = c.y - a.y, d2 = Math.hypot(dx2, dy2), min = a.r + c.r;
+        if (d2 < min && d2 > 0) {
+          const p = (min - d2) / 2, nx = dx2 / d2, ny = dy2 / d2;
+          a.x -= nx * p; a.y -= ny * p; c.x += nx * p; c.y += ny * p;
+          const t = a.vx; a.vx = c.vx * 0.97; c.vx = t * 0.97; const t2 = a.vy; a.vy = c.vy * 0.97; c.vy = t2 * 0.97;
+        }
+      }
+      for (const b of act) { if (b !== exiting) drawBall(b); }
+      if (exiting) { exiting.y += exiting.vy; drawBall(exiting, 1.15); if (exiting.y > CY + R + 30) { const eb = exiting; exiting = null; ballOut(eb); } }
+      if (phase !== "idle" && phase !== "done") requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    later(() => { targetW = speedByRemain(); }, mode === "lotto" ? 6000 : 10000);
+    later(() => { if (phase === "mix") phase = "suck"; }, mode === "lotto" ? 6500 : 11500);
+    return () => { stRef.current.dead = true; timers.forEach(clearTimeout); };
+  }, [seed, mode]);
+  return <canvas ref={cvRef} width={360} height={330} style={{ display: "block", margin: "0 auto", maxWidth: "100%" }} />;
+}
+
 // ── 해방역 레이스 게임 ──
 
 function HaebangRaceGame({ onBack, user }: any) {
   const refs = React.useRef<any>({}).current;
   const [view, setView] = useState<string>("title");
+  const [lottoSeed, setLottoSeed] = useState<number | null>(null);
+  const [lottoNums, setLottoNums] = useState<string[]>([]);
   const [count, setCount] = useState(24);
   const [winCount, setWinCount] = useState(1);
   const [playing, setPlaying] = useState(false);
@@ -1469,8 +1634,35 @@ function HaebangRaceGame({ onBack, user }: any) {
           <div style={{textAlign:"center",marginBottom:16,fontSize:19,fontWeight:600,color:"#fff"}}>이벤트 게임</div>
           <div style={{...cardBox,cursor:"pointer"}} onClick={()=>setView("setup")}>🚇 해방역 레이스</div>
           <div style={{...cardBox,opacity:0.4}}>🪜 사다리타기 (준비중)</div>
-          <div style={{...cardBox,opacity:0.4}}>🎯 룰렛 (준비중)</div>
+          <div style={{...cardBox,cursor:"pointer"}} onClick={()=>{setLottoSeed(null);setLottoNums([]);setView("lotto");}}>🎱 로또 번호 뽑기</div>
           <button style={ghostBtn} onClick={()=>setView("title")}>← 뒤로</button>
+        </div>
+      )}
+
+      {!playing && view==="lotto" && (
+        <div>
+          <div style={{textAlign:"center",marginBottom:4,fontSize:19,fontWeight:600,color:"#fff"}}>🎱 로또 번호 뽑기</div>
+          <div style={{textAlign:"center",fontSize:11.5,color:"#A5B4FC",marginBottom:10}}>공 45개가 섞이다 6개가 나와요 · 재미로 즐겨주세요</div>
+          {lottoSeed !== null ? (
+            <>
+              <DrawMachine mode="lotto" seed={lottoSeed} onFinish={(nums: string[]) => setLottoNums(nums)} />
+              <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",minHeight:40,marginTop:10}}>
+                {lottoNums.map((n: string, i: number) => {
+                  const num = parseInt(n,10);
+                  const col = num<=10?{h:46,s:95,l:55}:num<=20?{h:210,s:85,l:52}:num<=30?{h:2,s:80,l:52}:num<=40?{h:220,s:8,l:45}:{h:135,s:65,l:40};
+                  return <div key={i} style={{width:38,height:38,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:`radial-gradient(circle at 32% 30%, hsl(${col.h},${col.s}%,${Math.min(85,col.l+22)}%), hsl(${col.h},${col.s}%,${col.l}%) 60%, hsl(${col.h},${col.s}%,${Math.max(20,col.l-18)}%))`}}>
+                    <span style={{background:"rgba(255,255,255,0.94)",color:"#1F2937",borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900}}>{n}</span>
+                  </div>;
+                })}
+              </div>
+              {lottoNums.length >= 6 && (
+                <button onClick={()=>{setLottoNums([]);setLottoSeed(crypto.getRandomValues(new Uint32Array(1))[0]);}} style={{margin:"14px auto 0",display:"block",background:"linear-gradient(135deg,#F59E0B,#F97316)",color:"#fff",border:"none",borderRadius:12,padding:"12px 40px",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>🔄 다시 뽑기</button>
+              )}
+            </>
+          ) : (
+            <button onClick={()=>setLottoSeed(crypto.getRandomValues(new Uint32Array(1))[0])} style={{margin:"30px auto",display:"block",background:"linear-gradient(135deg,#F59E0B,#F97316)",color:"#fff",border:"none",borderRadius:12,padding:"14px 46px",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>🎱 추첨 시작</button>
+          )}
+          <button style={ghostBtn} onClick={()=>{setLottoSeed(null);setView("list");}}>← 게임 목록</button>
         </div>
       )}
 
@@ -11668,13 +11860,59 @@ function PointRuleSettings() {
 }
 
 // 🎁 포인트 추첨 (관리자) — 상품은 이번 달 등록, 추첨은 매달 1일 "전월 TOP20" 대상 · point_draw 표
+// 🎡 룰렛 원판 — names 칸으로 원판을 그리고, winnerIdx 칸에 감속하며 멈춤
+function RouletteWheel({ names, winnerIdx, spinning, done }: any) {
+  const n = names.length;
+  const seg = 360 / n;
+  const size = 280;
+  const c = size / 2;
+  const r = c - 4;
+  // 최종 회전 = 5바퀴 + (12시 포인터에 당첨 칸 중심이 오도록)
+  const finalRot = 360 * 5 + (360 - (winnerIdx * seg + seg / 2));
+  const rot = spinning || done ? finalRot : 0;
+  const colors = ["#4F46E5", "#6D28D9", "#7C3AED", "#818CF8"];
+  const polar = (angleDeg: number, radius: number) => {
+    const a = ((angleDeg - 90) * Math.PI) / 180;
+    return [c + radius * Math.cos(a), c + radius * Math.sin(a)];
+  };
+  return (
+    <div style={{ position: "relative", width: size, margin: "0 auto" }}>
+      <div style={{ position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)", zIndex: 2, fontSize: 22 }}>🔻</div>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: `rotate(${rot}deg)`, transition: spinning || done ? "transform 4.2s cubic-bezier(0.12, 0.8, 0.08, 1)" : "none" }}>
+        {names.map((nm: string, i: number) => {
+          const a0 = i * seg;
+          const a1 = (i + 1) * seg;
+          const [x0, y0] = polar(a0, r);
+          const [x1, y1] = polar(a1, r);
+          const large = seg > 180 ? 1 : 0;
+          const mid = a0 + seg / 2;
+          const [tx, ty] = polar(mid, r * 0.68);
+          const isWin = done && i === winnerIdx;
+          return (
+            <g key={i}>
+              <path d={`M ${c} ${c} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`} fill={isWin ? "#F59E0B" : colors[i % colors.length]} stroke="#fff" strokeWidth="1.5" />
+              <text x={tx} y={ty} fill="#fff" fontSize={n > 14 ? 9 : 11} fontWeight="700" textAnchor="middle" dominantBaseline="middle" transform={`rotate(${mid}, ${tx}, ${ty})`}>{String(nm).slice(0, 4)}</text>
+            </g>
+          );
+        })}
+        <circle cx={c} cy={c} r={26} fill="#fff" stroke="#E5E7EB" strokeWidth="2" />
+        <text x={c} y={c} fontSize="18" textAnchor="middle" dominantBaseline="central">🎁</text>
+      </svg>
+    </div>
+  );
+}
+
+// 🎁 포인트 추첨 (관리자) — 상품은 이번 달 등록, 추첨은 매달 1일 "전월 TOP20" 서바이벌 추첨기
 function PointDrawAdmin({ rows }: any) {
   const [open, setOpen] = React.useState(false);
   const [prize, setPrize] = React.useState("");
-  const [prevDraw, setPrevDraw] = React.useState<any>(null); // 전월(추첨 대상) 기록
-  const [prevPool, setPrevPool] = React.useState<any[]>([]); // 전월 TOP20
-  const [spinning, setSpinning] = React.useState(false);
-  const [spinName, setSpinName] = React.useState("");
+  const [prevDraw, setPrevDraw] = React.useState<any>(null);
+  const [prevPool, setPrevPool] = React.useState<any[]>([]);
+  const [runSeed, setRunSeed] = React.useState<number | null>(null);
+  const [verifyMode, setVerifyMode] = React.useState(false);
+  const [outSet, setOutSet] = React.useState<any>({});
+  const [statusMsg, setStatusMsg] = React.useState("");
+  const [winLabel, setWinLabel] = React.useState("");
   const _n = new Date();
   const ym = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}`;
   const _p = new Date(_n.getFullYear(), _n.getMonth() - 1, 1);
@@ -11686,7 +11924,6 @@ function PointDrawAdmin({ rows }: any) {
       if (d.year_month === ym && d.prize) setPrize(d.prize);
       if (d.year_month === prevYm) setPrevDraw(d);
     });
-    // 전월 TOP20 풀 계산 (지회장·결원 제외)
     const start = new Date(_p.getFullYear(), _p.getMonth(), 1).toISOString();
     const end = new Date(_n.getFullYear(), _n.getMonth(), 1).toISOString();
     const { data: pts } = await supabase.from("user_points").select("employee_number, point, created_at").gte("created_at", start).lt("created_at", end);
@@ -11711,24 +11948,44 @@ function PointDrawAdmin({ rows }: any) {
     load();
   };
 
-  const spin = async () => {
+  const seedToCode = (s: number) => (s >>> 0).toString(36).toUpperCase().padStart(7, "0");
+
+  const startDraw = async () => {
     if (prevPool.length === 0) { showToast("전월 추첨 대상(TOP20)이 없어요.", "error"); return; }
     if (!prevDraw?.prize) { showToast(`전월(${prevYm})에 등록된 상품이 없어요.`, "error"); return; }
     if (prevDraw?.winner_emp) { showToast("전월 추첨은 이미 완료됐어요.", "error"); return; }
-    if (!window.confirm(`${prevYm} TOP ${prevPool.length}명 중 1명을 추첨합니다.\n결과는 되돌릴 수 없어요. 진행할까요?`)) return;
-    setSpinning(true);
-    const winner: any = prevPool[Math.floor(Math.random() * prevPool.length)];
-    let t = 0;
-    const iv = setInterval(() => { setSpinName(prevPool[t % prevPool.length].name); t++; }, 80);
-    setTimeout(async () => {
-      clearInterval(iv);
-      setSpinName(winner.name);
-      const { error } = await supabase.from("point_draw").upsert({ year_month: prevYm, prize: prevDraw.prize, winner_emp: winner.emp, winner_name: winner.name, drawn_at: new Date().toISOString() }, { onConflict: "year_month" });
-      setSpinning(false);
-      if (error) { showToast("추첨 저장 실패: " + error.message, "error"); return; }
-      showToast(`🎉 ${winner.name} 님 당첨!`);
-      load();
-    }, 2600);
+    if (!window.confirm(`${prevYm} TOP ${prevPool.length}명 서바이벌 추첨을 시작합니다.\n추첨 코드가 먼저 서버에 기록되고, 결과는 되돌릴 수 없어요.`)) return;
+    const s = crypto.getRandomValues(new Uint32Array(1))[0];
+    // ★ 조작 방지: 결과가 나오기 전에 추첨 코드를 서버에 먼저 기록
+    const { error } = await supabase.from("point_draw").upsert({ year_month: prevYm, prize: prevDraw.prize, draw_seed: String(s) }, { onConflict: "year_month" });
+    if (error) { showToast("추첨 코드 기록 실패: " + error.message, "error"); return; }
+    setOutSet({}); setWinLabel(""); setVerifyMode(false); setStatusMsg("공 섞는 중…");
+    setRunSeed(s);
+  };
+
+  const replay = () => {
+    const s = parseInt(prevDraw?.draw_seed || "0", 10);
+    if (!s) { showToast("저장된 추첨 코드가 없어요.", "error"); return; }
+    setOutSet({}); setWinLabel(""); setVerifyMode(true); setStatusMsg("검증 재현 중…");
+    setRunSeed(null); setTimeout(() => setRunSeed(s), 50);
+  };
+
+  const onProgress = (label: string, remain: number) => {
+    setOutSet((o: any) => ({ ...o, [label]: true }));
+    setStatusMsg(`탈락 ${prevPool.length - remain}명 · 남은 인원 ${remain}명`);
+  };
+  const onFinish = async (winner: string) => {
+    setWinLabel(winner); setStatusMsg("");
+    if (verifyMode) {
+      const match = winner === prevDraw?.winner_name;
+      showToast(match ? "✅ 검증 성공 — 저장된 당첨자와 동일해요!" : "⚠️ 검증 불일치!", match ? "success" : "error");
+      return;
+    }
+    const w = prevPool.find((p: any) => p.name === winner);
+    const { error } = await supabase.from("point_draw").upsert({ year_month: prevYm, prize: prevDraw.prize, draw_seed: prevDraw?.draw_seed || null, winner_emp: w?.emp || "", winner_name: winner, drawn_at: new Date().toISOString() }, { onConflict: "year_month" });
+    if (error) { showToast("결과 저장 실패: " + error.message, "error"); return; }
+    showToast(`🎉 ${winner} 님 당첨!`);
+    load();
   };
 
   return (
@@ -11744,21 +12001,36 @@ function PointDrawAdmin({ rows }: any) {
             <input value={prize} onChange={(e) => setPrize(e.target.value)} placeholder="상품명 (예: 커피 기프티콘 3만원권)" style={{ flex: 1, padding: "10px 12px", borderRadius: 9, border: "1px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }} />
             <button onClick={savePrize} style={{ padding: "10px 14px", borderRadius: 9, border: "none", background: "#F3F4F6", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>등록</button>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>② 전월({prevYm}) 추첨 — 매달 1일 진행</div>
-          <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 10 }}>전월 TOP {prevPool.length}명 대상 · 전월 상품: {prevDraw?.prize || "미등록"}</div>
-          {spinning || spinName ? (
-            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: 18, textAlign: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 26, marginBottom: 4 }}>🎡</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: spinning ? "#9CA3AF" : "#4F46E5" }}>{spinName}</div>
-              {!spinning && spinName && <div style={{ fontSize: 12, color: "#059669", fontWeight: 700, marginTop: 4 }}>🎉 당첨!</div>}
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>② 전월({prevYm}) 서바이벌 추첨 — 매달 1일 진행</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 10 }}>TOP {prevPool.length}명 · 공이 하나씩 탈락, 최후 1인 당첨 · 전월 상품: {prevDraw?.prize || "미등록"}</div>
+          {runSeed !== null && (
+            <div style={{ background: "linear-gradient(180deg,#1E1B4B,#312E81)", borderRadius: 16, padding: "12px 6px", marginBottom: 10 }}>
+              <DrawMachine mode="event" names={prevPool.map((p: any) => p.name)} seed={runSeed} onProgress={onProgress} onFinish={onFinish} />
+              <div style={{ textAlign: "center", color: "#C7D2FE", fontSize: 12, fontWeight: 700, minHeight: 16, marginTop: 4 }}>{statusMsg}</div>
+              <div style={{ textAlign: "center", color: "#818CF8", fontSize: 10.5, marginTop: 4 }}>🔒 추첨 코드 <b>{seedToCode(runSeed)}</b> — 시작 전 서버 기록{verifyMode ? " · 검증 재현" : ""}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 5, marginTop: 10, padding: "0 6px" }}>
+                {prevPool.map((p: any) => {
+                  const isWin = winLabel === p.name;
+                  const isOut = outSet[p.name];
+                  return <div key={p.emp} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, borderRadius: 8, padding: "6px 2px", transition: "all 0.4s", color: isWin ? "#78350F" : isOut ? "#4C4A78" : "#E0E7FF", background: isWin ? "linear-gradient(135deg,#FDE68A,#F59E0B)" : isOut ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.09)", textDecoration: isOut && !isWin ? "line-through" : "none" }}>{p.name}</div>;
+                })}
+              </div>
+              {winLabel && <div style={{ textAlign: "center", color: "#FBBF24", fontSize: 15, fontWeight: 800, marginTop: 10 }}>🏆 최후의 1인: {winLabel} 님!</div>}
             </div>
-          ) : null}
+          )}
           {prevDraw?.winner_name ? (
-            <div style={{ background: "#ECFDF5", color: "#059669", border: "1.5px solid #6EE7B7", borderRadius: 12, padding: 13, textAlign: "center", fontWeight: 800, fontSize: 13 }}>
-              ✅ {prevDraw.winner_name} 님 당첨 · {prevDraw.prize}
-            </div>
+            <>
+              <div style={{ background: "#ECFDF5", color: "#059669", border: "1.5px solid #6EE7B7", borderRadius: 12, padding: 13, textAlign: "center", fontWeight: 800, fontSize: 13 }}>
+                ✅ {prevDraw.winner_name} 님 당첨 · {prevDraw.prize}
+              </div>
+              {prevDraw?.draw_seed && (
+                <button onClick={replay} style={{ width: "100%", marginTop: 8, padding: 11, borderRadius: 10, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🔍 추첨 코드로 재현 (검증)</button>
+              )}
+            </>
           ) : (
-            <button onClick={spin} disabled={spinning} style={{ width: "100%", padding: 13, borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", opacity: spinning ? 0.6 : 1 }}>{spinning ? "룰렛 도는 중…" : "🎡 전월 룰렛 돌리기"}</button>
+            runSeed === null && (
+              <button onClick={startDraw} style={{ width: "100%", padding: 13, borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>🎱 전월 서바이벌 추첨 시작</button>
+            )
           )}
         </div>
       )}
