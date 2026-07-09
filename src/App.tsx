@@ -28220,6 +28220,16 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
   const [myRank, setMyRank] = React.useState<any>(null);
   const [top20, setTop20] = React.useState<any[]>([]);
   const [showTop20, setShowTop20] = React.useState(false);
+  const [monthPrize, setMonthPrize] = React.useState<any>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const ym = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+        const { data } = await supabase.from("point_draw").select("prize, winner_name").eq("year_month", ym).maybeSingle();
+        if (data && data.prize) setMonthPrize(data);
+      } catch (e) {}
+    })();
+  }, []);
 
   React.useEffect(() => {
     (async () => {
@@ -28248,7 +28258,7 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
       const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
       const myIdx = ranked.findIndex((r) => r.emp === myId);
       setMyRank(myIdx >= 0 ? { rank: myIdx + 1, total: ranked[myIdx].total } : null);
-      setTopUsers(ranked.slice(0, 3).map((r, i) => ({ rank: i + 1, emp: r.emp, total: r.total, isMe: r.emp === myId })));
+      setTopUsers(ranked.slice(0, 3).map((r, i) => ({ rank: i + 1, emp: r.emp, name: r.name, total: r.total, isMe: r.emp === myId })));
       setTop20(ranked.slice(0, 20).map((r, i) => ({ ...r, rank: i + 1, isMe: r.emp === myId })));
     })();
   }, [user]);
@@ -28303,13 +28313,16 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
         topUsers.map((u) => (
           <div key={u.rank} style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 0", fontSize: 12, color: "#1F2937" }}>
             <span>{u.rank === 1 ? "🥇" : u.rank === 2 ? "🥈" : "🥉"}</span>
-            <span style={{ flex: 1, fontWeight: u.isMe ? 800 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.isMe ? "나" : `조합원 ${["A","B","C"][u.rank-1]}`}</span>
+            <span style={{ flex: 1, fontWeight: u.isMe ? 800 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}{u.isMe ? " (나)" : ""}</span>
             <span style={{ fontWeight: 700, color: "#B45309" }}>{u.total}P</span>
           </div>
         ))
       )}
       {myRank && myRank.rank > 3 && (
         <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 4, paddingTop: 4, fontSize: 11, color: "#6B7280", fontWeight: 700 }}>내 순위 {myRank.rank}위 ({myRank.total}P)</div>
+      )}
+      {monthPrize && !monthPrize.winner_name && (
+        <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 4, paddingTop: 5, fontSize: 11, color: "#B45309", fontWeight: 700, lineHeight: 1.4 }}>🎁 이달의 상품: {monthPrize.prize}<br /><span style={{ color: "#9CA3AF", fontWeight: 500 }}>TOP 20 중 말일 추첨 1명</span></div>
       )}
     </div>
     {showTop20 && (
@@ -28320,6 +28333,9 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
             <span style={{ fontSize: 11, color: "#9CA3AF" }}>{new Date().getMonth() + 1}월 · 실시간</span>
           </div>
           <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 10 }}>지회장은 순위·추첨에서 제외돼요</div>
+          {monthPrize && !monthPrize.winner_name && (
+            <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "9px 12px", marginBottom: 10, fontSize: 12, color: "#B45309", fontWeight: 700, lineHeight: 1.5 }}>🎁 이달의 상품: {monthPrize.prize}<br /><span style={{ fontWeight: 500, color: "#D97706" }}>TOP 20에 들면 말일 룰렛 추첨 자동 응모!</span></div>
+          )}
           {top20.map((r: any, i: number) => (
             <div key={r.emp} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px", background: r.isMe ? "#EEF2FF" : i < 3 ? "#FFFBEB" : "transparent", borderRadius: r.isMe || i < 3 ? 8 : 0, borderBottom: !r.isMe && i >= 3 ? "1px solid #F9FAFB" : "none" }}>
               <span style={{ width: 22, textAlign: "center", fontSize: i < 3 ? 15 : 12, fontWeight: 700, color: "#9CA3AF" }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
@@ -28413,16 +28429,20 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         .select("employee_number, point, created_at")
         .gte("created_at", monthStart);
       if (!data) return;
-      const { data: memU } = await supabase.from("members").select("employee_number, is_union");
+      const { data: memU } = await supabase.from("members").select("employee_number, is_union, is_owner, name");
       const unionSet = new Set<string>();
-      (memU || []).forEach((m: any) => { if (m.is_union === true) unionSet.add(String(m.employee_number)); });
+      const nameMap: any = {};
+      (memU || []).forEach((m: any) => {
+        if (m.is_union === true && m.is_owner !== true && !String(m.name || "").includes("결원")) unionSet.add(String(m.employee_number));
+        nameMap[String(m.employee_number)] = m.name;
+      });
       const sums: any = {};
       data.forEach((r: any) => {
         sums[r.employee_number] = (sums[r.employee_number] || 0) + (r.point || 0);
       });
       const ranked = Object.entries(sums)
         .filter(([emp]) => unionSet.has(String(emp)))
-        .map(([emp, total]) => ({ emp, total: total as number }))
+        .map(([emp, total]) => ({ emp, name: nameMap[String(emp)] || "(미등록)", total: total as number }))
         .sort((a, b) => b.total - a.total);
       const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
       const myIdx = ranked.findIndex((r) => r.emp === myId);
@@ -28431,6 +28451,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
         ranked.slice(0, 3).map((r, i) => ({
           rank: i + 1,
           emp: r.emp,
+          name: r.name,
           total: r.total,
           isMe: r.emp === myId,
         }))
@@ -28780,7 +28801,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
                   </span>
                   <span style={{ fontWeight: 600 }}>{u.rank}위</span>
                   <span style={{ flex: 1, fontWeight: u.isMe ? 800 : 500 }}>
-                    {u.isMe ? "나" : `조합원 ${["A", "B", "C"][u.rank - 1]}`}
+                    {u.name}{u.isMe ? " (나)" : ""}
                   </span>
                   <span style={{ fontWeight: 700 }}>{u.total}P</span>
                 </div>
