@@ -11502,8 +11502,6 @@ function PointRankingAdmin() {
   const [period, setPeriod] = React.useState<"this" | "last" | "year">("last");
   const [rows, setRows] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [awarding, setAwarding] = React.useState(false);
-  const [awardedMonths, setAwardedMonths] = React.useState<string[]>([]);
 
   // 기간별 시작/끝 계산
   const now = new Date();
@@ -11548,32 +11546,8 @@ function PointRankingAdmin() {
     setLoading(false);
   };
 
-  const loadAwarded = async () => {
-    const { data } = await supabase.from("point_award").select("year_month");
-    setAwardedMonths((data || []).map((r: any) => r.year_month));
-  };
-
   React.useEffect(() => { loadRanking(); }, [period]);
-  React.useEffect(() => { loadAwarded(); }, []);
 
-  const handleAward = async () => {
-    if (rows.length === 0) { showToast("1등이 없어요.", "error"); return; }
-    const champ = rows[0];
-    if (!window.confirm(`${range.ym} 1등 "${champ.name}" 조합원에게 상품 지급 완료 처리할까요?\n홈 화면에 축하 메시지가 하루 동안 표시됩니다.`)) return;
-    setAwarding(true);
-    const { error } = await supabase.from("point_award").insert({
-      year_month: range.ym,
-      employee_number: String(champ.emp),
-      member_name: champ.name,
-      point: champ.total,
-    });
-    setAwarding(false);
-    if (error) { showToast("처리 실패: " + error.message, "error"); return; }
-    showToast("상품 지급 완료! 홈 화면에 축하 메시지가 표시됩니다.");
-    loadAwarded();
-  };
-
-  const alreadyAwarded = range.ym && awardedMonths.includes(range.ym);
   const champ = rows[0];
 
   return (
@@ -11601,23 +11575,11 @@ function PointRankingAdmin() {
           {champ && (
             <div style={{ background: period === "year" ? "linear-gradient(135deg,#7C3AED,#6D28D9)" : "linear-gradient(135deg,#FBBF24,#F59E0B)", borderRadius: 18, padding: 17, color: "#fff", marginBottom: 10, position: "relative", overflow: "hidden" }}>
               <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 7 }}>
-                {period === "this" ? "👑 이번 달 1등 (진행 중)" : period === "last" ? "👑 전월 1등 · 상품 증정 대상" : "🏅 1년 누적 1등 (연말 시상 후보)"}
+                {period === "this" ? "👑 이번 달 1등 (진행 중)" : period === "last" ? "👑 전월 1등" : "🏅 1년 누적 1등"}
               </div>
               <div style={{ fontSize: 22, fontWeight: 800 }}>{champ.name}</div>
               <div style={{ fontSize: 25, fontWeight: 800, marginTop: 8 }}>{champ.total}P</div>
             </div>
-          )}
-
-          {period === "last" && (
-            alreadyAwarded ? (
-              <div style={{ background: "#ECFDF5", color: "#059669", border: "1.5px solid #6EE7B7", borderRadius: 12, padding: 13, textAlign: "center", fontWeight: 800, fontSize: 13, marginBottom: 16 }}>
-                ✅ 이미 상품 지급 완료된 달이에요
-              </div>
-            ) : (
-              <button onClick={handleAward} disabled={awarding} style={{ width: "100%", padding: 14, borderRadius: 12, background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", border: "none", fontSize: 14, fontWeight: 800, cursor: "pointer", marginBottom: 16, fontFamily: "inherit" }}>
-                {awarding ? "처리 중…" : "✅ 상품 지급 완료 처리"}
-              </button>
-            )
           )}
 
           <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
@@ -28441,7 +28403,6 @@ function HomeCarousel({
   }, []);
 const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const [myRank, setMyRank] = React.useState<any>(null);
-  const [awardWinner, setAwardWinner] = React.useState<any>(null);
 
   React.useEffect(() => {
     const loadTop = async () => {
@@ -28513,19 +28474,6 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
       setRecentActs(acts.map((a: any) => ({ ...a, count: cnt[a.id] || 0 })));
     };
     loadActs();
-  }, []);
-  React.useEffect(() => {
-    const loadAward = async () => {
-      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await supabase
-        .from("point_award")
-        .select("*")
-        .gte("awarded_at", dayAgo)
-        .order("awarded_at", { ascending: false })
-        .limit(1);
-      if (data && data.length > 0) setAwardWinner(data[0]);
-    };
-    loadAward();
   }, []);
     const [index, setIndex] = React.useState(1);
   // 팁 카드 슬라이드에 도착할 때마다 다음 팁으로 교체
@@ -28933,15 +28881,6 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>호봉 승급을 축하합니다</div>
           <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{promoToday.name} 조합원님</div>
           <div style={{ fontSize: 12, opacity: 0.9 }}>오늘부터 {promoToday.step}호봉 적용 🎉</div>
-        </div>
-      )}
-
-      {awardWinner && (
-        <div style={{ background: "linear-gradient(135deg,#F59E0B,#EF4444)", borderRadius: 14, padding: "16px 18px", color: "#fff", textAlign: "center", marginBottom: 10, position: "relative", overflow: "hidden" }}>
-          <div style={{ fontSize: 26, marginBottom: 4 }}>🎉🏆🎉</div>
-          <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.95 }}>{Number(awardWinner.year_month.split("-")[1])}월 포인트왕</div>
-          <div style={{ fontSize: 18, fontWeight: 800, margin: "3px 0" }}>{awardWinner.member_name} 조합원님</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>축하합니다! 🎁 상품이 전달됩니다</div>
         </div>
       )}
 
