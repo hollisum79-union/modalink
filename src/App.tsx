@@ -11628,8 +11628,52 @@ function PointRankingAdmin() {
               </div>
             ))}
           </div>
+          <PointRuleSettings />
         </>
       )}
+    </div>
+  );
+}
+
+// ⚙️ 포인트 기준 설정 (관리자) — point_settings 표
+function PointRuleSettings() {
+  const [vals, setVals] = React.useState<any>(() => {
+    const o: any = {};
+    Object.entries(getPointRules()).forEach(([k, r]: any) => { o[k] = { point: String(r.point), max: String(r.maxPerDay) }; });
+    return o;
+  });
+  const [saving, setSaving] = React.useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const rows = Object.entries(vals).map(([k, v]: any) => ({
+        key: k,
+        point: parseInt(v.point, 10) || 0,
+        max_per_day: parseInt(v.max, 10) || 0,
+      }));
+      const { error } = await supabase.from("point_settings").upsert(rows, { onConflict: "key" });
+      if (error) throw error;
+      await loadPointRules();
+      showToast("포인트 기준을 저장했어요.");
+    } catch (e: any) {
+      showToast("저장 실패: " + (e?.message || e), "error");
+    }
+    setSaving(false);
+  };
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginTop: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 4 }}>⚙️ 포인트 기준 설정</div>
+      <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 12 }}>항목별 지급 포인트와 하루 한도를 바꿀 수 있어요 · 저장 즉시 적용</div>
+      {Object.entries(POINT_RULES).map(([k, r]: any) => (
+        <div key={k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+          <span style={{ flex: 1, fontSize: 13, color: "#374151" }}>{r.label}</span>
+          <input value={vals[k]?.point ?? ""} onChange={(e) => setVals({ ...vals, [k]: { ...vals[k], point: e.target.value.replace(/[^0-9]/g, "") } })} inputMode="numeric" style={{ width: 46, padding: "6px 4px", borderRadius: 7, border: "1px solid #E5E7EB", fontSize: 13, textAlign: "center", fontFamily: "inherit" }} />
+          <span style={{ fontSize: 11, color: "#9CA3AF" }}>P ·</span>
+          <input value={vals[k]?.max ?? ""} onChange={(e) => setVals({ ...vals, [k]: { ...vals[k], max: e.target.value.replace(/[^0-9]/g, "") } })} inputMode="numeric" style={{ width: 40, padding: "6px 4px", borderRadius: 7, border: "1px solid #E5E7EB", fontSize: 13, textAlign: "center", fontFamily: "inherit" }} />
+          <span style={{ fontSize: 11, color: "#9CA3AF" }}>회/일</span>
+        </div>
+      ))}
+      <button onClick={save} disabled={saving} style={{ width: "100%", marginTop: 12, padding: 12, borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>{saving ? "저장 중..." : "저장"}</button>
     </div>
   );
 }
@@ -11869,7 +11913,7 @@ function FieldRanking() {
       });
       const ranked = Object.entries(byEmp)
         .map(([emp, v]: any) => ({ emp, name: nameMap[emp] || "(미등록)", count: v.count, total: v.total, list: v.list.sort((x: any, y: any) => String(y.activity_date || "").localeCompare(String(x.activity_date || ""))) }))
-        .sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name), "ko"));
+        .sort((a, b) => b.count - a.count || b.total - a.total || String(a.name).localeCompare(String(b.name), "ko"));
       setRows(ranked);
       setLoading(false);
     })();
@@ -14946,6 +14990,25 @@ const POINT_RULES = {
   comment: { label: "댓글 작성", point: 5, maxPerDay: 10 },
   unionEvent: { label: "조합 일정 참여", point: 35, maxPerDay: 999, manual: true },
 };
+// 관리자 설정(point_settings 표)이 있으면 그 값으로 덮어씀. 없으면 위 기본값.
+let POINT_RULES_LIVE: any = { ...POINT_RULES };
+async function loadPointRules() {
+  try {
+    const { data } = await supabase.from("point_settings").select("key, point, max_per_day");
+    if (data && data.length) {
+      const merged: any = { ...POINT_RULES };
+      data.forEach((r: any) => {
+        if (merged[r.key]) {
+          merged[r.key] = { ...merged[r.key], point: Number(r.point) || 0, maxPerDay: Number(r.max_per_day) || 0 };
+        }
+      });
+      POINT_RULES_LIVE = merged;
+    }
+  } catch (e) {}
+}
+function getPointRules() {
+  return POINT_RULES_LIVE;
+}
 function getPointKey(empId) {
   return `points_${String(empId)}`;
 }
@@ -14974,8 +15037,9 @@ function savePointData(empId, data) {
 }
 
 async function addPoint(empId, actionKey, ref?) {
-  if (!POINT_RULES[actionKey]) return null;
-  const rule = POINT_RULES[actionKey];
+  const RULES = getPointRules();
+  if (!RULES[actionKey]) return null;
+  const rule = RULES[actionKey];
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -28100,6 +28164,8 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
   const [showAllCond, setShowAllCond] = React.useState(false);
   const [topUsers, setTopUsers] = React.useState<any[]>([]);
   const [myRank, setMyRank] = React.useState<any>(null);
+  const [top20, setTop20] = React.useState<any[]>([]);
+  const [showTop20, setShowTop20] = React.useState(false);
 
   React.useEffect(() => {
     (async () => {
@@ -28114,16 +28180,22 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const { data } = await supabase.from("user_points").select("employee_number, point, created_at").gte("created_at", monthStart);
       if (!data) return;
-      const { data: memU } = await supabase.from("members").select("employee_number, is_union");
+      const { data: memU } = await supabase.from("members").select("employee_number, is_union, is_owner, name");
       const unionSet = new Set<string>();
-      (memU || []).forEach((m: any) => { if (m.is_union === true) unionSet.add(String(m.employee_number)); });
+      const nameMap: any = {};
+      (memU || []).forEach((m: any) => {
+        // 지회장(owner)은 순위·추첨에서 제외 — 차순위가 자리를 채움
+        if (m.is_union === true && m.is_owner !== true) unionSet.add(String(m.employee_number));
+        nameMap[String(m.employee_number)] = m.name;
+      });
       const sums: any = {};
       data.forEach((r: any) => { sums[r.employee_number] = (sums[r.employee_number] || 0) + (r.point || 0); });
-      const ranked = Object.entries(sums).filter(([emp]) => unionSet.has(String(emp))).map(([emp, total]) => ({ emp, total: total as number })).sort((a, b) => b.total - a.total);
+      const ranked = Object.entries(sums).filter(([emp]) => unionSet.has(String(emp))).map(([emp, total]) => ({ emp, name: nameMap[String(emp)] || "(미등록)", total: total as number })).sort((a, b) => b.total - a.total);
       const myId = String(user?.employee_number || user?.emp_id || user?.id || "");
       const myIdx = ranked.findIndex((r) => r.emp === myId);
       setMyRank(myIdx >= 0 ? { rank: myIdx + 1, total: ranked[myIdx].total } : null);
       setTopUsers(ranked.slice(0, 3).map((r, i) => ({ rank: i + 1, emp: r.emp, total: r.total, isMe: r.emp === myId })));
+      setTop20(ranked.slice(0, 20).map((r, i) => ({ ...r, rank: i + 1, isMe: r.emp === myId })));
     })();
   }, [user]);
 
@@ -28165,8 +28237,12 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
   }
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #ECECF3", borderRadius: 16, padding: 12, minWidth: 0 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#B45309", marginBottom: 8 }}>🏆 활동 TOP3</div>
+    <>
+    <div onClick={() => top20.length > 0 && setShowTop20(true)} style={{ background: "#fff", border: "1px solid #ECECF3", borderRadius: 16, padding: 12, minWidth: 0, cursor: "pointer" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#B45309" }}>🏆 활동 TOP3</span>
+        {top20.length > 0 && <span style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700 }}>TOP20 ›</span>}
+      </div>
       {topUsers.length === 0 ? (
         <div style={{ fontSize: 12, color: "#9CA3AF" }}>집계된 활동이 없어요</div>
       ) : (
@@ -28182,6 +28258,33 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
         <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 4, paddingTop: 4, fontSize: 11, color: "#6B7280", fontWeight: 700 }}>내 순위 {myRank.rank}위 ({myRank.total}P)</div>
       )}
     </div>
+    {showTop20 && (
+      <div onClick={() => setShowTop20(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 20 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: "18px 16px", width: "100%", maxWidth: 340, maxHeight: "75vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>🏆 이달의 TOP 20</span>
+            <span style={{ fontSize: 11, color: "#9CA3AF" }}>{new Date().getMonth() + 1}월 · 실시간</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 10 }}>지회장은 순위·추첨에서 제외돼요</div>
+          {top20.map((r: any, i: number) => (
+            <div key={r.emp} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px", background: r.isMe ? "#EEF2FF" : i < 3 ? "#FFFBEB" : "transparent", borderRadius: r.isMe || i < 3 ? 8 : 0, borderBottom: !r.isMe && i >= 3 ? "1px solid #F9FAFB" : "none" }}>
+              <span style={{ width: 22, textAlign: "center", fontSize: i < 3 ? 15 : 12, fontWeight: 700, color: "#9CA3AF" }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: r.isMe ? 800 : 500, color: r.isMe ? "#4F46E5" : "#1F2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{r.isMe ? " (나)" : ""}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: r.isMe ? "#4F46E5" : "#6B7280" }}>{r.total}P</span>
+            </div>
+          ))}
+          {myRank && myRank.rank > 20 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px", background: "#EEF2FF", borderRadius: 8, marginTop: 6 }}>
+              <span style={{ width: 22, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{myRank.rank}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 800, color: "#4F46E5" }}>나</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>{myRank.total}P</span>
+            </div>
+          )}
+          <button onClick={() => setShowTop20(false)} style={{ width: "100%", marginTop: 12, padding: 12, borderRadius: 10, border: "1.5px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -28838,7 +28941,7 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
             </div>
             <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>활동하면 포인트가 쌓여요. 순위는 매월 1일 0시에 초기화돼요.</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {Object.values(POINT_RULES).map((r: any, i: number) => (
+              {Object.values(getPointRules()).map((r: any, i: number) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: "#F9FAFB", borderRadius: 12 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#1F2937" }}>{r.label}</div>
@@ -30784,9 +30887,9 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         if (data) setHomeShiftBase(data);
       });
   }, []);
-  // 앱 접속 포인트
+  // 앱 접속 포인트 (관리자 설정 규칙 먼저 로드)
   React.useEffect(() => {
-    if (user) addPoint(getUserId(user), "access");
+    if (user) loadPointRules().then(() => addPoint(getUserId(user), "access"));
   }, [user]);
 
   // 화면별 포인트 적립
