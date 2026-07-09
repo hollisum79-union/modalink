@@ -7882,7 +7882,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                                             자료 {fileCount}개
                     </div>
                   </div>
-                  {cat.id.startsWith("cat_") && (
+                  {isAdmin && cat.id.startsWith("cat_") && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRenameCategory(cat); }}
                       style={{ border: "none", background: "#F3F4F6", color: "#4F46E5", fontSize: 12, fontWeight: 700, padding: "6px 10px", borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
@@ -7890,7 +7890,7 @@ const [showAddCat, setShowAddCat] = useState(false);
                                            이름변경
                     </button>
                   )}
-                  {cat.id.startsWith("cat_") && (
+                  {isAdmin && cat.id.startsWith("cat_") && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat); }}
                       style={{ border: "none", background: "#FEE2E2", color: "#EF4444", fontSize: 12, fontWeight: 700, padding: "6px 10px", borderRadius: 8, cursor: "pointer", flexShrink: 0 }}
@@ -11843,7 +11843,7 @@ function FieldRanking() {
 
   React.useEffect(() => {
     (async () => {
-      const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString();
+      const yearStart = `${new Date().getFullYear()}-01-01`;
       const { data: parts } = await supabase
         .from("field_participants")
         .select("employee_number, activity_id, created_at")
@@ -11869,7 +11869,7 @@ function FieldRanking() {
       });
       const ranked = Object.entries(byEmp)
         .map(([emp, v]: any) => ({ emp, name: nameMap[emp] || "(미등록)", count: v.count, total: v.total, list: v.list.sort((x: any, y: any) => String(y.activity_date || "").localeCompare(String(x.activity_date || ""))) }))
-        .sort((a, b) => b.total - a.total);
+        .sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name), "ko"));
       setRows(ranked);
       setLoading(false);
     })();
