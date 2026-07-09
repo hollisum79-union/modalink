@@ -11604,6 +11604,17 @@ function PointRankingAdmin() {
 // ⚙️ 포인트 기준 설정 (관리자) — point_settings 표 · 접이식
 function PointRuleSettings() {
   const [open, setOpen] = React.useState(false);
+  const [noticeText, setNoticeText] = React.useState("");
+  React.useEffect(() => {
+    supabase.from("game_settings").select("value").eq("key", "checkin_notice").maybeSingle().then(({ data }) => {
+      if (data && data.value) setNoticeText(String(data.value));
+    });
+  }, []);
+  const saveNotice = async () => {
+    const { error } = await supabase.from("game_settings").upsert({ key: "checkin_notice", value: noticeText.trim(), updated_at: new Date().toISOString() }, { onConflict: "key" });
+    if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+    showToast(noticeText.trim() ? "출석 팝업 안내문을 저장했어요." : "기본 안내문으로 되돌렸어요.");
+  };
   const [vals, setVals] = React.useState<any>(() => {
     const o: any = {};
     Object.entries(getPointRules()).forEach(([k, r]: any) => { o[k] = { point: String(r.point), max: String(r.maxPerDay) }; });
@@ -11646,6 +11657,10 @@ function PointRuleSettings() {
             </div>
           ))}
           <button onClick={save} disabled={saving} style={{ width: "100%", marginTop: 12, padding: 12, borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>{saving ? "저장 중..." : "저장"}</button>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginTop: 16, marginBottom: 6 }}>💬 출석 팝업 안내문</div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 8, lineHeight: 1.5 }}>출석 체크 시 팝업에 표시돼요. 특별 공지가 있을 때 바꿔 쓰고, 비우고 저장하면 기본 문구(내 정보 수정 안내)로 돌아가요.</div>
+          <textarea value={noticeText} onChange={(e) => setNoticeText(e.target.value)} rows={3} placeholder="📌 마이페이지의 내 정보(호봉·통상임금·시작점 등)는 급여·근무표 계산과 연동돼요. 승급 등 변동이 생기면 꼭 수정해주세요." style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 9, border: "1px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", resize: "vertical", lineHeight: 1.6 }} />
+          <button onClick={saveNotice} style={{ width: "100%", marginTop: 8, padding: 11, borderRadius: 10, border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>안내문 저장</button>
         </div>
       )}
     </div>
@@ -15507,12 +15522,19 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
     return d.toDateString() === n.toDateString();
   }).length;
 
+  const [checkinPopup, setCheckinPopup] = React.useState(false);
+  const CHECKIN_NOTICE_DEFAULT = "📌 마이페이지의 내 정보(호봉·통상임금·시작점 등)는 급여·근무표 계산과 연동돼요. 승급 등 변동이 생기면 꼭 수정해주세요.";
+  const [checkinNotice, setCheckinNotice] = React.useState(CHECKIN_NOTICE_DEFAULT);
+  React.useEffect(() => {
+    supabase.from("game_settings").select("value").eq("key", "checkin_notice").maybeSingle().then(({ data }) => {
+      if (data && data.value && String(data.value).trim()) setCheckinNotice(String(data.value));
+    });
+  }, []);
   const handleCheckin = async () => {
     if (user?.is_admin) { setToast("관리자는 포인트 대상이 아니에요"); setTimeout(() => setToast(""), 2000); return; }
     const earned = await addPoint(empId, "checkin");
     if (earned) {
-      setToast(`+${earned}P 출석 체크 완료!`);
-      setTimeout(() => setToast(""), 2000);
+      setCheckinPopup(true);
       loadDb();
     } else {
       setToast("오늘 이미 출석했어요!");
@@ -15609,9 +15631,19 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
         {todayCheckin >= 1 ? "✅ 오늘 출석 완료 (+10P)" : "🙋 출석 체크 (+10P)"}
       </button>
 
-      <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 12px", marginBottom: 16, fontSize: 11.5, color: "#92400E", lineHeight: 1.6 }}>
-        📌 마이페이지의 내 정보(호봉·통상임금·시작점 등)는 <b>급여·근무표 계산과 연동</b>돼요. 승급 등 변동이 생기면 꼭 수정해주세요.
-      </div>
+      {checkinPopup && (
+        <div onClick={() => setCheckinPopup(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 20, padding: "26px 20px", width: "100%", maxWidth: 320, textAlign: "center" }}>
+            <div style={{ fontSize: 44, marginBottom: 8 }}>🎉</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#059669", marginBottom: 4 }}>출석 완료! +10P</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 16 }}>내일도 만나요</div>
+            <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#92400E", lineHeight: 1.7, textAlign: "left", marginBottom: 16, whiteSpace: "pre-wrap" }}>
+              {checkinNotice}
+            </div>
+            <button onClick={() => setCheckinPopup(false)} style={{ width: "100%", padding: 13, borderRadius: 11, border: "none", background: "#4F46E5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>확인</button>
+          </div>
+        </div>
+      )}
 
       <div style={{ background: "#F9FAFB", borderRadius: 12, padding: 14, marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>이번 달 적립 내역</div>
