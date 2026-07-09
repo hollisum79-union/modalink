@@ -28650,7 +28650,7 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
         <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 4, paddingTop: 4, fontSize: 11, color: "#6B7280", fontWeight: 700 }}>내 순위 {myRank.rank}위 ({myRank.total}P)</div>
       )}
       {monthPrize && !monthPrize.winner_name && (
-        <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 4, paddingTop: 5, fontSize: 11, color: "#B45309", fontWeight: 700, lineHeight: 1.4 }}>🎁 이달의 상품: {monthPrize.prize}<br /><span style={{ color: "#9CA3AF", fontWeight: 500 }}>TOP 20 중 말일 추첨 1명</span></div>
+        <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 4, paddingTop: 5, fontSize: 11, color: "#B45309", fontWeight: 700, lineHeight: 1.4 }}>🎁 이달의 상품: {monthPrize.prize}<br /><span style={{ color: "#9CA3AF", fontWeight: 500 }}>이달 TOP 20 → 다음 달 1일 추첨 1명</span></div>
       )}
     </div>
     {showTop20 && (
@@ -28662,7 +28662,7 @@ function PointCondolenceCard({ user, onCondolenceClick }: any) {
           </div>
           <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 10 }}>지회장은 순위·추첨에서 제외돼요</div>
           {monthPrize && !monthPrize.winner_name && (
-            <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "9px 12px", marginBottom: 10, fontSize: 12, color: "#B45309", fontWeight: 700, lineHeight: 1.5 }}>🎁 이달의 상품: {monthPrize.prize}<br /><span style={{ fontWeight: 500, color: "#D97706" }}>TOP 20에 들면 말일 룰렛 추첨 자동 응모!</span></div>
+            <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "9px 12px", marginBottom: 10, fontSize: 12, color: "#B45309", fontWeight: 700, lineHeight: 1.5 }}>🎁 이달의 상품: {monthPrize.prize}<br /><span style={{ fontWeight: 500, color: "#D97706" }}>이달 TOP 20에 들면 다음 달 1일 추첨 자동 응모!</span></div>
           )}
           {top20.map((r: any, i: number) => (
             <div key={r.emp} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px", background: r.isMe ? "#EEF2FF" : i < 3 ? "#FFFBEB" : "transparent", borderRadius: r.isMe || i < 3 ? 8 : 0, borderBottom: !r.isMe && i >= 3 ? "1px solid #F9FAFB" : "none" }}>
