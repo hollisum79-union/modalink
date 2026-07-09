@@ -5284,6 +5284,7 @@ const [nameMap, setNameMap] = useState({});
         .insert([{ vote_id: vote.id, member_id: myId, choice: choice }]);
       if (error) throw error;
       setSubmitted(true);
+      addPoint(getUserId(user), "vote", "vote_" + vote.id); // 실제 제출 시에만 · 같은 투표 중복 방지
       loadResults();
     } catch (e: any) {
       showToast("투표 제출에 실패했습니다. 잠시 후 다시 시도해주세요.", "error");
@@ -11651,18 +11652,39 @@ function PointRuleSettings() {
   );
 }
 
-// 🎁 이달의 추첨 (관리자) — 상품명 등록 + TOP20 룰렛 · point_draw 표
+// 🎁 포인트 추첨 (관리자) — 상품은 이번 달 등록, 추첨은 매달 1일 "전월 TOP20" 대상 · point_draw 표
 function PointDrawAdmin({ rows }: any) {
   const [open, setOpen] = React.useState(false);
   const [prize, setPrize] = React.useState("");
-  const [draw, setDraw] = React.useState<any>(null); // 이번 달 추첨 기록
+  const [prevDraw, setPrevDraw] = React.useState<any>(null); // 전월(추첨 대상) 기록
+  const [prevPool, setPrevPool] = React.useState<any[]>([]); // 전월 TOP20
   const [spinning, setSpinning] = React.useState(false);
   const [spinName, setSpinName] = React.useState("");
-  const ym = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  const _n = new Date();
+  const ym = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}`;
+  const _p = new Date(_n.getFullYear(), _n.getMonth() - 1, 1);
+  const prevYm = `${_p.getFullYear()}-${String(_p.getMonth() + 1).padStart(2, "0")}`;
 
   const load = async () => {
-    const { data } = await supabase.from("point_draw").select("*").eq("year_month", ym).maybeSingle();
-    if (data) { setDraw(data); setPrize(data.prize || ""); }
+    const { data } = await supabase.from("point_draw").select("*").in("year_month", [ym, prevYm]);
+    (data || []).forEach((d: any) => {
+      if (d.year_month === ym && d.prize) setPrize(d.prize);
+      if (d.year_month === prevYm) setPrevDraw(d);
+    });
+    // 전월 TOP20 풀 계산 (지회장·결원 제외)
+    const start = new Date(_p.getFullYear(), _p.getMonth(), 1).toISOString();
+    const end = new Date(_n.getFullYear(), _n.getMonth(), 1).toISOString();
+    const { data: pts } = await supabase.from("user_points").select("employee_number, point, created_at").gte("created_at", start).lt("created_at", end);
+    const { data: mem } = await supabase.from("members").select("employee_number, name, is_union, is_owner");
+    const nameMap: any = {}; const okSet = new Set<string>();
+    (mem || []).forEach((m: any) => {
+      nameMap[String(m.employee_number)] = m.name;
+      if (m.is_union === true && m.is_owner !== true && !String(m.name || "").includes("결원")) okSet.add(String(m.employee_number));
+    });
+    const sums: any = {};
+    (pts || []).forEach((r: any) => { const k = String(r.employee_number); sums[k] = (sums[k] || 0) + (r.point || 0); });
+    const pool = Object.entries(sums).filter(([e]) => okSet.has(String(e))).map(([emp, total]) => ({ emp, name: nameMap[emp] || "(미등록)", total })).sort((a: any, b: any) => b.total - a.total).slice(0, 20);
+    setPrevPool(pool);
   };
   React.useEffect(() => { load(); }, []);
 
@@ -11675,23 +11697,18 @@ function PointDrawAdmin({ rows }: any) {
   };
 
   const spin = async () => {
-    const pool = (rows || []).slice(0, 20);
-    if (pool.length === 0) { showToast("추첨 대상(TOP20)이 없어요.", "error"); return; }
-    if (!prize.trim()) { showToast("먼저 상품명을 등록하세요.", "error"); return; }
-    if (draw?.winner_emp) { showToast("이번 달은 이미 추첨했어요.", "error"); return; }
-    if (!window.confirm(`이번 달 TOP ${pool.length}명 중 1명을 추첨합니다.\n결과는 되돌릴 수 없어요. 진행할까요?`)) return;
+    if (prevPool.length === 0) { showToast("전월 추첨 대상(TOP20)이 없어요.", "error"); return; }
+    if (!prevDraw?.prize) { showToast(`전월(${prevYm})에 등록된 상품이 없어요.`, "error"); return; }
+    if (prevDraw?.winner_emp) { showToast("전월 추첨은 이미 완료됐어요.", "error"); return; }
+    if (!window.confirm(`${prevYm} TOP ${prevPool.length}명 중 1명을 추첨합니다.\n결과는 되돌릴 수 없어요. 진행할까요?`)) return;
     setSpinning(true);
-    // 룰렛 연출: 이름이 빠르게 돌다가 멈춤
-    const winner = pool[Math.floor(Math.random() * pool.length)];
+    const winner: any = prevPool[Math.floor(Math.random() * prevPool.length)];
     let t = 0;
-    const iv = setInterval(() => {
-      setSpinName(pool[t % pool.length].name);
-      t++;
-    }, 80);
+    const iv = setInterval(() => { setSpinName(prevPool[t % prevPool.length].name); t++; }, 80);
     setTimeout(async () => {
       clearInterval(iv);
       setSpinName(winner.name);
-      const { error } = await supabase.from("point_draw").upsert({ year_month: ym, prize: prize.trim(), winner_emp: winner.emp, winner_name: winner.name, drawn_at: new Date().toISOString() }, { onConflict: "year_month" });
+      const { error } = await supabase.from("point_draw").upsert({ year_month: prevYm, prize: prevDraw.prize, winner_emp: winner.emp, winner_name: winner.name, drawn_at: new Date().toISOString() }, { onConflict: "year_month" });
       setSpinning(false);
       if (error) { showToast("추첨 저장 실패: " + error.message, "error"); return; }
       showToast(`🎉 ${winner.name} 님 당첨!`);
@@ -11702,16 +11719,18 @@ function PointDrawAdmin({ rows }: any) {
   return (
     <div style={{ background: "#fff", borderRadius: 14, padding: "12px 16px", marginBottom: 16 }}>
       <div onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>🎁 이달의 추첨</span>
-        <span style={{ fontSize: 12, color: draw?.winner_name ? "#059669" : "#9CA3AF" }}>{draw?.winner_name ? `✅ ${draw.winner_name} 당첨` : open ? "접기 ▲" : "펼치기 ▼"}</span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>🎁 포인트 추첨</span>
+        <span style={{ fontSize: 12, color: prevDraw?.winner_name ? "#059669" : "#9CA3AF" }}>{prevDraw?.winner_name ? `✅ 전월: ${prevDraw.winner_name} 당첨` : open ? "접기 ▲" : "펼치기 ▼"}</span>
       </div>
       {open && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 10 }}>이번 달({ym}) TOP 20 대상 · 룰렛으로 1명 · 결과는 홈에 3일 공개</div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <input value={prize} onChange={(e) => setPrize(e.target.value)} placeholder="상품명 (예: 커피 기프티콘 3만원권)" disabled={!!draw?.winner_emp} style={{ flex: 1, padding: "10px 12px", borderRadius: 9, border: "1px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }} />
-            {!draw?.winner_emp && <button onClick={savePrize} style={{ padding: "10px 14px", borderRadius: 9, border: "none", background: "#F3F4F6", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>등록</button>}
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>① 이번 달({ym}) 상품 등록 — 조합원 홈에 공개돼요</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <input value={prize} onChange={(e) => setPrize(e.target.value)} placeholder="상품명 (예: 커피 기프티콘 3만원권)" style={{ flex: 1, padding: "10px 12px", borderRadius: 9, border: "1px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }} />
+            <button onClick={savePrize} style={{ padding: "10px 14px", borderRadius: 9, border: "none", background: "#F3F4F6", color: "#4F46E5", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>등록</button>
           </div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>② 전월({prevYm}) 추첨 — 매달 1일 진행</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 10 }}>전월 TOP {prevPool.length}명 대상 · 전월 상품: {prevDraw?.prize || "미등록"}</div>
           {spinning || spinName ? (
             <div style={{ background: "#F9FAFB", borderRadius: 12, padding: 18, textAlign: "center", marginBottom: 10 }}>
               <div style={{ fontSize: 26, marginBottom: 4 }}>🎡</div>
@@ -11719,12 +11738,12 @@ function PointDrawAdmin({ rows }: any) {
               {!spinning && spinName && <div style={{ fontSize: 12, color: "#059669", fontWeight: 700, marginTop: 4 }}>🎉 당첨!</div>}
             </div>
           ) : null}
-          {draw?.winner_name ? (
+          {prevDraw?.winner_name ? (
             <div style={{ background: "#ECFDF5", color: "#059669", border: "1.5px solid #6EE7B7", borderRadius: 12, padding: 13, textAlign: "center", fontWeight: 800, fontSize: 13 }}>
-              ✅ {draw.winner_name} 님 당첨 · {draw.prize}
+              ✅ {prevDraw.winner_name} 님 당첨 · {prevDraw.prize}
             </div>
           ) : (
-            <button onClick={spin} disabled={spinning} style={{ width: "100%", padding: 13, borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", opacity: spinning ? 0.6 : 1 }}>{spinning ? "룰렛 도는 중…" : "🎡 룰렛 돌리기"}</button>
+            <button onClick={spin} disabled={spinning} style={{ width: "100%", padding: 13, borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4F46E5,#6D28D9)", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", opacity: spinning ? 0.6 : 1 }}>{spinning ? "룰렛 도는 중…" : "🎡 전월 룰렛 돌리기"}</button>
           )}
         </div>
       )}
@@ -15099,7 +15118,8 @@ async function addPoint(empId, actionKey, ref?) {
   todayStart.setHours(0, 0, 0, 0);
 
   try {
-        if (actionKey === "notice" && ref) {
+        if (ref) {
+      // ref가 있으면 (같은 공지·같은 투표 등) 중복 적립 방지
       const { data: dup } = await supabase
         .from("user_points")
         .select("id")
@@ -15588,6 +15608,10 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
       >
         {todayCheckin >= 1 ? "✅ 오늘 출석 완료 (+10P)" : "🙋 출석 체크 (+10P)"}
       </button>
+
+      <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 12px", marginBottom: 16, fontSize: 11.5, color: "#92400E", lineHeight: 1.6 }}>
+        📌 마이페이지의 내 정보(호봉·통상임금·시작점 등)는 <b>급여·근무표 계산과 연동</b>돼요. 승급 등 변동이 생기면 꼭 수정해주세요.
+      </div>
 
       <div style={{ background: "#F9FAFB", borderRadius: 12, padding: 14, marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", marginBottom: 10 }}>이번 달 적립 내역</div>
@@ -30969,7 +30993,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     if (screen === "noticeDetail" && selectedNotice) {
       addPoint(uid, "notice", selectedNotice.id || selectedNotice.title);
     }
-    if (screen === "vote") addPoint(uid, "vote");
     if (screen === "workAdjust") addPoint(uid, "schedule");
   }, [screen, selectedNotice]);
 
@@ -31624,16 +31647,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         onBack={() => setScreen("home")}
         initialFilter={boardTab}
         onSelect={(p) => {
-          const nv = (p.views || 0) + 1;
+          const isMine = String(p.author_emp || "") === String((user as any)?.employee_number || "");
+          const nv = markViewed("post", "posts", p, !!(user as any)?.is_admin || isMine);
           setSelectedPost({ ...p, views: nv });
           setScreen("boardDetail");
-          supabase
-            .from("posts")
-            .update({ views: nv })
-            .eq("id", p.id)
-            .then(({ error }) => {
-              if (error) console.error("조회수 업데이트 실패:", error);
-            });
         }}
                 onWrite={() => { setEditingPost(null); setScreen("boardWrite"); }}
         user={user}
