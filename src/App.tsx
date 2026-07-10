@@ -13824,6 +13824,558 @@ function TempDiaAdmin() {
 }
 
 
+// ════════════════════════════════════════════════
+// 운용기관사 모드 (2단계 — 껍데기)
+//   · 담당자 추가/끄기 = 실제 작동 (operator_staff)
+//   · 홈/신청함/순위표/이력 = 목업 숫자 (아직 데이터 미연결)
+// ════════════════════════════════════════════════
+const OP_TEAL = "#0D9488";
+const OP_TEAL_DARK = "#0F766E";
+
+function OperatorStaffPicker({ onPick }: { onPick: (s: any) => void }) {
+  const [staff, setStaff] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [manage, setManage] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("operator_staff")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (error) showToast("담당자 불러오기 실패: " + error.message, "error");
+    setStaff(data || []);
+    setLoading(false);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const addStaff = async () => {
+    const n = newName.trim();
+    if (!n) return;
+    const { error } = await supabase.from("operator_staff").insert({ name: n });
+    if (error) {
+      showToast("추가 실패: " + error.message, "error");
+      return;
+    }
+    setNewName("");
+    showToast("담당자를 추가했습니다");
+    load();
+  };
+
+  const toggleStaff = async (s: any) => {
+    const { error } = await supabase
+      .from("operator_staff")
+      .update({ active: !s.active })
+      .eq("id", s.id);
+    if (error) {
+      showToast("변경 실패: " + error.message, "error");
+      return;
+    }
+    load();
+  };
+
+  const activeStaff = staff.filter((s) => s.active);
+
+  return (
+    <div style={{ padding: "8px 4px 20px" }}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>
+        담당자를 선택하세요
+      </div>
+      <div style={{ fontSize: 12.5, color: "#6B7280", marginBottom: 16, lineHeight: 1.6 }}>
+        선택한 이름으로 모든 확정 기록이 남습니다.
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF", fontSize: 13 }}>
+          불러오는 중…
+        </div>
+      ) : activeStaff.length === 0 ? (
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            padding: "36px 16px",
+            textAlign: "center",
+            color: "#9CA3AF",
+            fontSize: 13,
+            lineHeight: 1.8,
+            border: "1px solid #E9EDEC",
+          }}
+        >
+          등록된 담당자가 없습니다.
+          <br />
+          아래 담당자 관리에서 추가하세요.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {activeStaff.map((s) => (
+            <div
+              key={s.id}
+              onClick={() => onPick(s)}
+              style={{
+                background: "#fff",
+                borderRadius: 16,
+                padding: "18px 18px",
+                border: "1px solid #E9EDEC",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  background: "#CCFBF1",
+                  color: OP_TEAL_DARK,
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  flex: "none",
+                }}
+              >
+                {String(s.name).slice(0, 1)}
+              </div>
+              <div style={{ flex: 1, fontSize: 15.5, fontWeight: 700, color: "#111827" }}>
+                {s.name}
+              </div>
+              <div style={{ color: "#D1D5DB", fontSize: 18 }}>›</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div
+        onClick={() => setManage(!manage)}
+        style={{
+          marginTop: 18,
+          textAlign: "center",
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: "#9CA3AF",
+          cursor: "pointer",
+          padding: 10,
+        }}
+      >
+        담당자 관리 {manage ? "▲" : "▼"}
+      </div>
+
+      {manage && (
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            padding: 16,
+            border: "1px solid #E9EDEC",
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="새 담당자 이름"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{
+                flex: 1,
+                border: "1px solid #E5E7EB",
+                borderRadius: 11,
+                padding: "11px 12px",
+                fontSize: 14,
+                fontFamily: "inherit",
+                WebkitAppearance: "none",
+                appearance: "none",
+              }}
+            />
+            <button
+              onClick={addStaff}
+              style={{
+                border: 0,
+                borderRadius: 11,
+                background: OP_TEAL,
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 800,
+                padding: "0 16px",
+                fontFamily: "inherit",
+                cursor: "pointer",
+              }}
+            >
+              추가
+            </button>
+          </div>
+
+          {staff.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "#9CA3AF", padding: "6px 2px" }}>
+              아직 아무도 없습니다.
+            </div>
+          ) : (
+            staff.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "11px 0",
+                  borderBottom: "1px solid #F3F4F6",
+                }}
+              >
+                <div
+                  style={{
+                    flex: 1,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: s.active ? "#111827" : "#C4C7CC",
+                  }}
+                >
+                  {s.name}
+                  {!s.active && (
+                    <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 6 }}>
+                      사용 안 함
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => toggleStaff(s)}
+                  style={{
+                    border: 0,
+                    borderRadius: 9,
+                    background: s.active ? "#F3F4F6" : "#CCFBF1",
+                    color: s.active ? "#6B7280" : OP_TEAL_DARK,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "7px 12px",
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                  }}
+                >
+                  {s.active ? "사용 안 함" : "다시 사용"}
+                </button>
+              </div>
+            ))
+          )}
+
+          <div
+            style={{
+              marginTop: 14,
+              fontSize: 11.5,
+              color: "#9CA3AF",
+              lineHeight: 1.7,
+              background: "#F9FAFB",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            담당자는 삭제하지 않고 "사용 안 함"으로 끕니다. 지우면 과거 확정 기록에서
+            이름이 사라집니다.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OperatorMockPanel({ tab }: { tab: string }) {
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const pill: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 700,
+    background: "#CCFBF1",
+    color: OP_TEAL_DARK,
+    padding: "3px 9px",
+    borderRadius: 20,
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "11px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+  const nm: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: "#111827" };
+  const meta: React.CSSProperties = { fontSize: 11.5, color: "#9CA3AF", fontWeight: 500 };
+  const notReady = (
+    <div
+      style={{
+        background: "#FEF3C7",
+        color: "#92400E",
+        borderRadius: 12,
+        padding: "10px 12px",
+        fontSize: 11.5,
+        fontWeight: 700,
+        marginBottom: 12,
+        lineHeight: 1.6,
+      }}
+    >
+      아래 숫자는 예시입니다. 규칙이 확정되면 실제 데이터로 바뀝니다.
+    </div>
+  );
+
+  if (tab === "home")
+    return (
+      <div>
+        {notReady}
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          {[
+            ["3", "새 신청"],
+            ["2", "승인 대기"],
+            ["5", "확정"],
+          ].map(([n, l]) => (
+            <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
+              <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{n}</div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={card}>
+          <div style={ttl}>
+            확정해야 할 자리 <span style={pill}>예시</span>
+          </div>
+          <div style={row}>
+            <div style={{ flex: 1 }}>
+              <div style={nm}>대기충당 · 32다이아</div>
+              <div style={meta}>아직 배정 안 됨</div>
+            </div>
+          </div>
+          <div style={{ ...row, borderBottom: 0 }}>
+            <div style={{ flex: 1 }}>
+              <div style={nm}>휴무충당 · 71다이아</div>
+              <div style={meta}>당사자 승인 대기 중</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+  if (tab === "apply")
+    return (
+      <div>
+        {notReady}
+        <div style={card}>
+          <div style={ttl}>
+            휴무충당 신청 <span style={pill}>0건</span>
+          </div>
+          <div style={{ textAlign: "center", padding: "34px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
+            아직 신청이 없습니다.
+            <br />
+            조합원이 앱에서 신청하면 여기 쌓입니다.
+          </div>
+        </div>
+        <div style={card}>
+          <div style={ttl}>
+            대기충당 신청 <span style={pill}>0건</span>
+          </div>
+          <div style={{ textAlign: "center", padding: "34px 0", color: "#9CA3AF", fontSize: 13 }}>
+            아직 신청이 없습니다.
+          </div>
+        </div>
+      </div>
+    );
+
+  if (tab === "rank")
+    return (
+      <div>
+        {notReady}
+        <div style={card}>
+          <div style={ttl}>
+            충당 순위 <span style={pill}>점수 낮은 순</span>
+          </div>
+          {[
+            ["1", "예시1", "대기 2 · 휴무 0", "2점"],
+            ["2", "예시2", "대기 1 · 휴무 1", "3점"],
+            ["3", "예시3", "대기 2 · 휴무 1", "4점"],
+          ].map(([r, n, m, s], i) => (
+            <div key={r} style={{ ...row, borderBottom: i === 2 ? 0 : row.borderBottom }}>
+              <div
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 9,
+                  background: i === 0 ? OP_TEAL : "#F1F5F4",
+                  color: i === 0 ? "#fff" : "#4B5563",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  flex: "none",
+                }}
+              >
+                {r}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={nm}>{n}</div>
+                <div style={meta}>{m}</div>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: OP_TEAL_DARK }}>{s}</div>
+            </div>
+          ))}
+        </div>
+        <div style={card}>
+          <div style={ttl}>계산 근거</div>
+          <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.9 }}>
+            대기충당 1점 · 휴무충당 2점
+            <br />
+            동점이면 사번 순
+            <br />
+            <span style={{ color: "#DC2626", fontWeight: 800 }}>
+              ※ 이 규칙은 아직 확정 전입니다
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+
+  return (
+    <div>
+      {notReady}
+      <div style={card}>
+        <div style={ttl}>
+          확정 이력 <span style={pill}>최근 순</span>
+        </div>
+        <div style={{ textAlign: "center", padding: "34px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
+          아직 확정된 배정이 없습니다.
+        </div>
+      </div>
+      <div style={card}>
+        <div style={ttl}>기록은 지워지지 않습니다</div>
+        <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.8 }}>
+          모든 배정은 누가 · 언제 확정했는지 남습니다.
+          <br />
+          담당자 전원이 같은 이력을 봅니다.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OperatorScreen() {
+  const [me, setMe] = useState<any>(null);
+  const [tab, setTab] = useState("home");
+
+  if (!me) {
+    return (
+      <div>
+        <div
+          style={{
+            background: "#CCFBF1",
+            color: OP_TEAL_DARK,
+            borderRadius: 14,
+            padding: "12px 14px",
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1.7,
+            marginBottom: 14,
+          }}
+        >
+          테스트 중인 화면입니다. 나중에는 공용 기기에서 로그인하면 바로 이 화면이 뜹니다.
+        </div>
+        <OperatorStaffPicker onPick={(s) => { setMe(s); setTab("home"); }} />
+      </div>
+    );
+  }
+
+  const tabs = [
+    { id: "home", label: "홈", icon: "🏠" },
+    { id: "apply", label: "신청함", icon: "📋" },
+    { id: "rank", label: "순위표", icon: "📊" },
+    { id: "hist", label: "이력", icon: "📜" },
+  ];
+
+  return (
+    <div style={{ paddingBottom: 8 }}>
+      <div
+        style={{
+          background: "linear-gradient(135deg,#0F766E,#0D9488,#14B8A6)",
+          borderRadius: 20,
+          padding: "16px 18px",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>운용기관사</div>
+          <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.4, marginTop: 2 }}>
+            {me.name}님
+          </div>
+        </div>
+        <button
+          onClick={() => setMe(null)}
+          style={{
+            border: 0,
+            borderRadius: 11,
+            background: "rgba(255,255,255,0.2)",
+            color: "#fff",
+            fontSize: 12.5,
+            fontWeight: 800,
+            padding: "9px 14px",
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          나가기
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {tabs.map((t) => (
+          <div
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "10px 0",
+              borderRadius: 12,
+              background: tab === t.id ? "#fff" : "transparent",
+              border: tab === t.id ? "1px solid #E9EDEC" : "1px solid transparent",
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ fontSize: 17, opacity: tab === t.id ? 1 : 0.45 }}>{t.icon}</div>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 800,
+                marginTop: 2,
+                color: tab === t.id ? OP_TEAL : "#9CA3AF",
+              }}
+            >
+              {t.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <OperatorMockPanel tab={tab} />
+    </div>
+  );
+}
+
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaTimeTab, setDiaTimeTab] = useState("편승용");
@@ -13982,6 +14534,14 @@ useEffect(() => {
       icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
       color: "#7C3AED",
       bg: "#F3E8FF",
+      badge: 0,
+    },
+    {
+      id: "operator",
+      label: "운용기관사 (테스트)",
+      icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
+      color: "#0D9488",
+      bg: "#CCFBF1",
       badge: 0,
     },
   ];
@@ -14210,6 +14770,7 @@ useEffect(() => {
         {activeMenu === "salarytable" && <SalaryTableScreen />}
         {activeMenu === "routeinput" && <RouteInputScreen />}
         {activeMenu === "tempdia" && <TempDiaAdmin />}
+        {activeMenu === "operator" && <OperatorScreen />}
         {activeMenu === "workgroup" && (
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
