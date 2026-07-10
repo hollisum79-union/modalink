@@ -14106,19 +14106,27 @@ function OperatorHome() {
     { dia: "71", name: "박민수", reason: "휴가" },
   ];
   const standby = [
-    { slot: "대기7", name: "정하늘", usable: true, note: "" },
-    { slot: "대기64", name: "최바다", usable: true, note: "" },
-    { slot: "대기66", name: "강산", usable: false, note: "휴가" },
+    { slot: "대기7", name: "정하늘", usable: true, note: "", region: "대공원" },
+    { slot: "대기64", name: "최바다", usable: true, note: "", region: "대공원" },
+    { slot: "대기66", name: "강산", usable: false, note: "휴가", region: "도봉" },
   ];
+
+  // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
+  const [fillDia, setFillDia] = useState<string>("");
+  const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
 
   const stamps = [
     { label: "1차 확정", who: "하경수", when: "7/10 14:20" },
     { label: "2차 확정", who: "", when: "" },
   ];
 
+  const usedNames = Object.values(assigned).map((a) => a.name);
+
   const bal = (s: string) => {
-    const e = empty.filter((x) => shiftOf(x.dia) === s).length;
-    const k = standby.filter((x) => x.usable && shiftOf(x.slot) === s).length;
+    const e = empty.filter((x) => shiftOf(x.dia) === s && !assigned[x.dia]).length;
+    const k = standby.filter(
+      (x) => x.usable && shiftOf(x.slot) === s && !usedNames.includes(x.name)
+    ).length;
     return { empty: e, standby: k, short: e - k };
   };
   const day = bal("주간");
@@ -14201,6 +14209,166 @@ function OperatorHome() {
     { off: 1, step: "2차 확정", note: "1차 완료 · 하경수", hot: true },
     { off: 2, step: "1차 작성", note: "아직 아무것도 없음", hot: false },
   ];
+
+  // ── 채우기 팝업 ──
+  if (fillDia) {
+    const slot = empty.find((e) => e.dia === fillDia)!;
+    const s = shiftOf(fillDia);
+
+    // 충당 순서대로 후보 구성 (예시)
+    const standbyCands = standby
+      .filter((x) => x.usable && shiftOf(x.slot) === s && !usedNames.includes(x.name))
+      .sort((a, b) => {
+        // 같은 소속 우선, 그다음 높은 번호부터
+        const ra = a.region === "대공원" ? 0 : 1;
+        const rb = b.region === "대공원" ? 0 : 1;
+        if (ra !== rb) return ra - rb;
+        return Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""));
+      });
+
+    const restCands = (
+      s === "주간"
+        ? [
+            { name: "박민수", pts: "주간 2점", note: "휴45", warn: "" },
+            { name: "이영희", pts: "주간 2점", note: "휴12", warn: "" },
+            { name: "김철수", pts: "주간 5점", note: "휴3", warn: "" },
+          ]
+        : [
+            { name: "정우주", pts: "야간 1개", note: "휴30", warn: "내일 주간 15 — 뽑으면 15가 빕니다" },
+            { name: "한별", pts: "야간 2개", note: "휴22", warn: "" },
+          ]
+    ).filter((c) => !usedNames.includes(c.name) && c.name !== slot.name);
+
+    const pick = (name: string, via: string) => {
+      setAssigned({ ...assigned, [fillDia]: { name, via } });
+      setFillDia("");
+      showToast(`${fillDia}다이아 → ${name} (${via})`);
+    };
+
+    const secTtl: React.CSSProperties = {
+      fontSize: 12,
+      fontWeight: 800,
+      color: "#6B7280",
+      margin: "14px 2px 8px",
+    };
+
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <button
+            onClick={() => setFillDia("")}
+            style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            ‹ 뒤로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>
+            {fillDia}다이아 채우기
+            <span style={chip(s)}>{s}</span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#F9FAFB",
+            borderRadius: 12,
+            padding: "11px 13px",
+            fontSize: 12,
+            color: "#6B7280",
+            fontWeight: 600,
+            marginBottom: 4,
+            lineHeight: 1.6,
+          }}
+        >
+          {slot.name} · {slot.reason} 자리입니다. 아래는 충당 순서대로 정렬된 추천입니다 (예시 데이터).
+        </div>
+
+        <div style={secTtl}>⓪ 지정근무 신청자</div>
+        <div style={{ ...card, marginBottom: 4 }}>
+          <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            이 날짜 지정근무 신청이 없습니다.
+          </div>
+        </div>
+
+        <div style={secTtl}>① 대기 근무자 ({s})</div>
+        <div style={{ ...card, marginBottom: 4 }}>
+          {standbyCands.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+              쓸 수 있는 {s} 대기가 없습니다.
+            </div>
+          ) : (
+            standbyCands.map((c, i) => (
+              <div key={c.slot} style={{ ...row, borderBottom: i === standbyCands.length - 1 ? 0 : row.borderBottom }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                    {c.name}
+                    {i === 0 && (
+                      <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#CCFBF1", color: OP_TEAL_DARK }}>
+                        추천
+                      </span>
+                    )}
+                  </div>
+                  <div style={meta}>
+                    {c.slot} · {c.region}
+                  </div>
+                </div>
+                <button
+                  onClick={() => pick(c.name, "대기충당")}
+                  style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  배정
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={secTtl}>③ 지도 기관사</div>
+        <div style={{ ...card, marginBottom: 4 }}>
+          <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            지정된 지도 기관사가 없거나 모두 불가합니다.
+          </div>
+        </div>
+
+        <div style={secTtl}>④ 휴무충당 후보 ({s === "주간" ? "점수 낮은 순" : "개수 적은 순"})</div>
+        <div style={card}>
+          {restCands.map((c, i) => (
+            <div key={c.name} style={{ ...row, borderBottom: i === restCands.length - 1 ? 0 : row.borderBottom }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{c.name}</div>
+                <div style={meta}>
+                  {c.pts} · {c.note}
+                </div>
+                {c.warn && (
+                  <div style={{ fontSize: 11, color: "#DC2626", fontWeight: 800, marginTop: 3 }}>
+                    ⚠️ {c.warn}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => pick(c.name, "휴무충당")}
+                style={{ border: 0, borderRadius: 10, background: "#fff", color: OP_TEAL_DARK, fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer", boxShadow: "inset 0 0 0 1.5px #99F6E4" }}
+              >
+                배정
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            fontSize: 11.5,
+            color: "#9CA3AF",
+            lineHeight: 1.8,
+            background: "#F9FAFB",
+            borderRadius: 12,
+            padding: "12px 14px",
+          }}
+        >
+          앱은 순서를 추천만 합니다. 배정은 담당자가 당사자와 확인한 뒤 누르세요.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -14323,23 +14491,20 @@ function OperatorHome() {
             {empty.length}
           </span>
         </div>
-        {empty.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "28px 0", color: "#9CA3AF", fontSize: 13 }}>
-            비는 자리가 없습니다.
-          </div>
-        ) : (
-          empty.map((e, i) => (
+        {empty.map((e, i) => {
+          const a = assigned[e.dia];
+          return (
             <div key={e.dia} style={{ ...row, borderBottom: i === empty.length - 1 ? 0 : row.borderBottom }}>
               <div
                 style={{
                   minWidth: 44,
                   textAlign: "center",
-                  background: "#F1F5F4",
+                  background: a ? "#F0FDFA" : "#F1F5F4",
                   borderRadius: 10,
                   padding: "7px 4px",
                   fontSize: 13,
                   fontWeight: 800,
-                  color: "#374151",
+                  color: a ? OP_TEAL_DARK : "#374151",
                   flex: "none",
                 }}
               >
@@ -14350,26 +14515,38 @@ function OperatorHome() {
                   {e.name}
                   <span style={chip(shiftOf(e.dia))}>{shiftOf(e.dia)}</span>
                 </div>
-                <div style={meta}>{e.reason}</div>
+                <div style={meta}>
+                  {a ? (
+                    <span style={{ color: OP_TEAL_DARK, fontWeight: 800 }}>
+                      → {a.name} ({a.via})
+                    </span>
+                  ) : (
+                    e.reason
+                  )}
+                </div>
               </div>
-              <button
-                style={{
-                  border: 0,
-                  borderRadius: 11,
-                  background: OP_TEAL,
-                  color: "#fff",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  padding: "9px 14px",
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                }}
-              >
-                채우기
-              </button>
+              {a ? (
+                <button
+                  onClick={() => {
+                    const next = { ...assigned };
+                    delete next[e.dia];
+                    setAssigned(next);
+                  }}
+                  style={{ border: 0, borderRadius: 11, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  취소
+                </button>
+              ) : (
+                <button
+                  onClick={() => setFillDia(e.dia)}
+                  style={{ border: 0, borderRadius: 11, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  채우기
+                </button>
+              )}
             </div>
-          ))
-        )}
+          );
+        })}
       </div>
 
       {/* 대기 근무자 */}
@@ -14380,34 +14557,40 @@ function OperatorHome() {
             {standby.length}명
           </span>
         </div>
-        {standby.map((s, i) => (
-          <div key={s.slot} style={{ ...row, borderBottom: i === standby.length - 1 ? 0 : row.borderBottom }}>
-            <div
-              style={{
-                minWidth: 56,
-                textAlign: "center",
-                background: s.usable ? "#FEFCE8" : "#F9FAFB",
-                borderRadius: 10,
-                padding: "7px 4px",
-                fontSize: 12,
-                fontWeight: 800,
-                color: s.usable ? "#CA8A04" : "#C4C7CC",
-                flex: "none",
-              }}
-            >
-              {s.slot}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: s.usable ? "#111827" : "#C4C7CC" }}>
-                {s.name}
-                <span style={{ ...chip(shiftOf(s.slot)), opacity: s.usable ? 1 : 0.45 }}>
-                  {shiftOf(s.slot)}
-                </span>
+        {standby.map((s, i) => {
+          const used = usedNames.includes(s.name);
+          const grey = !s.usable || used;
+          return (
+            <div key={s.slot} style={{ ...row, borderBottom: i === standby.length - 1 ? 0 : row.borderBottom }}>
+              <div
+                style={{
+                  minWidth: 56,
+                  textAlign: "center",
+                  background: grey ? "#F9FAFB" : "#FEFCE8",
+                  borderRadius: 10,
+                  padding: "7px 4px",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: grey ? "#C4C7CC" : "#CA8A04",
+                  flex: "none",
+                }}
+              >
+                {s.slot}
               </div>
-              <div style={meta}>{s.usable ? "사용 가능" : s.note + " · 못 씀"}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: grey ? "#C4C7CC" : "#111827" }}>
+                  {s.name}
+                  <span style={{ ...chip(shiftOf(s.slot)), opacity: grey ? 0.45 : 1 }}>
+                    {shiftOf(s.slot)}
+                  </span>
+                </div>
+                <div style={meta}>
+                  {used ? "배정됨" : s.usable ? "사용 가능" : s.note + " · 못 씀"}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button
