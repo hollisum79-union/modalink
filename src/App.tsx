@@ -14213,10 +14213,10 @@ function OperatorHome() {
         </button>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", letterSpacing: -0.3 }}>
-            {mm}월 {dd}일 ({dow})
+            {mm}월 {dd}일 ({dow}) 근무
           </div>
           <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 1 }}>
-            {dayOffset === 2 ? "이틀 전 정리" : dayOffset === 1 ? "하루 전 확인" : dayOffset === 0 ? "당일" : `${dayOffset}일 뒤`}
+            {dayOffset === 2 ? "이틀 전 정리" : dayOffset === 1 ? "하루 전 확인" : dayOffset === 0 ? "당일" : `${dayOffset}일 뒤 근무분`}
           </div>
         </div>
         <button
@@ -14864,20 +14864,32 @@ function OperatorMockPanel({ tab }: { tab: string }) {
         {notReady}
         <div style={card}>
           <div style={ttl}>
-            휴무충당 신청 <span style={pill}>0건</span>
+            지정근무 신청 <span style={pill}>교번 · 0건</span>
           </div>
-          <div style={{ textAlign: "center", padding: "34px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
+          <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
             아직 신청이 없습니다.
             <br />
-            조합원이 앱에서 신청하면 여기 쌓입니다.
+            교번 근무자가 휴무일에 신청할 수 있습니다.
           </div>
         </div>
         <div style={card}>
           <div style={ttl}>
-            대기충당 신청 <span style={pill}>0건</span>
+            지원근무 신청 <span style={pill}>교대 · 0건</span>
           </div>
-          <div style={{ textAlign: "center", padding: "34px 0", color: "#9CA3AF", fontSize: 13 }}>
+          <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
             아직 신청이 없습니다.
+            <br />
+            지원근무 대상자가 휴무일에 신청할 수 있습니다.
+          </div>
+        </div>
+        <div style={card}>
+          <div style={ttl}>
+            휴무충당 불가 <span style={{ fontSize: 11, fontWeight: 700, background: "#FEE2E2", color: "#991B1B", padding: "3px 9px", borderRadius: 20 }}>0건</span>
+          </div>
+          <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
+            휴무충당은 신청받지 않습니다.
+            <br />
+            그날 휴무자 전원이 후보이고, 못 하는 사람만 여기서 빠집니다.
           </div>
         </div>
       </div>
