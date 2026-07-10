@@ -14089,28 +14089,40 @@ function OperatorHome() {
   const [dayOffset, setDayOffset] = useState(2);
   const target = new Date();
   target.setDate(target.getDate() + dayOffset);
-  const yy = target.getFullYear();
   const mm = target.getMonth() + 1;
   const dd = target.getDate();
   const dow = ["일", "월", "화", "수", "목", "금", "토"][target.getDay()];
 
-  // ── 예시 데이터 (규칙 확정 후 실제 데이터로 교체) ──
+  // 다이아 번호 → 주간(1~59) / 야간(60~90)
+  const shiftOf = (no: string) => {
+    const n = Number(String(no).replace(/[^0-9]/g, ""));
+    return n >= 60 ? "야간" : "주간";
+  };
+
+  // ── 예시 데이터 (규칙 확정 후 실제 근무표와 연결) ──
   const empty = [
-    { dia: "32", name: "김철수", reason: "휴가", filled: "" },
-    { dia: "47", name: "이영희", reason: "유고 · 육아휴직", filled: "" },
+    { dia: "32", name: "김철수", reason: "휴가" },
+    { dia: "47", name: "이영희", reason: "유고 · 육아휴직" },
+    { dia: "71", name: "박민수", reason: "휴가" },
   ];
   const standby = [
-    { slot: "대기1", name: "박민수", usable: true, note: "" },
     { slot: "대기7", name: "정하늘", usable: true, note: "" },
-    { slot: "대기64", name: "최바다", usable: false, note: "휴가" },
+    { slot: "대기64", name: "최바다", usable: true, note: "" },
+    { slot: "대기66", name: "강산", usable: false, note: "휴가" },
   ];
-  const usableCount = standby.filter((s) => s.usable).length;
-  const shortage = empty.length - usableCount;
 
   const stamps = [
     { label: "1차 확정", who: "하경수", when: "7/10 14:20" },
     { label: "2차 확정", who: "", when: "" },
   ];
+
+  const bal = (s: string) => {
+    const e = empty.filter((x) => shiftOf(x.dia) === s).length;
+    const k = standby.filter((x) => x.usable && shiftOf(x.slot) === s).length;
+    return { empty: e, standby: k, short: e - k };
+  };
+  const day = bal("주간");
+  const night = bal("야간");
 
   const card: React.CSSProperties = {
     background: "#fff",
@@ -14136,6 +14148,47 @@ function OperatorHome() {
     borderBottom: "1px solid #F3F4F6",
   };
   const meta: React.CSSProperties = { fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 };
+
+  const chip = (s: string) => ({
+    fontSize: 10.5,
+    fontWeight: 800,
+    padding: "2px 7px",
+    borderRadius: 6,
+    marginLeft: 6,
+    background: s === "야간" ? "#EDE9FE" : "#DBEAFE",
+    color: s === "야간" ? "#6D28D9" : "#1D4ED8",
+  });
+
+  const BalanceRow = ({ label, b }: { label: string; b: any }) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "13px 14px",
+        background: b.short > 0 ? "#FEE2E2" : "#D1FAE5",
+        borderRadius: 12,
+        marginBottom: 8,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12.5,
+          fontWeight: 800,
+          color: b.short > 0 ? "#991B1B" : "#065F46",
+          minWidth: 34,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: b.short > 0 ? "#991B1B" : "#065F46" }}>
+        빈 {b.empty} · 대기 {b.standby}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 800, color: b.short > 0 ? "#991B1B" : "#065F46" }}>
+        {b.short > 0 ? `${b.short}자리 부족` : "채울 수 있음"}
+      </div>
+    </div>
+  );
 
   return (
     <div>
@@ -14189,53 +14242,29 @@ function OperatorHome() {
         아래 내용은 예시입니다. 규칙이 확정되면 실제 근무표와 연결됩니다.
       </div>
 
-      {/* 요약 */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-        <div style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
-          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{empty.length}</div>
-          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>빈 자리</div>
-        </div>
-        <div style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
-          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{usableCount}</div>
-          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>쓸 수 있는 대기</div>
-        </div>
-      </div>
+      {/* 주간 / 야간 수급 */}
+      <BalanceRow label="주간" b={day} />
+      <BalanceRow label="야간" b={night} />
 
-      {shortage > 0 ? (
-        <div
-          style={{
-            background: "#FEE2E2",
-            color: "#991B1B",
-            borderRadius: 12,
-            padding: "12px 14px",
-            fontSize: 12.5,
-            fontWeight: 800,
-            marginBottom: 12,
-            lineHeight: 1.6,
-          }}
-        >
-          대기가 {shortage}명 모자랍니다. {shortage}자리는 휴무충당이 필요합니다.
-        </div>
-      ) : (
-        <div
-          style={{
-            background: "#D1FAE5",
-            color: "#065F46",
-            borderRadius: 12,
-            padding: "12px 14px",
-            fontSize: 12.5,
-            fontWeight: 800,
-            marginBottom: 12,
-          }}
-        >
-          대기 근무자로 모두 채울 수 있습니다.
-        </div>
-      )}
+      <div
+        style={{
+          fontSize: 11.5,
+          color: "#9CA3AF",
+          fontWeight: 600,
+          lineHeight: 1.7,
+          padding: "2px 4px 14px",
+        }}
+      >
+        대기충당은 주간은 주간끼리, 야간은 야간끼리만 됩니다. 모자란 만큼 휴무충당이 필요합니다.
+      </div>
 
       {/* 빈 자리 */}
       <div style={card}>
         <div style={ttl}>
-          빈 자리 <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>{empty.length}</span>
+          빈 자리{" "}
+          <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
+            {empty.length}
+          </span>
         </div>
         {empty.length === 0 ? (
           <div style={{ textAlign: "center", padding: "28px 0", color: "#9CA3AF", fontSize: 13 }}>
@@ -14246,7 +14275,7 @@ function OperatorHome() {
             <div key={e.dia} style={{ ...row, borderBottom: i === empty.length - 1 ? 0 : row.borderBottom }}>
               <div
                 style={{
-                  minWidth: 46,
+                  minWidth: 44,
                   textAlign: "center",
                   background: "#F1F5F4",
                   borderRadius: 10,
@@ -14260,7 +14289,10 @@ function OperatorHome() {
                 {e.dia}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{e.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                  {e.name}
+                  <span style={chip(shiftOf(e.dia))}>{shiftOf(e.dia)}</span>
+                </div>
                 <div style={meta}>{e.reason}</div>
               </div>
               <button
@@ -14286,7 +14318,10 @@ function OperatorHome() {
       {/* 대기 근무자 */}
       <div style={card}>
         <div style={ttl}>
-          대기 근무자 <span style={{ fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", padding: "3px 9px", borderRadius: 20 }}>{standby.length}명</span>
+          대기 근무자{" "}
+          <span style={{ fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", padding: "3px 9px", borderRadius: 20 }}>
+            {standby.length}명
+          </span>
         </div>
         {standby.map((s, i) => (
           <div key={s.slot} style={{ ...row, borderBottom: i === standby.length - 1 ? 0 : row.borderBottom }}>
@@ -14306,7 +14341,12 @@ function OperatorHome() {
               {s.slot}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: s.usable ? "#111827" : "#C4C7CC" }}>{s.name}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: s.usable ? "#111827" : "#C4C7CC" }}>
+                {s.name}
+                <span style={{ ...chip(shiftOf(s.slot)), opacity: s.usable ? 1 : 0.45 }}>
+                  {shiftOf(s.slot)}
+                </span>
+              </div>
               <div style={meta}>{s.usable ? "사용 가능" : s.note + " · 못 씀"}</div>
             </div>
           </div>
@@ -14388,6 +14428,382 @@ function OperatorHome() {
   );
 }
 
+// ── 지원근무: 2개월 1기, 각 기 1회 의무. 대상자는 교대 근무자 중 지정 ──
+function OperatorSupport() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  // 기 = 0(1-2월) ~ 5(11-12월)
+  const [term, setTerm] = useState(Math.floor(now.getMonth() / 2));
+  const [targets, setTargets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [shiftAll, setShiftAll] = useState<any[]>([]);
+  const [q, setQ] = useState("");
+  const [saving, setSaving] = useState("");
+
+  const loadTargets = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("members")
+      .select("id, name, employee_number, is_support_target")
+      .eq("is_support_target", true)
+      .order("name", { ascending: true });
+    if (error) showToast("불러오기 실패: " + error.message, "error");
+    setTargets(data || []);
+    setLoading(false);
+  };
+  useEffect(() => {
+    loadTargets();
+  }, []);
+
+  const openPicker = async () => {
+    const { data, error } = await supabase
+      .from("members")
+      .select("id, name, employee_number, is_support_target")
+      .eq("work_type", "교대")
+      .order("name", { ascending: true });
+    if (error) {
+      showToast("불러오기 실패: " + error.message, "error");
+      return;
+    }
+    setShiftAll((data || []).filter((m: any) => !String(m.name || "").includes("결원")));
+    setPickOpen(true);
+  };
+
+  const toggleTarget = async (m: any) => {
+    setSaving(m.id);
+    const next = !m.is_support_target;
+    const { error } = await supabase
+      .from("members")
+      .update({ is_support_target: next })
+      .eq("id", m.id);
+    setSaving("");
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    setShiftAll((prev) => prev.map((x) => (x.id === m.id ? { ...x, is_support_target: next } : x)));
+    loadTargets();
+  };
+
+  const termLabel = (t: number) => `${t * 2 + 1}–${t * 2 + 2}월`;
+  const prevTerm = () => {
+    if (term === 0) { setTerm(5); setYear(year - 1); } else setTerm(term - 1);
+  };
+  const nextTerm = () => {
+    if (term === 5) { setTerm(0); setYear(year + 1); } else setTerm(term + 1);
+  };
+
+  // 기 종료일까지 남은 날
+  const termEnd = new Date(year, term * 2 + 2, 0);
+  const daysLeft = Math.ceil((termEnd.getTime() - now.getTime()) / 86400000);
+
+  // ── 완료/미완료는 아직 예시 ──
+  const done = targets.slice(0, Math.floor(targets.length / 2)).map((t) => ({
+    ...t,
+    note: "6/28 근무",
+  }));
+  const todo = targets.slice(Math.floor(targets.length / 2)).map((t, i) => ({
+    ...t,
+    note: i % 2 === 0 ? "아직 신청 안 함" : "7/12 신청 → 7/3 취소",
+  }));
+
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+
+  if (pickOpen) {
+    const filtered = shiftAll.filter(
+      (m) =>
+        !q.trim() ||
+        String(m.name || "").includes(q.trim()) ||
+        String(m.employee_number || "").includes(q.trim())
+    );
+    const picked = shiftAll.filter((m) => m.is_support_target).length;
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <button
+            onClick={() => setPickOpen(false)}
+            style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            ‹ 뒤로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>대상자 지정</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: OP_TEAL }}>{picked}명</div>
+        </div>
+
+        <div
+          style={{
+            background: "#CCFBF1",
+            color: OP_TEAL_DARK,
+            borderRadius: 12,
+            padding: "10px 12px",
+            fontSize: 11.5,
+            fontWeight: 700,
+            lineHeight: 1.7,
+            marginBottom: 12,
+          }}
+        >
+          4조2교대(교대) 근무자만 나옵니다. 인원이 바뀌면 여기서 체크만 옮기세요.
+        </div>
+
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="이름 또는 사번 검색"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{
+            width: "100%",
+            border: "1px solid #E5E7EB",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 14,
+            fontFamily: "inherit",
+            marginBottom: 12,
+            WebkitAppearance: "none",
+            appearance: "none",
+          }}
+        />
+
+        <div style={card}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
+              {shiftAll.length === 0 ? "교대 근무자가 없습니다." : "검색 결과가 없습니다."}
+            </div>
+          ) : (
+            filtered.map((m, i) => (
+              <div key={m.id} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+                  <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                    {m.employee_number}
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleTarget(m)}
+                  disabled={saving === m.id}
+                  style={{
+                    border: 0,
+                    borderRadius: 10,
+                    background: m.is_support_target ? OP_TEAL : "#F3F4F6",
+                    color: m.is_support_target ? "#fff" : "#6B7280",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "9px 14px",
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    opacity: saving === m.id ? 0.5 : 1,
+                  }}
+                >
+                  {m.is_support_target ? "대상자" : "지정"}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* 기 이동 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "#fff",
+          borderRadius: 16,
+          border: "1px solid #E9EDEC",
+          padding: "10px 12px",
+          marginBottom: 12,
+        }}
+      >
+        <button
+          onClick={prevTerm}
+          style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+        >
+          ‹
+        </button>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", letterSpacing: -0.3 }}>
+            {year}년 {termLabel(term)} 기
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 1 }}>
+            2개월에 1회 의무
+          </div>
+        </div>
+        <button
+          onClick={nextTerm}
+          style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+        >
+          ›
+        </button>
+      </div>
+
+      <div
+        style={{
+          background: "#FEF3C7",
+          color: "#92400E",
+          borderRadius: 12,
+          padding: "10px 12px",
+          fontSize: 11.5,
+          fontWeight: 700,
+          marginBottom: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        대상자 지정은 실제로 저장됩니다. 완료·미완료 목록은 아직 예시입니다.
+      </div>
+
+      {/* 요약 */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        {[
+          [String(targets.length), "대상자"],
+          [String(done.length), "완료"],
+          [String(todo.length), "미완료"],
+        ].map(([n, l]) => (
+          <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
+            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{loading ? "–" : n}</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {todo.length > 0 && daysLeft <= 45 && daysLeft >= 0 && (
+        <div
+          style={{
+            background: "#FEE2E2",
+            color: "#991B1B",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 12.5,
+            fontWeight: 800,
+            marginBottom: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          기 종료까지 {daysLeft}일 · 미완료 {todo.length}명
+        </div>
+      )}
+
+      {targets.length === 0 && !loading ? (
+        <div style={{ ...card, textAlign: "center", padding: "36px 16px", color: "#9CA3AF", fontSize: 13, lineHeight: 1.8 }}>
+          지정된 대상자가 없습니다.
+          <br />
+          아래에서 교대 근무자를 지정하세요.
+        </div>
+      ) : (
+        <>
+          <div style={card}>
+            <div style={ttl}>
+              미완료
+              <span style={{ fontSize: 11, fontWeight: 700, background: "#FEE2E2", color: "#991B1B", padding: "3px 9px", borderRadius: 20 }}>
+                {todo.length}명
+              </span>
+            </div>
+            {todo.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
+                모두 완료했습니다.
+              </div>
+            ) : (
+              todo.map((m, i) => (
+                <div key={m.id} style={{ ...row, borderBottom: i === todo.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+                    <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>{m.note}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={card}>
+            <div style={ttl}>
+              완료
+              <span style={{ fontSize: 11, fontWeight: 700, background: "#D1FAE5", color: "#065F46", padding: "3px 9px", borderRadius: 20 }}>
+                {done.length}명
+              </span>
+            </div>
+            {done.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
+                아직 없습니다.
+              </div>
+            ) : (
+              done.map((m, i) => (
+                <div key={m.id} style={{ ...row, borderBottom: i === done.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+                    <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>{m.note}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      <div
+        style={{
+          fontSize: 11.5,
+          color: "#9CA3AF",
+          lineHeight: 1.8,
+          background: "#F9FAFB",
+          borderRadius: 12,
+          padding: "12px 14px",
+          marginBottom: 12,
+        }}
+      >
+        취소하거나 날짜를 바꾸면 안 한 것으로 봅니다. 확정한 뒤 휴가를 내면 한 것으로 칩니다.
+        <br />
+        지원근무는 본인이 휴무인 날에만 신청할 수 있습니다.
+      </div>
+
+      <button
+        onClick={openPicker}
+        style={{
+          width: "100%",
+          border: 0,
+          borderRadius: 14,
+          background: "linear-gradient(135deg,#0F766E,#0D9488)",
+          color: "#fff",
+          fontSize: 14.5,
+          fontWeight: 800,
+          padding: "16px 0",
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        대상자 지정
+      </button>
+    </div>
+  );
+}
+
 function OperatorMockPanel({ tab }: { tab: string }) {
   const card: React.CSSProperties = {
     background: "#fff",
@@ -14440,6 +14856,7 @@ function OperatorMockPanel({ tab }: { tab: string }) {
   );
 
   if (tab === "home") return <OperatorHome />;
+  if (tab === "support") return <OperatorSupport />;
 
   if (tab === "apply")
     return (
@@ -14572,6 +14989,7 @@ function OperatorScreen() {
     { id: "home", label: "홈", icon: "🏠" },
     { id: "apply", label: "신청함", icon: "📋" },
     { id: "rank", label: "순위표", icon: "📊" },
+    { id: "support", label: "지원근무", icon: "🧩" },
     { id: "hist", label: "이력", icon: "📜" },
   ];
 
