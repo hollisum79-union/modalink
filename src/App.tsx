@@ -14083,6 +14083,311 @@ function OperatorStaffPicker({ onPick }: { onPick: (s: any) => void }) {
   );
 }
 
+// ── 운용 홈: 그날 빈 자리 + 대기 근무자 (아직 예시 데이터) ──
+function OperatorHome() {
+  // 기본 날짜 = 오늘 + 2일 (이틀 전 정리)
+  const [dayOffset, setDayOffset] = useState(2);
+  const target = new Date();
+  target.setDate(target.getDate() + dayOffset);
+  const yy = target.getFullYear();
+  const mm = target.getMonth() + 1;
+  const dd = target.getDate();
+  const dow = ["일", "월", "화", "수", "목", "금", "토"][target.getDay()];
+
+  // ── 예시 데이터 (규칙 확정 후 실제 데이터로 교체) ──
+  const empty = [
+    { dia: "32", name: "김철수", reason: "휴가", filled: "" },
+    { dia: "47", name: "이영희", reason: "유고 · 육아휴직", filled: "" },
+  ];
+  const standby = [
+    { slot: "대기1", name: "박민수", usable: true, note: "" },
+    { slot: "대기7", name: "정하늘", usable: true, note: "" },
+    { slot: "대기64", name: "최바다", usable: false, note: "휴가" },
+  ];
+  const usableCount = standby.filter((s) => s.usable).length;
+  const shortage = empty.length - usableCount;
+
+  const stamps = [
+    { label: "1차 확정", who: "하경수", when: "7/10 14:20" },
+    { label: "2차 확정", who: "", when: "" },
+  ];
+
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+  const meta: React.CSSProperties = { fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 };
+
+  return (
+    <div>
+      {/* 날짜 이동 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "#fff",
+          borderRadius: 16,
+          border: "1px solid #E9EDEC",
+          padding: "10px 12px",
+          marginBottom: 12,
+        }}
+      >
+        <button
+          onClick={() => setDayOffset(dayOffset - 1)}
+          style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+        >
+          ‹
+        </button>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", letterSpacing: -0.3 }}>
+            {mm}월 {dd}일 ({dow})
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 1 }}>
+            {dayOffset === 2 ? "이틀 전 정리" : dayOffset === 1 ? "하루 전 확인" : dayOffset === 0 ? "당일" : `${dayOffset}일 뒤`}
+          </div>
+        </div>
+        <button
+          onClick={() => setDayOffset(dayOffset + 1)}
+          style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+        >
+          ›
+        </button>
+      </div>
+
+      <div
+        style={{
+          background: "#FEF3C7",
+          color: "#92400E",
+          borderRadius: 12,
+          padding: "10px 12px",
+          fontSize: 11.5,
+          fontWeight: 700,
+          marginBottom: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        아래 내용은 예시입니다. 규칙이 확정되면 실제 근무표와 연결됩니다.
+      </div>
+
+      {/* 요약 */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <div style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
+          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{empty.length}</div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>빈 자리</div>
+        </div>
+        <div style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
+          <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{usableCount}</div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>쓸 수 있는 대기</div>
+        </div>
+      </div>
+
+      {shortage > 0 ? (
+        <div
+          style={{
+            background: "#FEE2E2",
+            color: "#991B1B",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 12.5,
+            fontWeight: 800,
+            marginBottom: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          대기가 {shortage}명 모자랍니다. {shortage}자리는 휴무충당이 필요합니다.
+        </div>
+      ) : (
+        <div
+          style={{
+            background: "#D1FAE5",
+            color: "#065F46",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 12.5,
+            fontWeight: 800,
+            marginBottom: 12,
+          }}
+        >
+          대기 근무자로 모두 채울 수 있습니다.
+        </div>
+      )}
+
+      {/* 빈 자리 */}
+      <div style={card}>
+        <div style={ttl}>
+          빈 자리 <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>{empty.length}</span>
+        </div>
+        {empty.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "28px 0", color: "#9CA3AF", fontSize: 13 }}>
+            비는 자리가 없습니다.
+          </div>
+        ) : (
+          empty.map((e, i) => (
+            <div key={e.dia} style={{ ...row, borderBottom: i === empty.length - 1 ? 0 : row.borderBottom }}>
+              <div
+                style={{
+                  minWidth: 46,
+                  textAlign: "center",
+                  background: "#F1F5F4",
+                  borderRadius: 10,
+                  padding: "7px 4px",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: "#374151",
+                  flex: "none",
+                }}
+              >
+                {e.dia}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{e.name}</div>
+                <div style={meta}>{e.reason}</div>
+              </div>
+              <button
+                style={{
+                  border: 0,
+                  borderRadius: 11,
+                  background: OP_TEAL,
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  padding: "9px 14px",
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                채우기
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* 대기 근무자 */}
+      <div style={card}>
+        <div style={ttl}>
+          대기 근무자 <span style={{ fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", padding: "3px 9px", borderRadius: 20 }}>{standby.length}명</span>
+        </div>
+        {standby.map((s, i) => (
+          <div key={s.slot} style={{ ...row, borderBottom: i === standby.length - 1 ? 0 : row.borderBottom }}>
+            <div
+              style={{
+                minWidth: 56,
+                textAlign: "center",
+                background: s.usable ? "#FEFCE8" : "#F9FAFB",
+                borderRadius: 10,
+                padding: "7px 4px",
+                fontSize: 12,
+                fontWeight: 800,
+                color: s.usable ? "#CA8A04" : "#C4C7CC",
+                flex: "none",
+              }}
+            >
+              {s.slot}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: s.usable ? "#111827" : "#C4C7CC" }}>{s.name}</div>
+              <div style={meta}>{s.usable ? "사용 가능" : s.note + " · 못 씀"}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button
+        style={{
+          width: "100%",
+          border: "1px solid #E9EDEC",
+          borderRadius: 14,
+          background: "#fff",
+          color: "#374151",
+          fontSize: 13.5,
+          fontWeight: 800,
+          padding: "14px 0",
+          fontFamily: "inherit",
+          cursor: "pointer",
+          marginBottom: 14,
+        }}
+      >
+        + 휴가 · 유고 입력
+      </button>
+
+      {/* 확정 도장 */}
+      <div style={card}>
+        <div style={ttl}>확정 기록</div>
+        {stamps.map((s, i) => (
+          <div key={s.label} style={{ ...row, borderBottom: i === stamps.length - 1 ? 0 : row.borderBottom }}>
+            <div
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: "50%",
+                background: s.who ? OP_TEAL : "#E5E7EB",
+                flex: "none",
+              }}
+            />
+            <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: s.who ? "#111827" : "#C4C7CC" }}>
+              {s.label}
+            </div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600 }}>
+              {s.who ? `${s.who} · ${s.when}` : "아직"}
+            </div>
+          </div>
+        ))}
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 11.5,
+            color: "#9CA3AF",
+            lineHeight: 1.7,
+            background: "#F9FAFB",
+            borderRadius: 10,
+            padding: "10px 12px",
+          }}
+        >
+          확정해도 잠기지 않습니다. 당일 아침까지 고칠 수 있고, 고치면 이 기록에 남습니다.
+        </div>
+      </div>
+
+      <button
+        style={{
+          width: "100%",
+          border: 0,
+          borderRadius: 14,
+          background: "linear-gradient(135deg,#0F766E,#0D9488)",
+          color: "#fff",
+          fontSize: 14.5,
+          fontWeight: 800,
+          padding: "16px 0",
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        1차 확정
+      </button>
+    </div>
+  );
+}
+
 function OperatorMockPanel({ tab }: { tab: string }) {
   const card: React.CSSProperties = {
     background: "#fff",
@@ -14134,41 +14439,7 @@ function OperatorMockPanel({ tab }: { tab: string }) {
     </div>
   );
 
-  if (tab === "home")
-    return (
-      <div>
-        {notReady}
-        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          {[
-            ["3", "새 신청"],
-            ["2", "승인 대기"],
-            ["5", "확정"],
-          ].map(([n, l]) => (
-            <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
-              <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{n}</div>
-              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-        <div style={card}>
-          <div style={ttl}>
-            확정해야 할 자리 <span style={pill}>예시</span>
-          </div>
-          <div style={row}>
-            <div style={{ flex: 1 }}>
-              <div style={nm}>대기충당 · 32다이아</div>
-              <div style={meta}>아직 배정 안 됨</div>
-            </div>
-          </div>
-          <div style={{ ...row, borderBottom: 0 }}>
-            <div style={{ flex: 1 }}>
-              <div style={nm}>휴무충당 · 71다이아</div>
-              <div style={meta}>당사자 승인 대기 중</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  if (tab === "home") return <OperatorHome />;
 
   if (tab === "apply")
     return (
