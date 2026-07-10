@@ -14190,8 +14190,65 @@ function OperatorHome() {
     </div>
   );
 
+  const fmtDate = (off: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + off);
+    return `${d.getMonth() + 1}/${d.getDate()} (${["일", "월", "화", "수", "목", "금", "토"][d.getDay()]})`;
+  };
+
+  // 오늘 할 일 (예시 — 확정 기능이 생기면 실제 기록으로 판단)
+  const tasks = [
+    { off: 1, step: "2차 확정", note: "1차 완료 · 하경수", hot: true },
+    { off: 2, step: "1차 작성", note: "아직 아무것도 없음", hot: false },
+  ];
+
   return (
     <div>
+      {/* 오늘 할 일 */}
+      <div style={{ ...card, padding: "14px 16px" }}>
+        <div style={{ ...ttl, marginBottom: 8 }}>
+          오늘 할 일
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: "#C4C7CC" }}>예시</span>
+        </div>
+        {tasks.map((t, i) => (
+          <div
+            key={t.off}
+            onClick={() => setDayOffset(t.off)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "12px 12px",
+              borderRadius: 12,
+              background: dayOffset === t.off ? "#F0FDFA" : "#F9FAFB",
+              border: dayOffset === t.off ? "1.5px solid #99F6E4" : "1.5px solid transparent",
+              marginBottom: i === tasks.length - 1 ? 0 : 8,
+              cursor: "pointer",
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>
+                {fmtDate(t.off)} 근무
+              </div>
+              <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>{t.note}</div>
+            </div>
+            <div
+              style={{
+                fontSize: 11.5,
+                fontWeight: 800,
+                padding: "6px 11px",
+                borderRadius: 9,
+                background: t.hot ? OP_TEAL : "#E5E7EB",
+                color: t.hot ? "#fff" : "#6B7280",
+                flex: "none",
+              }}
+            >
+              {t.step}
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* 날짜 이동 */}
       <div
         style={{
@@ -14429,6 +14486,309 @@ function OperatorHome() {
 }
 
 // ── 지원근무: 2개월 1기, 각 기 1회 의무. 대상자는 교대 근무자 중 지정 ──
+// ── 순위표: 주간 점수판 / 야간 개수판 (별개 장부) + 지도 기관사 지정 ──
+function OperatorRank() {
+  const [board, setBoard] = useState<"주간" | "야간">("주간");
+  const [instrOpen, setInstrOpen] = useState(false);
+  const [instrList, setInstrList] = useState<any[]>([]);
+  const [instrCount, setInstrCount] = useState<number | null>(null);
+  const [q, setQ] = useState("");
+  const [saving, setSaving] = useState("");
+
+  const loadCount = async () => {
+    const { count } = await supabase
+      .from("members")
+      .select("id", { count: "exact", head: true })
+      .eq("is_instructor", true);
+    setInstrCount(count ?? 0);
+  };
+  useEffect(() => {
+    loadCount();
+  }, []);
+
+  const openInstr = async () => {
+    const { data, error } = await supabase
+      .from("members")
+      .select("id, name, employee_number, work_type, is_instructor")
+      .order("name", { ascending: true });
+    if (error) {
+      showToast("불러오기 실패: " + error.message, "error");
+      return;
+    }
+    setInstrList((data || []).filter((m: any) => !String(m.name || "").includes("결원")));
+    setInstrOpen(true);
+  };
+
+  const toggleInstr = async (m: any) => {
+    setSaving(m.id);
+    const next = !m.is_instructor;
+    const { error } = await supabase
+      .from("members")
+      .update({ is_instructor: next })
+      .eq("id", m.id);
+    setSaving("");
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    setInstrList((prev) => prev.map((x) => (x.id === m.id ? { ...x, is_instructor: next } : x)));
+    loadCount();
+  };
+
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+
+  if (instrOpen) {
+    const filtered = instrList.filter(
+      (m) =>
+        !q.trim() ||
+        String(m.name || "").includes(q.trim()) ||
+        String(m.employee_number || "").includes(q.trim())
+    );
+    const picked = instrList.filter((m) => m.is_instructor).length;
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <button
+            onClick={() => setInstrOpen(false)}
+            style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            ‹ 뒤로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>지도 기관사 지정</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: OP_TEAL }}>{picked}명</div>
+        </div>
+
+        <div
+          style={{
+            background: "#CCFBF1",
+            color: OP_TEAL_DARK,
+            borderRadius: 12,
+            padding: "10px 12px",
+            fontSize: 11.5,
+            fontWeight: 700,
+            lineHeight: 1.7,
+            marginBottom: 12,
+          }}
+        >
+          자주 바뀌면 여기서 켜고 끄면 됩니다. 지도 기관사는 충당 순서 ③에 들어갑니다.
+        </div>
+
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="이름 또는 사번 검색"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{
+            width: "100%",
+            border: "1px solid #E5E7EB",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 14,
+            fontFamily: "inherit",
+            marginBottom: 12,
+            WebkitAppearance: "none",
+            appearance: "none",
+          }}
+        />
+
+        <div style={card}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13 }}>
+              검색 결과가 없습니다.
+            </div>
+          ) : (
+            filtered.map((m, i) => (
+              <div key={m.id} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+                  <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                    {m.employee_number}
+                    {m.work_type ? ` · ${m.work_type}` : ""}
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleInstr(m)}
+                  disabled={saving === m.id}
+                  style={{
+                    border: 0,
+                    borderRadius: 10,
+                    background: m.is_instructor ? OP_TEAL : "#F3F4F6",
+                    color: m.is_instructor ? "#fff" : "#6B7280",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "9px 14px",
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    opacity: saving === m.id ? 0.5 : 1,
+                  }}
+                >
+                  {m.is_instructor ? "지도" : "지정"}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── 예시 순위 데이터 (기준 점수 + 충당 기록이 생기면 실제 계산으로 교체) ──
+  const dayBoard = [
+    { name: "박민수", pts: 2, note: "휴45" },
+    { name: "이영희", pts: 2, note: "휴12" },
+    { name: "김철수", pts: 5, note: "휴3" },
+  ];
+  const nightBoard = [
+    { name: "정하늘", pts: 1, note: "휴30" },
+    { name: "최바다", pts: 2, note: "휴22" },
+    { name: "강산", pts: 4, note: "휴8" },
+  ];
+  const list = board === "주간" ? dayBoard : nightBoard;
+  const unit = board === "주간" ? "점" : "개";
+
+  return (
+    <div>
+      <div
+        style={{
+          background: "#FEF3C7",
+          color: "#92400E",
+          borderRadius: 12,
+          padding: "10px 12px",
+          fontSize: 11.5,
+          fontWeight: 700,
+          marginBottom: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        아래 순위는 예시입니다. 기준 점수를 받으면 실제 계산으로 바뀝니다.
+      </div>
+
+      {/* 주간/야간 전환 */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        {(["주간", "야간"] as const).map((b) => (
+          <div
+            key={b}
+            onClick={() => setBoard(b)}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "12px 0",
+              borderRadius: 13,
+              background: board === b ? "#fff" : "transparent",
+              border: board === b ? "1.5px solid #99F6E4" : "1.5px solid #E9EDEC",
+              fontSize: 13.5,
+              fontWeight: 800,
+              color: board === b ? OP_TEAL_DARK : "#9CA3AF",
+              cursor: "pointer",
+            }}
+          >
+            {b} {b === "주간" ? "점수판" : "개수판"}
+          </div>
+        ))}
+      </div>
+
+      <div style={card}>
+        <div style={ttl}>
+          {board} 충당 순서
+          <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
+            {board === "주간" ? "점수 낮은 순" : "개수 적은 순"}
+          </span>
+        </div>
+        {list.map((m, i) => (
+          <div key={m.name} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 9,
+                background: i === 0 ? OP_TEAL : "#F1F5F4",
+                color: i === 0 ? "#fff" : "#4B5563",
+                display: "grid",
+                placeItems: "center",
+                fontSize: 12,
+                fontWeight: 800,
+                flex: "none",
+              }}
+            >
+              {i + 1}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+              <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>{m.note}</div>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: OP_TEAL_DARK }}>
+              {m.pts}
+              {unit}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={card}>
+        <div style={ttl}>계산 규칙 (확정)</div>
+        <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.9 }}>
+          주간 점수와 야간 개수는 완전히 별개입니다.
+          <br />
+          동점이면 휴 번호가 큰 사람이 먼저입니다.
+          <br />
+          최근 2년치만 셉니다. 해가 바뀌면 전전년도 것은 빠집니다.
+          <br />
+          전입·신입은 발령일 3개월 후부터 후보에 오릅니다.
+        </div>
+      </div>
+
+      <div style={{ ...card, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>지도 기관사</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>
+            {instrCount === null ? "–" : `${instrCount}명 지정됨`} · 충당 순서 ③
+          </div>
+        </div>
+        <button
+          onClick={openInstr}
+          style={{
+            border: 0,
+            borderRadius: 11,
+            background: OP_TEAL,
+            color: "#fff",
+            fontSize: 12.5,
+            fontWeight: 800,
+            padding: "10px 16px",
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          지정하기
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OperatorSupport() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -14895,8 +15255,9 @@ function OperatorMockPanel({ tab }: { tab: string }) {
       </div>
     );
 
-  if (tab === "rank")
-    return (
+  if (tab === "rank") return <OperatorRank />;
+
+  return (
       <div>
         {notReady}
         <div style={card}>
