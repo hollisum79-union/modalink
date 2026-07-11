@@ -14549,49 +14549,67 @@ function OperatorHome() {
         })}
       </div>
 
-      {/* 대기 근무자 */}
-      <div style={card}>
-        <div style={ttl}>
-          대기 근무자{" "}
-          <span style={{ fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", padding: "3px 9px", borderRadius: 20 }}>
-            {standby.length}명
-          </span>
-        </div>
-        {standby.map((s, i) => {
-          const used = usedNames.includes(s.name);
-          const grey = !s.usable || used;
-          return (
-            <div key={s.slot} style={{ ...row, borderBottom: i === standby.length - 1 ? 0 : row.borderBottom }}>
-              <div
+      {/* 대기 근무자 — 주간/야간 분리 */}
+      {(["주간", "야간"] as const).map((sec) => {
+        const list = standby.filter((x) => shiftOf(x.slot) === sec);
+        const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
+        return (
+          <div style={card} key={sec}>
+            <div style={ttl}>
+              {sec} 대기{" "}
+              <span
                 style={{
-                  minWidth: 56,
-                  textAlign: "center",
-                  background: grey ? "#F9FAFB" : "#FEFCE8",
-                  borderRadius: 10,
-                  padding: "7px 4px",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: grey ? "#C4C7CC" : "#CA8A04",
-                  flex: "none",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: avail > 0 ? "#CCFBF1" : "#FEE2E2",
+                  color: avail > 0 ? OP_TEAL_DARK : "#991B1B",
+                  padding: "3px 9px",
+                  borderRadius: 20,
                 }}
               >
-                {s.slot}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: grey ? "#C4C7CC" : "#111827" }}>
-                  {s.name}
-                  <span style={{ ...chip(shiftOf(s.slot)), opacity: grey ? 0.45 : 1 }}>
-                    {shiftOf(s.slot)}
-                  </span>
-                </div>
-                <div style={meta}>
-                  {used ? "배정됨" : s.usable ? "사용 가능" : s.note + " · 못 씀"}
-                </div>
-              </div>
+                충당 가능 {avail}명 / {list.length}명
+              </span>
             </div>
-          );
-        })}
-      </div>
+            {list.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "20px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+                {sec} 대기가 없습니다.
+              </div>
+            ) : (
+              list.map((s, i) => {
+                const used = usedNames.includes(s.name);
+                const grey = !s.usable || used;
+                return (
+                  <div key={s.slot} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
+                    <div
+                      style={{
+                        minWidth: 56,
+                        textAlign: "center",
+                        background: grey ? "#F9FAFB" : "#FEFCE8",
+                        borderRadius: 10,
+                        padding: "7px 4px",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: grey ? "#C4C7CC" : "#CA8A04",
+                        flex: "none",
+                      }}
+                    >
+                      {s.slot}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: grey ? "#C4C7CC" : "#111827" }}>
+                        {s.name}
+                      </div>
+                      <div style={meta}>
+                        {used ? "배정됨" : s.usable ? "사용 가능" : s.note + " · 못 씀"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        );
+      })}
 
       <button
         style={{
