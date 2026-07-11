@@ -14108,24 +14108,32 @@ function OperatorHome() {
     return n >= 60 ? "야간" : "주간";
   };
 
-  // ── 예시 데이터 (규칙 확정 후 실제 근무표와 연결) ──
-  const empty = [
-    { dia: "32", name: "김철수", reason: "휴가", region: "대공원" },
-    { dia: "47", name: "이영희", reason: "유고 · 육아휴직", region: "도봉" },
-    { dia: "71", name: "박민수", reason: "휴가", region: "대공원" },
-  ];
+  // ── 예시 데이터: 날짜별로 다르게 (규칙 확정 후 실제 근무표와 연결) ──
+  const emptyByDay: Record<number, any[]> = {
+    1: [
+      { dia: "15", name: "안진모", reason: "대체휴가", region: "대공원" },
+      { dia: "63", name: "남훈식", reason: "연차", region: "도봉" },
+    ],
+    2: [
+      { dia: "32", name: "김철수", reason: "연차", region: "대공원" },
+      { dia: "47", name: "이영희", reason: "유고 · 육아휴직", region: "도봉" },
+      { dia: "71", name: "박민수", reason: "대체휴가", region: "대공원" },
+    ],
+    3: [{ dia: "9", name: "유지훈", reason: "촉진연차", region: "대공원" }],
+  };
+  const empty = emptyByDay[dayOffset] || [];
   // 평일 대기 구성 (실제): 주간 — 대공원 1·2·3·5·6·7 / 도봉 8, 야간 — 대공원 61·62·63 / 도봉 64·65
   const standby = [
     { slot: "대기1", name: "정하늘", usable: true, note: "", region: "대공원" },
     { slot: "대기2", name: "오세영", usable: true, note: "", region: "대공원" },
-    { slot: "대기3", name: "임도현", usable: false, note: "휴가", region: "대공원" },
+    { slot: "대기3", name: "임도현", usable: false, note: "대체휴가", region: "대공원" },
     { slot: "대기5", name: "구민재", usable: true, note: "", region: "대공원" },
     { slot: "대기6", name: "서지운", usable: true, note: "", region: "대공원" },
     { slot: "대기7", name: "문가온", usable: true, note: "", region: "대공원" },
     { slot: "대기8", name: "황도윤", usable: true, note: "", region: "도봉" },
     { slot: "대기61", name: "최바다", usable: true, note: "", region: "대공원" },
     { slot: "대기62", name: "노하람", usable: true, note: "", region: "대공원" },
-    { slot: "대기63", name: "강산", usable: false, note: "휴가", region: "대공원" },
+    { slot: "대기63", name: "강산", usable: false, note: "연차", region: "대공원" },
     { slot: "대기64", name: "백서준", usable: true, note: "", region: "도봉" },
     { slot: "대기65", name: "유채원", usable: true, note: "", region: "도봉" },
   ];
@@ -14134,8 +14142,18 @@ function OperatorHome() {
   const [fillDia, setFillDia] = useState<string>("");
   const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
 
-  const stamps = [
-    { label: "1차 확정", who: "하경수", when: "7/10 14:20" },
+  const stampsByDay: Record<number, any[]> = {
+    1: [
+      { label: "1차 확정", who: "하경수", when: "7/10 14:20" },
+      { label: "2차 확정", who: "", when: "" },
+    ],
+    2: [
+      { label: "1차 확정", who: "", when: "" },
+      { label: "2차 확정", who: "", when: "" },
+    ],
+  };
+  const stamps = stampsByDay[dayOffset] || [
+    { label: "1차 확정", who: "", when: "" },
     { label: "2차 확정", who: "", when: "" },
   ];
 
@@ -14513,6 +14531,11 @@ function OperatorHome() {
           {empty.length}
         </span>
       </div>
+      {empty.length === 0 && (
+        <div style={{ textAlign: "center", padding: "26px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+          이 날짜에는 비는 자리가 없습니다.
+        </div>
+      )}
       {empty.map((e, i) => {
         const a = assigned[e.dia];
         return (
@@ -15959,6 +15982,7 @@ useEffect(() => {
     >
       <div
         style={{
+          display: activeMenu === "operator" ? "none" : "block",
           background:
             "linear-gradient(135deg, #1E1B4B 0%, #3730A3 50%, #4F46E5 100%)",
           padding: "52px 20px 24px",
