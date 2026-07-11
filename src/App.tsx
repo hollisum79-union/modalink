@@ -14109,6 +14109,8 @@ function OperatorHome() {
   const [absReason, setAbsReason] = useState("휴가"); // 휴가/휴직/병가/기타
   const [absSub, setAbsSub] = useState("연차"); // 휴가 종류 또는 휴직 구분
   const [absEtc, setAbsEtc] = useState("");
+  const [absStart, setAbsStart] = useState(""); // 휴직·병가 기간 시작
+  const [absEnd, setAbsEnd] = useState(""); // 휴직·병가 기간 종료
   const [absReload, setAbsReload] = useState(0);
   useEffect(() => {
     (async () => {
@@ -14223,7 +14225,8 @@ function OperatorHome() {
       const { data } = await supabase
         .from("operator_absence")
         .select("*")
-        .eq("work_date", targetStr)
+        .lte("work_date", targetStr)
+        .gte("end_date", targetStr)
         .order("created_at", { ascending: true });
       setOpAbsences(data || []);
     })();
@@ -14397,11 +14400,17 @@ function OperatorHome() {
     const finalReason =
       absReason === "휴가" || absReason === "휴직" ? absSub : absReason === "병가" ? "병가" : absEtc.trim();
 
+    const isRange = absReason === "휴직" || absReason === "병가";
+    const startD = isRange ? absStart || targetStr : targetStr;
+    const endD = isRange ? absEnd || startD : targetStr;
+
     const saveAbsence = async () => {
       if (!absSel) return showToast("사람을 먼저 선택하세요", "error");
       if (!finalReason) return showToast("사유를 입력하세요", "error");
+      if (isRange && endD < startD) return showToast("종료일이 시작일보다 빠릅니다", "error");
       const { error } = await supabase.from("operator_absence").insert({
-        work_date: targetStr,
+        work_date: startD,
+        end_date: endD,
         employee_number: String(absSel.employee_number),
         member_name: absSel.name,
         reason: finalReason,
@@ -14411,6 +14420,8 @@ function OperatorHome() {
       setAbsSel(null);
       setAbsSearch("");
       setAbsEtc("");
+      setAbsStart("");
+      setAbsEnd("");
       setAbsReload((k) => k + 1);
     };
     const delAbsence = async (id: any) => {
@@ -14548,8 +14559,45 @@ function OperatorHome() {
             </div>
           )}
 
+          {isRange && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>기간</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="date"
+                  value={absStart || targetStr}
+                  onChange={(e) => setAbsStart(e.target.value)}
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+                />
+                <span style={{ color: "#9CA3AF", fontWeight: 800 }}>~</span>
+                <input
+                  type="date"
+                  value={absEnd || absStart || targetStr}
+                  onChange={(e) => setAbsEnd(e.target.value)}
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>
+                이 기간 매일 자동으로 유고로 잡힙니다.
+              </div>
+              {(() => {
+                const md2 = (s: string) => {
+                  const p = String(s).split("-");
+                  return p.length === 3 ? `${Number(p[1])}/${Number(p[2])}` : s;
+                };
+                const s = absStart || targetStr;
+                const e = absEnd || absStart || targetStr;
+                return (
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: OP_TEAL_DARK, marginTop: 6 }}>
+                    선택: {md2(s)} ~ {md2(e)}
+                    {s === e ? " (하루)" : ""}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           <button
-            onClick={saveAbsence}
             style={{ width: "100%", marginTop: 16, border: 0, borderRadius: 13, background: OP_TEAL, color: "#fff", fontSize: 14.5, fontWeight: 800, padding: "14px 0", fontFamily: "inherit", cursor: "pointer" }}
           >
             {absSel ? `+ ${absSel.name} · ${finalReason || "사유 선택"} 추가` : "+ 추가"}
@@ -14571,6 +14619,14 @@ function OperatorHome() {
                 w && !String(w.dia).startsWith("대기") && (w.type === "주간" || w.type === "야간")
                   ? `운전 다이아 ${w.dia}`
                   : "그날 운전 근무 아님 (빈자리 미반영)";
+              const md = (s: string) => {
+                const p = String(s).split("-");
+                return p.length === 3 ? `${Number(p[1])}/${Number(p[2])}` : s;
+              };
+              const periodTxt =
+                ab.end_date && ab.end_date !== ab.work_date
+                  ? `${md(ab.work_date)}~${md(ab.end_date)} · `
+                  : "";
               return (
                 <div key={ab.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === opAbsences.length - 1 ? 0 : "1px solid #F5F5F7" }}>
                   <div style={{ flex: 1 }}>
@@ -14583,7 +14639,7 @@ function OperatorHome() {
                       )}
                     </div>
                     <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
-                      {ab.reason} · {diaTxt}
+                      {ab.reason} · {periodTxt}{diaTxt}
                     </div>
                   </div>
                   <button
