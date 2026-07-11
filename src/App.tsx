@@ -14110,14 +14110,24 @@ function OperatorHome() {
 
   // ── 예시 데이터 (규칙 확정 후 실제 근무표와 연결) ──
   const empty = [
-    { dia: "32", name: "김철수", reason: "휴가" },
-    { dia: "47", name: "이영희", reason: "유고 · 육아휴직" },
-    { dia: "71", name: "박민수", reason: "휴가" },
+    { dia: "32", name: "김철수", reason: "휴가", region: "대공원" },
+    { dia: "47", name: "이영희", reason: "유고 · 육아휴직", region: "도봉" },
+    { dia: "71", name: "박민수", reason: "휴가", region: "대공원" },
   ];
+  // 평일 대기 구성 (실제): 주간 — 대공원 1·2·3·5·6·7 / 도봉 8, 야간 — 대공원 61·62·63 / 도봉 64·65
   const standby = [
-    { slot: "대기7", name: "정하늘", usable: true, note: "", region: "대공원" },
-    { slot: "대기64", name: "최바다", usable: true, note: "", region: "대공원" },
-    { slot: "대기66", name: "강산", usable: false, note: "휴가", region: "도봉" },
+    { slot: "대기1", name: "정하늘", usable: true, note: "", region: "대공원" },
+    { slot: "대기2", name: "오세영", usable: true, note: "", region: "대공원" },
+    { slot: "대기3", name: "임도현", usable: false, note: "휴가", region: "대공원" },
+    { slot: "대기5", name: "구민재", usable: true, note: "", region: "대공원" },
+    { slot: "대기6", name: "서지운", usable: true, note: "", region: "대공원" },
+    { slot: "대기7", name: "문가온", usable: true, note: "", region: "대공원" },
+    { slot: "대기8", name: "황도윤", usable: true, note: "", region: "도봉" },
+    { slot: "대기61", name: "최바다", usable: true, note: "", region: "대공원" },
+    { slot: "대기62", name: "노하람", usable: true, note: "", region: "대공원" },
+    { slot: "대기63", name: "강산", usable: false, note: "휴가", region: "대공원" },
+    { slot: "대기64", name: "백서준", usable: true, note: "", region: "도봉" },
+    { slot: "대기65", name: "유채원", usable: true, note: "", region: "도봉" },
   ];
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
@@ -14228,9 +14238,9 @@ function OperatorHome() {
     const standbyCands = standby
       .filter((x) => x.usable && shiftOf(x.slot) === s && !usedNames.includes(x.name))
       .sort((a, b) => {
-        // 같은 소속 우선, 그다음 높은 번호부터
-        const ra = a.region === "대공원" ? 0 : 1;
-        const rb = b.region === "대공원" ? 0 : 1;
+        // 빈 자리와 같은 소속 우선, 그다음 높은 번호부터
+        const ra = a.region === slot.region ? 0 : 1;
+        const rb = b.region === slot.region ? 0 : 1;
         if (ra !== rb) return ra - rb;
         return Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""));
       });
@@ -14288,7 +14298,7 @@ function OperatorHome() {
             lineHeight: 1.6,
           }}
         >
-          {slot.name} · {slot.reason} 자리입니다. 아래는 충당 순서대로 정렬된 추천입니다 (예시 데이터).
+          {slot.name}({slot.region}) · {slot.reason} 자리입니다. 같은 소속 → 높은 번호 순 추천입니다 (예시 데이터).
         </div>
 
         <div style={secTtl}>⓪ 지정근무 신청자</div>
@@ -14610,6 +14620,20 @@ function OperatorHome() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: grey ? "#C4C7CC" : "#111827" }}>
                     {s.name}
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        padding: "2px 7px",
+                        borderRadius: 6,
+                        marginLeft: 6,
+                        background: s.region === "도봉" ? "#FCE7F3" : "#F1F5F4",
+                        color: s.region === "도봉" ? "#BE185D" : "#4B5563",
+                        opacity: grey ? 0.5 : 1,
+                      }}
+                    >
+                      {s.region}
+                    </span>
                   </div>
                   <div style={meta}>
                     {used ? "배정됨" : s.usable ? "사용 가능" : s.note + " · 못 씀"}
