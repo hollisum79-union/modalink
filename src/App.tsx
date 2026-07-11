@@ -14408,21 +14408,28 @@ function OperatorHome() {
       if (!absSel) return showToast("사람을 먼저 선택하세요", "error");
       if (!finalReason) return showToast("사유를 입력하세요", "error");
       if (isRange && endD < startD) return showToast("종료일이 시작일보다 빠릅니다", "error");
-      const { error } = await supabase.from("operator_absence").insert({
-        work_date: startD,
-        end_date: endD,
-        employee_number: String(absSel.employee_number),
-        member_name: absSel.name,
-        reason: finalReason,
-      });
-      if (error) return showToast("저장 실패: " + error.message, "error");
-      showToast(`${absSel.name} · ${finalReason} 추가됨`);
-      setAbsSel(null);
-      setAbsSearch("");
-      setAbsEtc("");
-      setAbsStart("");
-      setAbsEnd("");
-      setAbsReload((k) => k + 1);
+      try {
+        const { error } = await supabase.from("operator_absence").insert({
+          work_date: startD,
+          end_date: endD,
+          employee_number: String(absSel.employee_number),
+          member_name: absSel.name,
+          reason: finalReason,
+        });
+        if (error) {
+          showToast("저장 실패: " + error.message, "error");
+          return;
+        }
+        showToast(`${absSel.name} · ${finalReason} 추가됨`);
+        setAbsSel(null);
+        setAbsSearch("");
+        setAbsEtc("");
+        setAbsStart("");
+        setAbsEnd("");
+        setAbsReload((k) => k + 1);
+      } catch (e: any) {
+        showToast("저장 오류: " + (e?.message || String(e)), "error");
+      }
     };
     const delAbsence = async (id: any) => {
       const { error } = await supabase.from("operator_absence").delete().eq("id", id);
@@ -14581,16 +14588,21 @@ function OperatorHome() {
                 이 기간 매일 자동으로 유고로 잡힙니다.
               </div>
               {(() => {
-                const md2 = (s: string) => {
+                const fmt = (s: string) => {
                   const p = String(s).split("-");
-                  return p.length === 3 ? `${Number(p[1])}/${Number(p[2])}` : s;
+                  return p.length === 3 ? `${p[0]}.${Number(p[1])}.${Number(p[2])}` : s;
                 };
                 const s = absStart || targetStr;
                 const e = absEnd || absStart || targetStr;
+                const days =
+                  Math.round(
+                    (new Date(e).getTime() - new Date(s).getTime()) / 86400000
+                  ) + 1;
+                const valid = e >= s;
                 return (
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: OP_TEAL_DARK, marginTop: 6 }}>
-                    선택: {md2(s)} ~ {md2(e)}
-                    {s === e ? " (하루)" : ""}
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: valid ? OP_TEAL_DARK : "#DC2626", marginTop: 6 }}>
+                    선택: {fmt(s)} ~ {fmt(e)}
+                    {valid ? (days === 1 ? " (하루)" : ` (${days}일)`) : " · 종료일이 시작일보다 빠릅니다"}
                   </div>
                 );
               })()}
