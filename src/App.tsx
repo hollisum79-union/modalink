@@ -14138,6 +14138,23 @@ function OperatorHome() {
     { slot: "대기65", name: "유채원", usable: true, note: "", region: "도봉" },
   ];
 
+  // 대상 날짜 문자열 (로컬)
+  const targetStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+
+  // 그 날짜의 지정근무 신청자 (실데이터 · chungdang_apply)
+  const [desigApplies, setDesigApplies] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("chungdang_apply")
+        .select("*")
+        .eq("kind", "designated")
+        .eq("status", "applied")
+        .eq("work_date", targetStr);
+      setDesigApplies(data || []);
+    })();
+  }, [targetStr]);
+
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
   const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
@@ -14319,11 +14336,39 @@ function OperatorHome() {
           {slot.name}({slot.region}) · {slot.reason} 자리입니다. 같은 소속 → 높은 번호 순 추천입니다 (예시 데이터).
         </div>
 
-        <div style={secTtl}>⓪ 지정근무 신청자</div>
+        <div style={secTtl}>⓪ 지정근무 신청자 (실데이터)</div>
         <div style={{ ...card, marginBottom: 4 }}>
-          <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
-            이 날짜 지정근무 신청이 없습니다.
-          </div>
+          {desigApplies.filter((d) => !usedNames.includes(d.member_name)).length === 0 ? (
+            <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+              이 날짜 지정근무 신청이 없습니다.
+            </div>
+          ) : (
+            desigApplies
+              .filter((d) => !usedNames.includes(d.member_name))
+              .map((d, i, arr) => (
+                <div key={d.id} style={{ ...row, borderBottom: i === arr.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                      {d.member_name}
+                      {i === 0 && (
+                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#FCE7F3", color: "#BE185D" }}>
+                          최우선
+                        </span>
+                      )}
+                    </div>
+                    <div style={meta}>
+                      지정근무 · {d.via === "app" ? "앱 신청" : `대리 입력 · ${d.via}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => pick(d.member_name, "지정근무")}
+                    style={{ border: 0, borderRadius: 10, background: "#BE185D", color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                  >
+                    배정
+                  </button>
+                </div>
+              ))
+          )}
         </div>
 
         <div style={secTtl}>① 대기 근무자 ({s})</div>
@@ -14596,8 +14641,17 @@ function OperatorHome() {
   );
 
   const standbyCards = (["주간", "야간"] as const).map((sec) => {
-    const list = standby.filter((x) => shiftOf(x.slot) === sec);
+    // 투입 순서 = 높은 번호부터 (소속 우선은 채우기 화면에서 빈 자리 기준으로 반영)
+    const list = standby
+      .filter((x) => shiftOf(x.slot) === sec)
+      .slice()
+      .sort(
+        (p, q) =>
+          Number(String(q.slot).replace(/[^0-9]/g, "")) -
+          Number(String(p.slot).replace(/[^0-9]/g, ""))
+      );
     const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
+    let ord = 0;
     return (
       <div style={card} key={sec}>
         <div style={ttl}>
@@ -14623,8 +14677,25 @@ function OperatorHome() {
           list.map((s, i) => {
             const used = usedNames.includes(s.name);
             const grey = !s.usable || used;
+            const myOrd = grey ? 0 : ++ord;
             return (
               <div key={s.slot} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
+                <div
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 8,
+                    background: myOrd === 1 ? OP_TEAL : myOrd > 0 ? "#F1F5F4" : "transparent",
+                    color: myOrd === 1 ? "#fff" : "#9CA3AF",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    flex: "none",
+                  }}
+                >
+                  {myOrd > 0 ? myOrd : ""}
+                </div>
                 <div
                   style={{
                     minWidth: 56,
@@ -15210,6 +15281,10 @@ const APPLY_KINDS: Record<string, string> = {
 function OperatorApply({ opName }: { opName: string }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const _now = new Date();
+  const [calOpen, setCalOpen] = useState(false);
+  const [calYm, setCalYm] = useState<[number, number]>([_now.getFullYear(), _now.getMonth()]);
+  const [pickDate, setPickDate] = useState<string>("");
   const [formOpen, setFormOpen] = useState(false);
   const [kind, setKind] = useState("designated");
   const [workDate, setWorkDate] = useState("");
@@ -15508,10 +15583,111 @@ function OperatorApply({ opName }: { opName: string }) {
     );
   };
 
+  // ── 미니 달력 재료 ──
+  const [cy, cm] = calYm;
+  const firstDow = new Date(cy, cm, 1).getDay();
+  const daysIn = new Date(cy, cm + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDow).fill(null),
+    ...Array.from({ length: daysIn }, (_, i) => i + 1),
+  ];
+  const dateStr = (d: number) =>
+    `${cy}-${String(cm + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const markedDates = new Set(
+    items.filter((it) => it.status !== "canceled").map((it) => String(it.work_date))
+  );
+
   return (
     <div>
+      {/* 달력 조회 */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+        <button
+          onClick={() => setCalOpen(!calOpen)}
+          style={{
+            border: "1px solid #E9EDEC",
+            borderRadius: 12,
+            background: pickDate ? "#F0FDFA" : "#fff",
+            color: OP_TEAL_DARK,
+            fontSize: 12.5,
+            fontWeight: 800,
+            padding: "10px 15px",
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          📅 {pickDate ? pickDate.slice(5).replace("-", "/") + " 신청만 보기" : "달력으로 조회"}
+        </button>
+        {pickDate && (
+          <button
+            onClick={() => setPickDate("")}
+            style={{ border: 0, borderRadius: 12, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "10px 13px", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            전체 날짜
+          </button>
+        )}
+      </div>
+
+      {calOpen && (
+        <div style={{ ...card, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <button
+              onClick={() => setCalYm(cm === 0 ? [cy - 1, 11] : [cy, cm - 1])}
+              style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+            >
+              ‹
+            </button>
+            <div style={{ fontSize: 14.5, fontWeight: 800 }}>{cy}년 {cm + 1}월</div>
+            <button
+              onClick={() => setCalYm(cm === 11 ? [cy + 1, 0] : [cy, cm + 1])}
+              style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+            >
+              ›
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+            {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+              <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 800, color: i === 0 ? "#DC2626" : i === 6 ? "#2563EB" : "#9CA3AF", padding: "4px 0" }}>
+                {d}
+              </div>
+            ))}
+            {cells.map((d, i) =>
+              d === null ? (
+                <div key={"e" + i} />
+              ) : (
+                <div
+                  key={d}
+                  onClick={() => {
+                    setPickDate(dateStr(d));
+                    setCalOpen(false);
+                  }}
+                  style={{
+                    textAlign: "center",
+                    padding: "8px 0",
+                    borderRadius: 9,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    background: pickDate === dateStr(d) ? OP_TEAL : markedDates.has(dateStr(d)) ? "#F0FDFA" : "transparent",
+                    color: pickDate === dateStr(d) ? "#fff" : "#374151",
+                    border: markedDates.has(dateStr(d)) && pickDate !== dateStr(d) ? "1px solid #99F6E4" : "1px solid transparent",
+                  }}
+                >
+                  {d}
+                </div>
+              )
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 8 }}>
+            청록 테두리 = 신청이 있는 날. 날짜를 누르면 그날 신청만 봅니다.
+          </div>
+        </div>
+      )}
+
       {(["designated", "support", "no_holiday_fill"] as const).map((k) => {
-        const list = items.filter((it) => it.kind === k);
+        const list = items
+          .filter((it) => it.kind === k && (!pickDate || String(it.work_date) === pickDate))
+          .slice()
+          .sort((x, y) => String(x.work_date).localeCompare(String(y.work_date)));
         const active = list.filter((it) => it.status !== "canceled").length;
         return (
           <div style={card} key={k}>
@@ -15541,6 +15717,21 @@ function OperatorApply({ opName }: { opName: string }) {
             ) : (
               list.map((it, i) => (
                 <div key={it.id} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
+                  <div
+                    style={{
+                      minWidth: 52,
+                      textAlign: "center",
+                      background: it.status === "canceled" ? "#F9FAFB" : "#F0FDFA",
+                      borderRadius: 10,
+                      padding: "7px 4px",
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      color: it.status === "canceled" ? "#C4C7CC" : OP_TEAL_DARK,
+                      flex: "none",
+                    }}
+                  >
+                    {String(it.work_date).slice(5).replace("-", "/")}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <div
                       style={{
@@ -15553,7 +15744,7 @@ function OperatorApply({ opName }: { opName: string }) {
                       {it.member_name}
                     </div>
                     <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                      {it.work_date} · {it.via === "app" ? "앱 신청" : `대리 입력 · ${it.via}`}
+                      {it.via === "app" ? "앱 신청" : `대리 입력 · ${it.via}`}
                     </div>
                   </div>
                   {statusBadge(it.status)}
@@ -15791,7 +15982,7 @@ function OperatorRank() {
           lineHeight: 1.6,
         }}
       >
-        아래 순위는 예시입니다. 기준 점수를 받으면 실제 계산으로 바뀝니다.
+        휴무충당 순서입니다. 아래 순위는 예시이며, 기준 점수를 받으면 실제 계산으로 바뀝니다.
       </div>
 
       {/* 주간/야간 전환 */}
@@ -16361,10 +16552,10 @@ function OperatorScreen() {
 
   const tabs = [
     { id: "home", label: "홈", icon: "🏠" },
-    { id: "apply", label: "신청함", icon: "📋" },
-    { id: "rank", label: "순위표", icon: "📊" },
+    { id: "rank", label: "휴무충당순서", icon: "📊" },
     { id: "designated", label: "지정근무", icon: "📌" },
     { id: "support", label: "지원근무", icon: "🧩" },
+    { id: "apply", label: "신청함", icon: "📋" },
     { id: "hist", label: "이력", icon: "📜" },
   ];
 
