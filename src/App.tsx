@@ -14802,6 +14802,404 @@ function OperatorHome() {
 }
 
 // ── 지원근무: 2개월 1기, 각 기 1회 의무. 대상자는 교대 근무자 중 지정 ──
+// ── 이력: 종류 구분 + 달력 팝업 (아직 예시 데이터) ──
+const HIST_KINDS = ["전체", "대기충당", "휴무충당", "지정근무", "지원근무"] as const;
+
+function OperatorHist() {
+  const now = new Date();
+  const [kindF, setKindF] = useState<string>("전체");
+  const [calOpen, setCalOpen] = useState(false);
+  const [calYm, setCalYm] = useState<[number, number]>([now.getFullYear(), now.getMonth()]);
+  const [pickDate, setPickDate] = useState<string>("");
+
+  // 예시 이력 (3단계에서 실제 기록으로 교체)
+  const hist = [
+    { date: "2026-07-12", kind: "대기충당", who: "정하늘", dia: "32", by: "하경수", memo: "김철수 연차" },
+    { date: "2026-07-12", kind: "휴무충당", who: "박민수", dia: "47", by: "하경수", memo: "이영희 육아휴직" },
+    { date: "2026-07-11", kind: "지정근무", who: "김영상", dia: "11", by: "이운용", memo: "안진모 대체휴가" },
+    { date: "2026-07-08", kind: "휴무충당", who: "김철수", dia: "71", by: "이운용", memo: "" },
+    { date: "2026-07-06", kind: "대기충당", who: "구민재", dia: "15", by: "하경수", memo: "" },
+    { date: "2026-07-02", kind: "지원근무", who: "노하람", dia: "-", by: "박운용", memo: "7-8월 기" },
+  ];
+
+  const filtered = hist.filter(
+    (h) => (kindF === "전체" || h.kind === kindF) && (!pickDate || h.date === pickDate)
+  );
+
+  const kindColor: Record<string, [string, string]> = {
+    대기충당: ["#FEFCE8", "#CA8A04"],
+    휴무충당: ["#DBEAFE", "#1D4ED8"],
+    지정근무: ["#FCE7F3", "#BE185D"],
+    지원근무: ["#EDE9FE", "#6D28D9"],
+  };
+
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+
+  // ── 미니 달력 ──
+  const [cy, cm] = calYm;
+  const firstDow = new Date(cy, cm, 1).getDay();
+  const daysIn = new Date(cy, cm + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDow).fill(null),
+    ...Array.from({ length: daysIn }, (_, i) => i + 1),
+  ];
+  const dateStr = (d: number) =>
+    `${cy}-${String(cm + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const histDates = new Set(hist.map((h) => h.date));
+
+  return (
+    <div>
+      <div
+        style={{
+          background: "#FEF3C7",
+          color: "#92400E",
+          borderRadius: 12,
+          padding: "10px 12px",
+          fontSize: 11.5,
+          fontWeight: 700,
+          marginBottom: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        아래 이력은 예시입니다. 확정 기능이 생기면 실제 기록으로 바뀝니다.
+      </div>
+
+      {/* 종류 필터 + 달력 버튼 */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        {HIST_KINDS.map((k) => (
+          <div
+            key={k}
+            onClick={() => setKindF(k)}
+            style={{
+              padding: "8px 13px",
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+              background: kindF === k ? OP_TEAL : "#fff",
+              color: kindF === k ? "#fff" : "#6B7280",
+              border: kindF === k ? "1px solid transparent" : "1px solid #E9EDEC",
+            }}
+          >
+            {k}
+          </div>
+        ))}
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={() => setCalOpen(!calOpen)}
+          style={{
+            border: "1px solid #E9EDEC",
+            borderRadius: 12,
+            background: pickDate ? "#F0FDFA" : "#fff",
+            color: OP_TEAL_DARK,
+            fontSize: 12.5,
+            fontWeight: 800,
+            padding: "9px 14px",
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          📅 {pickDate ? pickDate.slice(5).replace("-", "/") : "달력"}
+        </button>
+        {pickDate && (
+          <button
+            onClick={() => setPickDate("")}
+            style={{ border: 0, borderRadius: 12, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "9px 12px", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            전체 날짜
+          </button>
+        )}
+      </div>
+
+      {/* 달력 팝업 */}
+      {calOpen && (
+        <div style={{ ...card, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <button
+              onClick={() => setCalYm(cm === 0 ? [cy - 1, 11] : [cy, cm - 1])}
+              style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+            >
+              ‹
+            </button>
+            <div style={{ fontSize: 14.5, fontWeight: 800 }}>{cy}년 {cm + 1}월</div>
+            <button
+              onClick={() => setCalYm(cm === 11 ? [cy + 1, 0] : [cy, cm + 1])}
+              style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+            >
+              ›
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+            {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+              <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 800, color: i === 0 ? "#DC2626" : i === 6 ? "#2563EB" : "#9CA3AF", padding: "4px 0" }}>
+                {d}
+              </div>
+            ))}
+            {cells.map((d, i) =>
+              d === null ? (
+                <div key={"e" + i} />
+              ) : (
+                <div
+                  key={d}
+                  onClick={() => {
+                    setPickDate(dateStr(d));
+                    setCalOpen(false);
+                  }}
+                  style={{
+                    textAlign: "center",
+                    padding: "8px 0",
+                    borderRadius: 9,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    background: pickDate === dateStr(d) ? OP_TEAL : histDates.has(dateStr(d)) ? "#F0FDFA" : "transparent",
+                    color: pickDate === dateStr(d) ? "#fff" : "#374151",
+                    border: histDates.has(dateStr(d)) && pickDate !== dateStr(d) ? "1px solid #99F6E4" : "1px solid transparent",
+                  }}
+                >
+                  {d}
+                </div>
+              )
+            )}
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 8 }}>
+            청록 테두리 = 이력이 있는 날. 날짜를 누르면 그날 기록만 봅니다.
+          </div>
+        </div>
+      )}
+
+      {/* 이력 목록 */}
+      <div style={card}>
+        <div style={ttl}>
+          {pickDate ? `${pickDate.slice(5).replace("-", "/")} 이력` : "확정 이력"}
+          <span style={{ fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", padding: "3px 9px", borderRadius: 20 }}>
+            {filtered.length}건
+          </span>
+        </div>
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "28px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            해당 기록이 없습니다.
+          </div>
+        ) : (
+          filtered.map((h, i) => {
+            const [bg, fg] = kindColor[h.kind] || ["#F3F4F6", "#6B7280"];
+            return (
+              <div key={i} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom }}>
+                <span style={{ fontSize: 10.5, fontWeight: 800, padding: "4px 8px", borderRadius: 7, background: bg, color: fg, flex: "none" }}>
+                  {h.kind}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                    {h.who}
+                    {h.dia !== "-" && <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}> · {h.dia}다이아</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                    {h.date.slice(5).replace("-", "/")} · 확정 {h.by}
+                    {h.memo ? ` · ${h.memo}` : ""}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div
+        style={{
+          fontSize: 11.5,
+          color: "#9CA3AF",
+          lineHeight: 1.8,
+          background: "#F9FAFB",
+          borderRadius: 12,
+          padding: "12px 14px",
+        }}
+      >
+        기록은 지워지지 않습니다. 모든 배정은 누가 · 언제 확정했는지 남고, 담당자 전원이 같은 이력을 봅니다.
+      </div>
+    </div>
+  );
+}
+
+// ── 지정근무: 강제 휴무 빚 장부 (장부는 자동 계산 예정 · 신청은 실데이터) ──
+function OperatorDesignated() {
+  const [applies, setApplies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("chungdang_apply")
+        .select("*")
+        .eq("kind", "designated")
+        .neq("status", "canceled")
+        .order("work_date", { ascending: true })
+        .limit(50);
+      setApplies(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  // 빚 장부 예시 (off_dias + 교번 계산으로 자동 산출 예정)
+  const ledger = [
+    { name: "김영상", owed: 3, paid: 2 },
+    { name: "손상현", owed: 2, paid: 2 },
+    { name: "박동현", owed: 2, paid: 1 },
+    { name: "김성안", owed: 1, paid: 0 },
+  ];
+
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+
+  const remainTotal = ledger.reduce((s, l) => s + (l.owed - l.paid), 0);
+
+  return (
+    <div>
+      <div
+        style={{
+          background: "#FEF3C7",
+          color: "#92400E",
+          borderRadius: 12,
+          padding: "10px 12px",
+          fontSize: 11.5,
+          fontWeight: 700,
+          marginBottom: 12,
+          lineHeight: 1.6,
+        }}
+      >
+        빚 장부는 예시입니다. 휴무 지정(off_dias)과 교번 계산으로 자동 산출될 예정입니다. 아래 신청 목록은 실제 데이터입니다.
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        {[
+          [String(ledger.length), "빚 있는 사람"],
+          [String(remainTotal), "남은 지정근무"],
+          [String(applies.length), "신청됨"],
+        ].map(([n, l]) => (
+          <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
+            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{loading && l === "신청됨" ? "–" : n}</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={card}>
+        <div style={ttl}>
+          빚 장부 <span style={{ fontSize: 11, fontWeight: 700, background: "#FCE7F3", color: "#BE185D", padding: "3px 9px", borderRadius: 20 }}>강제 휴무 = 빚 1</span>
+        </div>
+        {ledger.map((l, i) => {
+          const remain = l.owed - l.paid;
+          return (
+            <div key={l.name} style={{ ...row, borderBottom: i === ledger.length - 1 ? 0 : row.borderBottom }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: remain > 0 ? "#111827" : "#C4C7CC" }}>{l.name}</div>
+                <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                  강제 휴무 {l.owed}회 · 갚음 {l.paid}회
+                </div>
+              </div>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  padding: "5px 11px",
+                  borderRadius: 9,
+                  background: remain > 0 ? "#FEE2E2" : "#D1FAE5",
+                  color: remain > 0 ? "#991B1B" : "#065F46",
+                }}
+              >
+                {remain > 0 ? `${remain}회 남음` : "완료"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={card}>
+        <div style={ttl}>
+          예정된 지정근무 <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>{applies.length}건</span>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>불러오는 중…</div>
+        ) : applies.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
+            아직 신청이 없습니다.
+            <br />
+            신청함에서 대리 입력하면 여기 뜹니다.
+          </div>
+        ) : (
+          applies.map((it, i) => (
+            <div key={it.id} style={{ ...row, borderBottom: i === applies.length - 1 ? 0 : row.borderBottom }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{it.member_name}</div>
+                <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                  {it.work_date} · {it.via === "app" ? "앱 신청" : `대리 입력 · ${it.via}`}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div
+        style={{
+          fontSize: 11.5,
+          color: "#9CA3AF",
+          lineHeight: 1.8,
+          background: "#F9FAFB",
+          borderRadius: 12,
+          padding: "12px 14px",
+        }}
+      >
+        지정근무는 강제 휴무를 갚는 근무입니다. 빈 다이아가 생기면 대기보다 먼저 투입됩니다 (충당 순서 ⓪).
+        <br />
+        취소하거나 날짜를 바꾸면 안 갚은 것이고, 확정 후 휴가를 내면 갚은 것으로 칩니다.
+      </div>
+    </div>
+  );
+}
+
 // ── 신청함: 지정·지원 신청 + 휴무충당 불가 (chungdang_apply, 대리 입력 실작동) ──
 const APPLY_KINDS: Record<string, string> = {
   designated: "지정근무",
@@ -15925,85 +16323,14 @@ function OperatorMockPanel({ tab, opName }: { tab: string; opName: string }) {
   );
 
   if (tab === "home") return <OperatorHome />;
+  if (tab === "designated") return <OperatorDesignated />;
   if (tab === "support") return <OperatorSupport />;
 
   if (tab === "apply") return <OperatorApply opName={opName} />;
 
   if (tab === "rank") return <OperatorRank />;
 
-  return (
-      <div>
-        {notReady}
-        <div style={card}>
-          <div style={ttl}>
-            충당 순위 <span style={pill}>점수 낮은 순</span>
-          </div>
-          {[
-            ["1", "예시1", "대기 2 · 휴무 0", "2점"],
-            ["2", "예시2", "대기 1 · 휴무 1", "3점"],
-            ["3", "예시3", "대기 2 · 휴무 1", "4점"],
-          ].map(([r, n, m, s], i) => (
-            <div key={r} style={{ ...row, borderBottom: i === 2 ? 0 : row.borderBottom }}>
-              <div
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 9,
-                  background: i === 0 ? OP_TEAL : "#F1F5F4",
-                  color: i === 0 ? "#fff" : "#4B5563",
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  flex: "none",
-                }}
-              >
-                {r}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={nm}>{n}</div>
-                <div style={meta}>{m}</div>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: OP_TEAL_DARK }}>{s}</div>
-            </div>
-          ))}
-        </div>
-        <div style={card}>
-          <div style={ttl}>계산 근거</div>
-          <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.9 }}>
-            대기충당 1점 · 휴무충당 2점
-            <br />
-            동점이면 사번 순
-            <br />
-            <span style={{ color: "#DC2626", fontWeight: 800 }}>
-              ※ 이 규칙은 아직 확정 전입니다
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-
-  return (
-    <div>
-      {notReady}
-      <div style={card}>
-        <div style={ttl}>
-          확정 이력 <span style={pill}>최근 순</span>
-        </div>
-        <div style={{ textAlign: "center", padding: "34px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
-          아직 확정된 배정이 없습니다.
-        </div>
-      </div>
-      <div style={card}>
-        <div style={ttl}>기록은 지워지지 않습니다</div>
-        <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.8 }}>
-          모든 배정은 누가 · 언제 확정했는지 남습니다.
-          <br />
-          담당자 전원이 같은 이력을 봅니다.
-        </div>
-      </div>
-    </div>
-  );
+  return <OperatorHist />;
 }
 
 function OperatorScreen() {
@@ -16036,6 +16363,7 @@ function OperatorScreen() {
     { id: "home", label: "홈", icon: "🏠" },
     { id: "apply", label: "신청함", icon: "📋" },
     { id: "rank", label: "순위표", icon: "📊" },
+    { id: "designated", label: "지정근무", icon: "📌" },
     { id: "support", label: "지원근무", icon: "🧩" },
     { id: "hist", label: "이력", icon: "📜" },
   ];
