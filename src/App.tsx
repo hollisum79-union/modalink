@@ -14100,6 +14100,8 @@ function OperatorHome() {
   const [opStartHist, setOpStartHist] = useState<any[]>([]);
   const [opSwaps, setOpSwaps] = useState<any[]>([]);
   const [opLoaded, setOpLoaded] = useState(false);
+  // 결원 펼침 (뱃지 눌렀을 때 어느 시간대의 결원 목록을 보여줄지)
+  const [openVacant, setOpenVacant] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
       const [mRes, rRes, hRes, sRes] = await Promise.all([
@@ -14166,6 +14168,25 @@ function OperatorHome() {
     list.sort(
       (a, b) =>
         Number(String(a.slot).replace(/[^0-9]/g, "")) - Number(String(b.slot).replace(/[^0-9]/g, ""))
+    );
+    return list;
+  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
+
+  // ── 결원 대기 (뱃지 총인원·펼침용): 이름에 "결원" 들어간 사람이 걸린 대기 자리 ──
+  const standbyVacant = React.useMemo(() => {
+    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
+    const list = opMembers
+      .map((m) => {
+        if (!String(m.name).includes("결원")) return null;
+        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+        if (!w || !String(w.dia).startsWith("대기")) return null;
+        if (String(w.dia).includes("~") || w.type === "비번") return null;
+        return { slot: String(w.dia), name: m.name, region: m.work_group };
+      })
+      .filter(Boolean) as any[];
+    list.sort(
+      (a, b) =>
+        Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""))
     );
     return list;
   }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
@@ -14685,12 +14706,16 @@ function OperatorHome() {
           Number(String(p.slot).replace(/[^0-9]/g, ""))
       );
     const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
+    const vacList = standbyVacant.filter((x) => shiftOf(x.slot) === sec);
+    const total = list.length + vacList.length;
+    const open = openVacant === sec;
     let ord = 0;
     return (
       <div style={card} key={sec}>
         <div style={ttl}>
           {sec} 대기{" "}
           <span
+            onClick={() => vacList.length > 0 && setOpenVacant(open ? null : sec)}
             style={{
               fontSize: 11,
               fontWeight: 700,
@@ -14698,11 +14723,67 @@ function OperatorHome() {
               color: avail > 0 ? OP_TEAL_DARK : "#991B1B",
               padding: "3px 9px",
               borderRadius: 20,
+              cursor: vacList.length > 0 ? "pointer" : "default",
+              userSelect: "none",
             }}
           >
-            충당 가능 {avail}명 / {list.length}명
+            가능 {avail}명 · 총 {total}명
+            {vacList.length > 0 && (
+              <span style={{ color: "#9CA3AF", fontWeight: 700 }}> (결원 {vacList.length})</span>
+            )}
+            {vacList.length > 0 && (
+              <span style={{ fontSize: 9, color: "#9CA3AF", marginLeft: 3 }}>{open ? "▲" : "▼"}</span>
+            )}
           </span>
         </div>
+        {open && vacList.length > 0 && (
+          <div
+            style={{
+              background: "#F9FAFB",
+              border: "1px solid #EEF0F2",
+              borderRadius: 12,
+              padding: "10px 12px",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
+              결원 자리 ({vacList.length})
+            </div>
+            {vacList.map((v) => (
+              <div
+                key={v.slot}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}
+              >
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 800,
+                    color: "#B45309",
+                    background: "#FEF9C3",
+                    borderRadius: 7,
+                    padding: "4px 8px",
+                  }}
+                >
+                  {v.slot}
+                </span>
+                <span style={{ fontSize: 12.5, color: "#6B7280", fontWeight: 700 }}>비어 있음</span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "1px 6px",
+                    borderRadius: 5,
+                    background: "#F3F4F6",
+                    color: "#9CA3AF",
+                    marginLeft: "auto",
+                  }}
+                >
+                  {v.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         {list.length === 0 ? (
           <div style={{ textAlign: "center", padding: "20px 0", color: "#C4C7CC", fontSize: 12.5 }}>
             {sec} 대기가 없습니다.
