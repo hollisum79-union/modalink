@@ -14164,7 +14164,6 @@ function OperatorHome() {
         Number(String(a.slot).replace(/[^0-9]/g, "")) - Number(String(b.slot).replace(/[^0-9]/g, ""))
     );
     return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
 
   // 대상 날짜 문자열 (로컬)
