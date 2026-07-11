@@ -14102,6 +14102,14 @@ function OperatorHome() {
   const [opLoaded, setOpLoaded] = useState(false);
   // 결원 펼침 (뱃지 눌렀을 때 어느 시간대의 결원 목록을 보여줄지)
   const [openVacant, setOpenVacant] = useState<string | null>(null);
+  // 유고 입력 화면 상태
+  const [showAbsence, setShowAbsence] = useState(false);
+  const [absSearch, setAbsSearch] = useState("");
+  const [absSel, setAbsSel] = useState<any>(null);
+  const [absReason, setAbsReason] = useState("휴가"); // 휴가/휴직/병가/기타
+  const [absSub, setAbsSub] = useState("연차"); // 휴가 종류 또는 휴직 구분
+  const [absEtc, setAbsEtc] = useState("");
+  const [absReload, setAbsReload] = useState(0);
   useEffect(() => {
     (async () => {
       const [mRes, rRes, hRes, sRes] = await Promise.all([
@@ -14208,9 +14216,22 @@ function OperatorHome() {
     })();
   }, [targetStr]);
 
-  // ── 빈 자리(결원) (실데이터): 그날 휴가인 사람의 다이아가 실제 운전 다이아면 빈 자리 ──
+  // 그 날짜의 직접 입력 결근 (실데이터 · operator_absence)
+  const [opAbsences, setOpAbsences] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("operator_absence")
+        .select("*")
+        .eq("work_date", targetStr)
+        .order("created_at", { ascending: true });
+      setOpAbsences(data || []);
+    })();
+  }, [targetStr, absReload]);
+
+  // ── 빈 자리(결원) (실데이터): 앱 휴가 + 직접 입력 유고 → 그 사람 다이아가 실제 운전 다이아면 빈 자리 ──
   const empty = React.useMemo(() => {
-    if (opMembers.length === 0 || opRotation.length === 0 || opLeaves.length === 0) return [] as any[];
+    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
     const LV_LABEL: Record<string, string> = {
       annual: "연차",
       tempAnnual: "가연차",
@@ -14220,30 +14241,32 @@ function OperatorHome() {
       longService: "장기재직휴가",
       petition: "청원휴가",
     };
+    // 사번별 사유 (앱 휴가 먼저, 직접 입력이 있으면 그게 우선)
+    const reasonByEmp = new Map<string, string>();
+    opLeaves.forEach((lv) =>
+      reasonByEmp.set(String(lv.employee_number), LV_LABEL[lv.leave_type] || lv.leave_type || "휴가")
+    );
+    opAbsences.forEach((ab) =>
+      reasonByEmp.set(String(ab.employee_number), ab.reason || "유고")
+    );
     const byEmp = new Map(opMembers.map((m) => [String(m.employee_number), m]));
-    const list = opLeaves
-      .map((lv) => {
-        const m = byEmp.get(String(lv.employee_number));
-        if (!m) return null;
-        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
-        if (!w) return null;
-        // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
-        if (String(w.dia).startsWith("대기")) return null;
-        if (w.type !== "주간" && w.type !== "야간") return null;
-        return {
-          dia: String(w.dia),
-          name: m.name,
-          reason: LV_LABEL[lv.leave_type] || lv.leave_type || "휴가",
-          region: m.work_group,
-        };
-      })
-      .filter(Boolean) as any[];
+    const list: any[] = [];
+    reasonByEmp.forEach((reason, emp) => {
+      const m = byEmp.get(emp);
+      if (!m) return;
+      const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+      if (!w) return;
+      // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
+      if (String(w.dia).startsWith("대기")) return;
+      if (w.type !== "주간" && w.type !== "야간") return;
+      list.push({ dia: String(w.dia), name: m.name, reason, region: m.work_group });
+    });
     list.sort(
       (a, b) =>
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
     );
     return list;
-  }, [opMembers, opRotation, opStartHist, opSwaps, opLeaves, targetStr]);
+  }, [opMembers, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -14353,6 +14376,221 @@ function OperatorHome() {
     { off: 1, step: "2차 확정", note: "1차 완료 · 하경수", hot: true },
     { off: 2, step: "1차 작성", note: "아직 아무것도 없음", hot: false },
   ];
+
+  // ── 유고 입력 화면 ──
+  if (showAbsence) {
+    const HYUGA = ["연차", "가연차", "촉진연차", "대체휴가", "학습휴가", "장기재직", "청원휴가"];
+    const HYUJIK = ["휴직", "육아휴직"];
+    const cands = opMembers
+      .filter((m) => !String(m.name).includes("결원"))
+      .filter((m) => absSearch.trim() === "" || String(m.name).includes(absSearch.trim()))
+      .slice(0, 8);
+    const finalReason =
+      absReason === "휴가" || absReason === "휴직" ? absSub : absReason === "병가" ? "병가" : absEtc.trim();
+
+    const saveAbsence = async () => {
+      if (!absSel) return showToast("사람을 먼저 선택하세요", "error");
+      if (!finalReason) return showToast("사유를 입력하세요", "error");
+      const { error } = await supabase.from("operator_absence").insert({
+        work_date: targetStr,
+        employee_number: String(absSel.employee_number),
+        member_name: absSel.name,
+        reason: finalReason,
+      });
+      if (error) return showToast("저장 실패: " + error.message, "error");
+      showToast(`${absSel.name} · ${finalReason} 추가됨`);
+      setAbsSel(null);
+      setAbsSearch("");
+      setAbsEtc("");
+      setAbsReload((k) => k + 1);
+    };
+    const delAbsence = async (id: any) => {
+      const { error } = await supabase.from("operator_absence").delete().eq("id", id);
+      if (error) return showToast("삭제 실패: " + error.message, "error");
+      setAbsReload((k) => k + 1);
+    };
+
+    const rzBtn = (label: string) => (
+      <button
+        key={label}
+        onClick={() => {
+          setAbsReason(label);
+          if (label === "휴가") setAbsSub("연차");
+          else if (label === "휴직") setAbsSub("휴직");
+        }}
+        style={{
+          fontSize: 13.5,
+          fontWeight: 800,
+          padding: "9px 18px",
+          borderRadius: 11,
+          border: absReason === label ? `1.5px solid ${OP_TEAL}` : "1.5px solid #E5E7EB",
+          background: absReason === label ? OP_TEAL : "#fff",
+          color: absReason === label ? "#fff" : "#6B7280",
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    );
+    const chip = (label: string) => (
+      <button
+        key={label}
+        onClick={() => setAbsSub(label)}
+        style={{
+          fontSize: 12.5,
+          fontWeight: 800,
+          padding: "7px 13px",
+          borderRadius: 9,
+          border: absSub === label ? `1.5px solid ${OP_TEAL_DARK}` : "1.5px solid #E5E7EB",
+          background: absSub === label ? "#CCFBF1" : "#fff",
+          color: absSub === label ? OP_TEAL_DARK : "#6B7280",
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    );
+
+    return (
+      <div style={{ maxWidth: 460, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <button
+            onClick={() => setShowAbsence(false)}
+            style={{ border: 0, background: "transparent", color: OP_TEAL_DARK, fontSize: 14, fontWeight: 800, fontFamily: "inherit", cursor: "pointer", padding: 0 }}
+          >
+            ‹ 뒤로
+          </button>
+          <span style={{ fontSize: 12.5, color: OP_TEAL_DARK, fontWeight: 800, background: "#F0FDFA", borderRadius: 8, padding: "4px 10px" }}>
+            {mm}/{dd} ({dow})
+          </span>
+        </div>
+
+        <div style={{ ...card }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>유고 입력</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 14 }}>
+            병가 · 휴가 · 휴직 · 기타 결근을 모두 유고로 관리합니다.
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>누구인가요?</div>
+          <input
+            value={absSel ? absSel.name : absSearch}
+            onChange={(e) => {
+              setAbsSel(null);
+              setAbsSearch(e.target.value);
+            }}
+            placeholder="이름 검색"
+            style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+          />
+          {!absSel &&
+            absSearch.trim() !== "" &&
+            cands.map((m) => (
+              <div
+                key={m.id}
+                onClick={() => {
+                  setAbsSel(m);
+                  setAbsSearch("");
+                }}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 12px", border: "1px solid #F0F0F2", borderRadius: 12, marginTop: 6, cursor: "pointer" }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, background: m.work_group === "도봉" ? "#FCE7F3" : "#F1F5F4", color: m.work_group === "도봉" ? "#BE185D" : "#4B5563" }}>
+                  {m.work_group}
+                </span>
+              </div>
+            ))}
+          {absSel && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 12px", border: `1.5px solid ${OP_TEAL}`, background: "#F0FDFA", borderRadius: 12, marginTop: 6 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{absSel.name}</span>
+              <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, background: absSel.work_group === "도봉" ? "#FCE7F3" : "#F1F5F4", color: absSel.work_group === "도봉" ? "#BE185D" : "#4B5563" }}>
+                {absSel.work_group}
+              </span>
+              <span style={{ marginLeft: "auto", color: OP_TEAL, fontWeight: 900 }}>✓</span>
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", margin: "16px 0 8px" }}>사유</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["휴가", "휴직", "병가", "기타"].map(rzBtn)}
+          </div>
+
+          {absReason === "휴가" && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>휴가 종류</div>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{HYUGA.map(chip)}</div>
+            </div>
+          )}
+          {absReason === "휴직" && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>휴직 구분</div>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{HYUJIK.map(chip)}</div>
+            </div>
+          )}
+          {absReason === "기타" && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>직접 입력</div>
+              <input
+                value={absEtc}
+                onChange={(e) => setAbsEtc(e.target.value)}
+                placeholder="사유를 입력하세요"
+                style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+              />
+            </div>
+          )}
+
+          <button
+            onClick={saveAbsence}
+            style={{ width: "100%", marginTop: 16, border: 0, borderRadius: 13, background: OP_TEAL, color: "#fff", fontSize: 14.5, fontWeight: 800, padding: "14px 0", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            {absSel ? `+ ${absSel.name} · ${finalReason || "사유 선택"} 추가` : "+ 추가"}
+          </button>
+
+          <div style={{ height: 1, background: "#F0F0F2", margin: "20px 0 8px" }} />
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
+            이 날짜 유고 ({opAbsences.length})
+          </div>
+          {opAbsences.length === 0 ? (
+            <div style={{ textAlign: "center", color: "#C4C7CC", fontSize: 12.5, padding: "16px 0" }}>
+              직접 입력한 결근이 없습니다.
+            </div>
+          ) : (
+            opAbsences.map((ab, i) => {
+              const m = opMembers.find((x) => String(x.employee_number) === String(ab.employee_number));
+              const w = m ? calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist) : null;
+              const diaTxt =
+                w && !String(w.dia).startsWith("대기") && (w.type === "주간" || w.type === "야간")
+                  ? `운전 다이아 ${w.dia}`
+                  : "그날 운전 근무 아님 (빈자리 미반영)";
+              return (
+                <div key={ab.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === opAbsences.length - 1 ? 0 : "1px solid #F5F5F7" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>
+                      {ab.member_name || (m ? m.name : ab.employee_number)}
+                      {m && (
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: m.work_group === "도봉" ? "#FCE7F3" : "#F1F5F4", color: m.work_group === "도봉" ? "#BE185D" : "#4B5563" }}>
+                          {m.work_group}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
+                      {ab.reason} · {diaTxt}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => delAbsence(ab.id)}
+                    style={{ border: 0, borderRadius: 10, background: "#FEF2F2", color: "#DC2626", fontSize: 12, fontWeight: 800, padding: "8px 12px", fontFamily: "inherit", cursor: "pointer" }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ── 채우기 팝업 ──
   if (fillDia) {
@@ -14920,6 +15158,7 @@ function OperatorHome() {
 
   const inputBtn = (
     <button
+      onClick={() => setShowAbsence(true)}
       style={{
         width: "100%",
         border: "1px solid #E9EDEC",
