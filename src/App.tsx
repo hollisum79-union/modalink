@@ -14111,6 +14111,7 @@ function OperatorHome() {
   const [absEtc, setAbsEtc] = useState("");
   const [absStart, setAbsStart] = useState(""); // 휴직·병가 기간 시작
   const [absEnd, setAbsEnd] = useState(""); // 휴직·병가 기간 종료
+  const [absMsg, setAbsMsg] = useState(""); // 저장 결과 메시지 (화면에 남김)
   const [absReload, setAbsReload] = useState(0);
   useEffect(() => {
     (async () => {
@@ -14405,9 +14406,10 @@ function OperatorHome() {
     const endD = isRange ? absEnd || startD : targetStr;
 
     const saveAbsence = async () => {
-      if (!absSel) return showToast("사람을 먼저 선택하세요", "error");
-      if (!finalReason) return showToast("사유를 입력하세요", "error");
-      if (isRange && endD < startD) return showToast("종료일이 시작일보다 빠릅니다", "error");
+      setAbsMsg("저장 중…");
+      if (!absSel) return setAbsMsg("⚠️ 사람을 먼저 선택하세요");
+      if (!finalReason) return setAbsMsg("⚠️ 사유를 선택/입력하세요");
+      if (isRange && endD < startD) return setAbsMsg("⚠️ 종료일이 시작일보다 빠릅니다");
       try {
         const { error } = await supabase.from("operator_absence").insert({
           work_date: startD,
@@ -14417,10 +14419,10 @@ function OperatorHome() {
           reason: finalReason,
         });
         if (error) {
-          showToast("저장 실패: " + error.message, "error");
+          setAbsMsg("❌ 저장 실패: " + error.message);
           return;
         }
-        showToast(`${absSel.name} · ${finalReason} 추가됨`);
+        setAbsMsg(`✓ ${absSel.name} · ${finalReason} 추가됨`);
         setAbsSel(null);
         setAbsSearch("");
         setAbsEtc("");
@@ -14428,7 +14430,7 @@ function OperatorHome() {
         setAbsEnd("");
         setAbsReload((k) => k + 1);
       } catch (e: any) {
-        showToast("저장 오류: " + (e?.message || String(e)), "error");
+        setAbsMsg("❌ 저장 오류: " + (e?.message || String(e)));
       }
     };
     const delAbsence = async (id: any) => {
@@ -14614,6 +14616,23 @@ function OperatorHome() {
           >
             {absSel ? `+ ${absSel.name} · ${finalReason || "사유 선택"} 추가` : "+ 추가"}
           </button>
+
+          {absMsg && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                fontSize: 12.5,
+                fontWeight: 800,
+                textAlign: "center",
+                background: absMsg.startsWith("✓") ? "#ECFDF5" : absMsg.startsWith("저장 중") ? "#F3F4F6" : "#FEF2F2",
+                color: absMsg.startsWith("✓") ? "#065F46" : absMsg.startsWith("저장 중") ? "#6B7280" : "#B91C1C",
+              }}
+            >
+              {absMsg}
+            </div>
+          )}
 
           <div style={{ height: 1, background: "#F0F0F2", margin: "20px 0 8px" }} />
           <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
