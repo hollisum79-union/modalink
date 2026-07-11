@@ -14659,6 +14659,19 @@ function OperatorHome() {
               <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
                 {e.name}
                 <span style={chip(shiftOf(e.dia))}>{shiftOf(e.dia)}</span>
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    padding: "2px 7px",
+                    borderRadius: 6,
+                    marginLeft: 6,
+                    background: e.region === "도봉" ? "#FCE7F3" : "#F1F5F4",
+                    color: e.region === "도봉" ? "#BE185D" : "#4B5563",
+                  }}
+                >
+                  {e.region}
+                </span>
               </div>
               <div style={meta}>
                 {a ? (
@@ -14765,6 +14778,18 @@ function OperatorHome() {
                   }}
                 >
                   {v.slot}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "2px 7px",
+                    borderRadius: 6,
+                    background: v.region === "도봉" ? "#FCE7F3" : "#F1F5F4",
+                    color: v.region === "도봉" ? "#BE185D" : "#4B5563",
+                  }}
+                >
+                  {v.region}
                 </span>
                 <span style={{ fontSize: 12.5, color: "#6B7280", fontWeight: 700 }}>비어 있음</span>
                 <span
