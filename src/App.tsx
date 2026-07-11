@@ -14135,20 +14135,7 @@ function OperatorHome() {
     return n >= 60 ? "야간" : "주간";
   };
 
-  // ── 예시 데이터: 날짜별로 다르게 (규칙 확정 후 실제 근무표와 연결) ──
-  const emptyByDay: Record<number, any[]> = {
-    1: [
-      { dia: "15", name: "안진모", reason: "대체휴가", region: "대공원" },
-      { dia: "63", name: "남훈식", reason: "연차", region: "도봉" },
-    ],
-    2: [
-      { dia: "32", name: "김철수", reason: "연차", region: "대공원" },
-      { dia: "47", name: "이영희", reason: "유고 · 육아휴직", region: "도봉" },
-      { dia: "71", name: "박민수", reason: "대체휴가", region: "대공원" },
-    ],
-    3: [{ dia: "9", name: "유지훈", reason: "촉진연차", region: "대공원" }],
-  };
-  const empty = emptyByDay[dayOffset] || [];
+  // 빈 자리(결원)는 아래에서 휴가 데이터(leave_history)로 계산 → const empty
   // ── 대기 근무자 (실데이터): 그날 교번 계산에서 dia가 "대기"로 시작하는 사람 ──
   //    usable/note(휴가로 못 씀)는 3-3에서 휴가 연동 시 채움. 지금은 전원 가능으로 표시.
   const standby = React.useMemo(() => {
@@ -14207,6 +14194,56 @@ function OperatorHome() {
       setDesigApplies(data || []);
     })();
   }, [targetStr]);
+
+  // 그 날짜의 휴가자 (실데이터 · leave_history) → 빈 자리 계산 재료
+  const [opLeaves, setOpLeaves] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("leave_history")
+        .select("employee_number, leave_type, used_date, status")
+        .eq("used_date", targetStr)
+        .neq("status", "취소");
+      setOpLeaves(data || []);
+    })();
+  }, [targetStr]);
+
+  // ── 빈 자리(결원) (실데이터): 그날 휴가인 사람의 다이아가 실제 운전 다이아면 빈 자리 ──
+  const empty = React.useMemo(() => {
+    if (opMembers.length === 0 || opRotation.length === 0 || opLeaves.length === 0) return [] as any[];
+    const LV_LABEL: Record<string, string> = {
+      annual: "연차",
+      tempAnnual: "가연차",
+      promotedAnnual: "촉진연차",
+      substitute: "대체휴가",
+      study: "학습휴가",
+      longService: "장기재직휴가",
+      petition: "청원휴가",
+    };
+    const byEmp = new Map(opMembers.map((m) => [String(m.employee_number), m]));
+    const list = opLeaves
+      .map((lv) => {
+        const m = byEmp.get(String(lv.employee_number));
+        if (!m) return null;
+        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+        if (!w) return null;
+        // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
+        if (String(w.dia).startsWith("대기")) return null;
+        if (w.type !== "주간" && w.type !== "야간") return null;
+        return {
+          dia: String(w.dia),
+          name: m.name,
+          reason: LV_LABEL[lv.leave_type] || lv.leave_type || "휴가",
+          region: m.work_group,
+        };
+      })
+      .filter(Boolean) as any[];
+    list.sort(
+      (a, b) =>
+        Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
+    );
+    return list;
+  }, [opMembers, opRotation, opStartHist, opSwaps, opLeaves, targetStr]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -14607,7 +14644,7 @@ function OperatorHome() {
       }}
     >
       {opLoaded
-        ? "대기 근무자는 실제 근무표에서 자동으로 불러왔습니다. 빈 자리(결원)·확정 도장은 아직 예시입니다."
+        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 유고 등 앱에 없는 결근은 '+휴가·유고 입력'으로 곧 추가됩니다. 확정 도장은 아직 예시입니다."
         : "실제 근무 데이터를 불러오는 중…"}
     </div>
   );
