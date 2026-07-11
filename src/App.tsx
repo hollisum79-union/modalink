@@ -14094,6 +14094,31 @@ function OperatorHome() {
   }, []);
   const isWide = winW >= 900;
 
+  // ── 실데이터: 교번 인원 · 교번표 · 시작이력 · 수락된 교체 (읽기 전용) ──
+  const [opMembers, setOpMembers] = useState<any[]>([]);
+  const [opRotation, setOpRotation] = useState<any[]>([]);
+  const [opStartHist, setOpStartHist] = useState<any[]>([]);
+  const [opSwaps, setOpSwaps] = useState<any[]>([]);
+  const [opLoaded, setOpLoaded] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const [mRes, rRes, hRes, sRes] = await Promise.all([
+        supabase
+          .from("members")
+          .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+          .eq("work_type", "교번"),
+        supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+        supabase.from("kyobun_start_history").select("*"),
+        supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+      ]);
+      setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
+      setOpRotation(rRes.data || []);
+      setOpStartHist(hRes.data || []);
+      setOpSwaps(sRes.data || []);
+      setOpLoaded(true);
+    })();
+  }, []);
+
   // 기본 날짜 = 오늘 + 2일 (이틀 전 정리)
   const [dayOffset, setDayOffset] = useState(2);
   const target = new Date();
@@ -14122,21 +14147,25 @@ function OperatorHome() {
     3: [{ dia: "9", name: "유지훈", reason: "촉진연차", region: "대공원" }],
   };
   const empty = emptyByDay[dayOffset] || [];
-  // 평일 대기 구성 (실제): 주간 — 대공원 1·2·3·5·6·7 / 도봉 8, 야간 — 대공원 61·62·63 / 도봉 64·65
-  const standby = [
-    { slot: "대기1", name: "정하늘", usable: true, note: "", region: "대공원" },
-    { slot: "대기2", name: "오세영", usable: true, note: "", region: "대공원" },
-    { slot: "대기3", name: "임도현", usable: false, note: "대체휴가", region: "대공원" },
-    { slot: "대기5", name: "구민재", usable: true, note: "", region: "대공원" },
-    { slot: "대기6", name: "서지운", usable: true, note: "", region: "대공원" },
-    { slot: "대기7", name: "문가온", usable: true, note: "", region: "대공원" },
-    { slot: "대기8", name: "황도윤", usable: true, note: "", region: "도봉" },
-    { slot: "대기61", name: "최바다", usable: true, note: "", region: "대공원" },
-    { slot: "대기62", name: "노하람", usable: true, note: "", region: "대공원" },
-    { slot: "대기63", name: "강산", usable: false, note: "연차", region: "대공원" },
-    { slot: "대기64", name: "백서준", usable: true, note: "", region: "도봉" },
-    { slot: "대기65", name: "유채원", usable: true, note: "", region: "도봉" },
-  ];
+  // ── 대기 근무자 (실데이터): 그날 교번 계산에서 dia가 "대기"로 시작하는 사람 ──
+  //    usable/note(휴가로 못 씀)는 3-3에서 휴가 연동 시 채움. 지금은 전원 가능으로 표시.
+  const standby = React.useMemo(() => {
+    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
+    const list = opMembers
+      .map((m) => {
+        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+        if (!w || !String(w.dia).startsWith("대기")) return null;
+        return { slot: String(w.dia), name: m.name, usable: true, note: "", region: m.work_group };
+      })
+      .filter(Boolean) as any[];
+    // 대기 번호 오름차순 (주간 1~59 → 야간 60~)
+    list.sort(
+      (a, b) =>
+        Number(String(a.slot).replace(/[^0-9]/g, "")) - Number(String(b.slot).replace(/[^0-9]/g, ""))
+    );
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
 
   // 대상 날짜 문자열 (로컬)
   const targetStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
@@ -14553,7 +14582,9 @@ function OperatorHome() {
         lineHeight: 1.6,
       }}
     >
-      아래 내용은 예시입니다. 규칙이 확정되면 실제 근무표와 연결됩니다.
+      {opLoaded
+        ? "대기 근무자는 실제 근무표에서 자동으로 불러왔습니다. 빈 자리(결원)·확정 도장은 아직 예시입니다."
+        : "실제 근무 데이터를 불러오는 중…"}
     </div>
   );
 
