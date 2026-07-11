@@ -14085,6 +14085,15 @@ function OperatorStaffPicker({ onPick }: { onPick: (s: any) => void }) {
 
 // ── 운용 홈: 그날 빈 자리 + 대기 근무자 (아직 예시 데이터) ──
 function OperatorHome() {
+  // 화면 폭 (900px 이상이면 와이드 3열 배치)
+  const [winW, setWinW] = useState(typeof window !== "undefined" ? window.innerWidth : 400);
+  useEffect(() => {
+    const onR = () => setWinW(window.innerWidth);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
+  const isWide = winW >= 900;
+
   // 기본 날짜 = 오늘 + 2일 (이틀 전 정리)
   const [dayOffset, setDayOffset] = useState(2);
   const target = new Date();
@@ -14370,19 +14379,20 @@ function OperatorHome() {
     );
   }
 
-  return (
-    <div>
-      {/* 오늘 할 일 */}
-      <div style={{ ...card, padding: "14px 16px" }}>
-        <div style={{ ...ttl, marginBottom: 8 }}>
-          오늘 할 일
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: "#C4C7CC" }}>예시</span>
-        </div>
+  // ── 섹션들 (와이드/세로 공용) ──
+  const taskCard = (
+    <div style={{ ...card, padding: "14px 16px", marginBottom: isWide ? 0 : 12 }}>
+      <div style={{ ...ttl, marginBottom: 8 }}>
+        오늘 할 일
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: "#C4C7CC" }}>예시</span>
+      </div>
+      <div style={{ display: isWide ? "flex" : "block", gap: 10 }}>
         {tasks.map((t, i) => (
           <div
             key={t.off}
             onClick={() => setDayOffset(t.off)}
             style={{
+              flex: 1,
               display: "flex",
               alignItems: "center",
               gap: 10,
@@ -14390,15 +14400,15 @@ function OperatorHome() {
               borderRadius: 12,
               background: dayOffset === t.off ? "#F0FDFA" : "#F9FAFB",
               border: dayOffset === t.off ? "1.5px solid #99F6E4" : "1.5px solid transparent",
-              marginBottom: i === tasks.length - 1 ? 0 : 8,
+              marginBottom: isWide || i === tasks.length - 1 ? 0 : 8,
               cursor: "pointer",
             }}
           >
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>
                 {fmtDate(t.off)} 근무
               </div>
-              <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>{t.note}</div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>{t.note}</div>
             </div>
             <div
               style={{
@@ -14416,61 +14426,313 @@ function OperatorHome() {
           </div>
         ))}
       </div>
+    </div>
+  );
 
-      {/* 날짜 이동 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          background: "#fff",
-          borderRadius: 16,
-          border: "1px solid #E9EDEC",
-          padding: "10px 12px",
-          marginBottom: 12,
-        }}
+  const dateCard = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "#fff",
+        borderRadius: 16,
+        border: "1px solid #E9EDEC",
+        padding: "10px 12px",
+        marginBottom: isWide ? 0 : 12,
+        height: isWide ? "100%" : undefined,
+        boxSizing: "border-box",
+      }}
+    >
+      <button
+        onClick={() => setDayOffset(dayOffset - 1)}
+        style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
       >
-        <button
-          onClick={() => setDayOffset(dayOffset - 1)}
-          style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
-        >
-          ‹
-        </button>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", letterSpacing: -0.3 }}>
-            {mm}월 {dd}일 ({dow}) 근무
+        ‹
+      </button>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", letterSpacing: -0.3 }}>
+          {mm}월 {dd}일 ({dow}) 근무
+        </div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 1 }}>
+          {dayOffset === 2 ? "이틀 전 정리" : dayOffset === 1 ? "하루 전 확인" : dayOffset === 0 ? "당일" : `${dayOffset}일 뒤 근무분`}
+        </div>
+      </div>
+      <button
+        onClick={() => setDayOffset(dayOffset + 1)}
+        style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+      >
+        ›
+      </button>
+    </div>
+  );
+
+  const banner = (
+    <div
+      style={{
+        background: "#FEF3C7",
+        color: "#92400E",
+        borderRadius: 12,
+        padding: "10px 12px",
+        fontSize: 11.5,
+        fontWeight: 700,
+        marginBottom: 12,
+        lineHeight: 1.6,
+      }}
+    >
+      아래 내용은 예시입니다. 규칙이 확정되면 실제 근무표와 연결됩니다.
+    </div>
+  );
+
+  const balanceStrip = (
+    <div style={{ display: isWide ? "flex" : "block", gap: 12, marginBottom: isWide ? 14 : 0 }}>
+      <div style={{ flex: 1 }}>
+        <BalanceRow label="주간" b={day} />
+      </div>
+      <div style={{ flex: 1 }}>
+        <BalanceRow label="야간" b={night} />
+      </div>
+    </div>
+  );
+
+  const emptyCard = (
+    <div style={card}>
+      <div style={ttl}>
+        빈 자리{" "}
+        <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
+          {empty.length}
+        </span>
+      </div>
+      {empty.map((e, i) => {
+        const a = assigned[e.dia];
+        return (
+          <div key={e.dia} style={{ ...row, borderBottom: i === empty.length - 1 ? 0 : row.borderBottom }}>
+            <div
+              style={{
+                minWidth: 44,
+                textAlign: "center",
+                background: a ? "#F0FDFA" : "#F1F5F4",
+                borderRadius: 10,
+                padding: "7px 4px",
+                fontSize: 13,
+                fontWeight: 800,
+                color: a ? OP_TEAL_DARK : "#374151",
+                flex: "none",
+              }}
+            >
+              {e.dia}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                {e.name}
+                <span style={chip(shiftOf(e.dia))}>{shiftOf(e.dia)}</span>
+              </div>
+              <div style={meta}>
+                {a ? (
+                  <span style={{ color: OP_TEAL_DARK, fontWeight: 800 }}>
+                    → {a.name} ({a.via})
+                  </span>
+                ) : (
+                  e.reason
+                )}
+              </div>
+            </div>
+            {a ? (
+              <button
+                onClick={() => {
+                  const next = { ...assigned };
+                  delete next[e.dia];
+                  setAssigned(next);
+                }}
+                style={{ border: 0, borderRadius: 11, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+              >
+                취소
+              </button>
+            ) : (
+              <button
+                onClick={() => setFillDia(e.dia)}
+                style={{ border: 0, borderRadius: 11, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+              >
+                채우기
+              </button>
+            )}
           </div>
-          <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 1 }}>
-            {dayOffset === 2 ? "이틀 전 정리" : dayOffset === 1 ? "하루 전 확인" : dayOffset === 0 ? "당일" : `${dayOffset}일 뒤 근무분`}
+        );
+      })}
+    </div>
+  );
+
+  const standbyCards = (["주간", "야간"] as const).map((sec) => {
+    const list = standby.filter((x) => shiftOf(x.slot) === sec);
+    const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
+    return (
+      <div style={card} key={sec}>
+        <div style={ttl}>
+          {sec} 대기{" "}
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              background: avail > 0 ? "#CCFBF1" : "#FEE2E2",
+              color: avail > 0 ? OP_TEAL_DARK : "#991B1B",
+              padding: "3px 9px",
+              borderRadius: 20,
+            }}
+          >
+            충당 가능 {avail}명 / {list.length}명
+          </span>
+        </div>
+        {list.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "20px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            {sec} 대기가 없습니다.
+          </div>
+        ) : (
+          list.map((s, i) => {
+            const used = usedNames.includes(s.name);
+            const grey = !s.usable || used;
+            return (
+              <div key={s.slot} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
+                <div
+                  style={{
+                    minWidth: 56,
+                    textAlign: "center",
+                    background: grey ? "#F9FAFB" : "#FEFCE8",
+                    borderRadius: 10,
+                    padding: "7px 4px",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: grey ? "#C4C7CC" : "#CA8A04",
+                    flex: "none",
+                  }}
+                >
+                  {s.slot}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: grey ? "#C4C7CC" : "#111827" }}>
+                    {s.name}
+                  </div>
+                  <div style={meta}>
+                    {used ? "배정됨" : s.usable ? "사용 가능" : s.note + " · 못 씀"}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
+  });
+
+  const inputBtn = (
+    <button
+      style={{
+        width: "100%",
+        border: "1px solid #E9EDEC",
+        borderRadius: 14,
+        background: "#fff",
+        color: "#374151",
+        fontSize: 13.5,
+        fontWeight: 800,
+        padding: "14px 0",
+        fontFamily: "inherit",
+        cursor: "pointer",
+        marginBottom: 14,
+      }}
+    >
+      + 휴가 · 유고 입력
+    </button>
+  );
+
+  const stampCard = (
+    <div style={card}>
+      <div style={ttl}>확정 기록</div>
+      {stamps.map((s, i) => (
+        <div key={s.label} style={{ ...row, borderBottom: i === stamps.length - 1 ? 0 : row.borderBottom }}>
+          <div
+            style={{
+              width: 9,
+              height: 9,
+              borderRadius: "50%",
+              background: s.who ? OP_TEAL : "#E5E7EB",
+              flex: "none",
+            }}
+          />
+          <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: s.who ? "#111827" : "#C4C7CC" }}>
+            {s.label}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600 }}>
+            {s.who ? `${s.who} · ${s.when}` : "아직"}
           </div>
         </div>
-        <button
-          onClick={() => setDayOffset(dayOffset + 1)}
-          style={{ border: 0, background: "#F3F4F6", borderRadius: 10, width: 34, height: 34, fontSize: 15, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
-        >
-          ›
-        </button>
-      </div>
-
+      ))}
       <div
         style={{
-          background: "#FEF3C7",
-          color: "#92400E",
-          borderRadius: 12,
-          padding: "10px 12px",
+          marginTop: 12,
           fontSize: 11.5,
-          fontWeight: 700,
-          marginBottom: 12,
-          lineHeight: 1.6,
+          color: "#9CA3AF",
+          lineHeight: 1.7,
+          background: "#F9FAFB",
+          borderRadius: 10,
+          padding: "10px 12px",
         }}
       >
-        아래 내용은 예시입니다. 규칙이 확정되면 실제 근무표와 연결됩니다.
+        확정해도 잠기지 않습니다. 당일 아침까지 고칠 수 있고, 고치면 이 기록에 남습니다.
       </div>
+    </div>
+  );
 
-      {/* 주간 / 야간 수급 */}
-      <BalanceRow label="주간" b={day} />
-      <BalanceRow label="야간" b={night} />
+  const confirmBtn = (
+    <button
+      style={{
+        width: "100%",
+        border: 0,
+        borderRadius: 14,
+        background: "linear-gradient(135deg,#0F766E,#0D9488)",
+        color: "#fff",
+        fontSize: 14.5,
+        fontWeight: 800,
+        padding: "16px 0",
+        fontFamily: "inherit",
+        cursor: "pointer",
+      }}
+    >
+      1차 확정
+    </button>
+  );
 
+  // ── 와이드(900px+): 3열 배치 ──
+  if (isWide) {
+    return (
+      <div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, marginBottom: 14 }}>
+          {taskCard}
+          {dateCard}
+        </div>
+        {banner}
+        {balanceStrip}
+        <div style={{ display: "grid", gridTemplateColumns: "1.25fr 1fr 0.95fr", gap: 14, alignItems: "start" }}>
+          <div>
+            {emptyCard}
+            {inputBtn}
+          </div>
+          <div>{standbyCards}</div>
+          <div>
+            {stampCard}
+            <div style={{ height: 12 }} />
+            {confirmBtn}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 세로(폰): 기존 순서 ──
+  return (
+    <div>
+      {taskCard}
+      {dateCard}
+      {banner}
+      {balanceStrip}
       <div
         style={{
           fontSize: 11.5,
@@ -14482,206 +14744,12 @@ function OperatorHome() {
       >
         대기충당은 주간은 주간끼리, 야간은 야간끼리만 됩니다. 모자란 만큼 휴무충당이 필요합니다.
       </div>
-
-      {/* 빈 자리 */}
-      <div style={card}>
-        <div style={ttl}>
-          빈 자리{" "}
-          <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
-            {empty.length}
-          </span>
-        </div>
-        {empty.map((e, i) => {
-          const a = assigned[e.dia];
-          return (
-            <div key={e.dia} style={{ ...row, borderBottom: i === empty.length - 1 ? 0 : row.borderBottom }}>
-              <div
-                style={{
-                  minWidth: 44,
-                  textAlign: "center",
-                  background: a ? "#F0FDFA" : "#F1F5F4",
-                  borderRadius: 10,
-                  padding: "7px 4px",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: a ? OP_TEAL_DARK : "#374151",
-                  flex: "none",
-                }}
-              >
-                {e.dia}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-                  {e.name}
-                  <span style={chip(shiftOf(e.dia))}>{shiftOf(e.dia)}</span>
-                </div>
-                <div style={meta}>
-                  {a ? (
-                    <span style={{ color: OP_TEAL_DARK, fontWeight: 800 }}>
-                      → {a.name} ({a.via})
-                    </span>
-                  ) : (
-                    e.reason
-                  )}
-                </div>
-              </div>
-              {a ? (
-                <button
-                  onClick={() => {
-                    const next = { ...assigned };
-                    delete next[e.dia];
-                    setAssigned(next);
-                  }}
-                  style={{ border: 0, borderRadius: 11, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
-                >
-                  취소
-                </button>
-              ) : (
-                <button
-                  onClick={() => setFillDia(e.dia)}
-                  style={{ border: 0, borderRadius: 11, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
-                >
-                  채우기
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 대기 근무자 — 주간/야간 분리 */}
-      {(["주간", "야간"] as const).map((sec) => {
-        const list = standby.filter((x) => shiftOf(x.slot) === sec);
-        const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
-        return (
-          <div style={card} key={sec}>
-            <div style={ttl}>
-              {sec} 대기{" "}
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  background: avail > 0 ? "#CCFBF1" : "#FEE2E2",
-                  color: avail > 0 ? OP_TEAL_DARK : "#991B1B",
-                  padding: "3px 9px",
-                  borderRadius: 20,
-                }}
-              >
-                충당 가능 {avail}명 / {list.length}명
-              </span>
-            </div>
-            {list.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "20px 0", color: "#C4C7CC", fontSize: 12.5 }}>
-                {sec} 대기가 없습니다.
-              </div>
-            ) : (
-              list.map((s, i) => {
-                const used = usedNames.includes(s.name);
-                const grey = !s.usable || used;
-                return (
-                  <div key={s.slot} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
-                    <div
-                      style={{
-                        minWidth: 56,
-                        textAlign: "center",
-                        background: grey ? "#F9FAFB" : "#FEFCE8",
-                        borderRadius: 10,
-                        padding: "7px 4px",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: grey ? "#C4C7CC" : "#CA8A04",
-                        flex: "none",
-                      }}
-                    >
-                      {s.slot}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: grey ? "#C4C7CC" : "#111827" }}>
-                        {s.name}
-                      </div>
-                      <div style={meta}>
-                        {used ? "배정됨" : s.usable ? "사용 가능" : s.note + " · 못 씀"}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        );
-      })}
-
-      <button
-        style={{
-          width: "100%",
-          border: "1px solid #E9EDEC",
-          borderRadius: 14,
-          background: "#fff",
-          color: "#374151",
-          fontSize: 13.5,
-          fontWeight: 800,
-          padding: "14px 0",
-          fontFamily: "inherit",
-          cursor: "pointer",
-          marginBottom: 14,
-        }}
-      >
-        + 휴가 · 유고 입력
-      </button>
-
-      {/* 확정 도장 */}
-      <div style={card}>
-        <div style={ttl}>확정 기록</div>
-        {stamps.map((s, i) => (
-          <div key={s.label} style={{ ...row, borderBottom: i === stamps.length - 1 ? 0 : row.borderBottom }}>
-            <div
-              style={{
-                width: 9,
-                height: 9,
-                borderRadius: "50%",
-                background: s.who ? OP_TEAL : "#E5E7EB",
-                flex: "none",
-              }}
-            />
-            <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: s.who ? "#111827" : "#C4C7CC" }}>
-              {s.label}
-            </div>
-            <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600 }}>
-              {s.who ? `${s.who} · ${s.when}` : "아직"}
-            </div>
-          </div>
-        ))}
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 11.5,
-            color: "#9CA3AF",
-            lineHeight: 1.7,
-            background: "#F9FAFB",
-            borderRadius: 10,
-            padding: "10px 12px",
-          }}
-        >
-          확정해도 잠기지 않습니다. 당일 아침까지 고칠 수 있고, 고치면 이 기록에 남습니다.
-        </div>
-      </div>
-
-      <button
-        style={{
-          width: "100%",
-          border: 0,
-          borderRadius: 14,
-          background: "linear-gradient(135deg,#0F766E,#0D9488)",
-          color: "#fff",
-          fontSize: 14.5,
-          fontWeight: 800,
-          padding: "16px 0",
-          fontFamily: "inherit",
-          cursor: "pointer",
-        }}
-      >
-        1차 확정
-      </button>
+      {emptyCard}
+      {standbyCards}
+      {inputBtn}
+      {stampCard}
+      <div style={{ height: 12 }} />
+      {confirmBtn}
     </div>
   );
 }
@@ -15857,7 +15925,7 @@ useEffect(() => {
   return (
     <div
       style={{
-        maxWidth: 430,
+        maxWidth: activeMenu === "operator" ? 1200 : 430,
         margin: "0 auto",
         fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
         background: "#F4F3FF",
