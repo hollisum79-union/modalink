@@ -14802,6 +14802,399 @@ function OperatorHome() {
 }
 
 // ── 지원근무: 2개월 1기, 각 기 1회 의무. 대상자는 교대 근무자 중 지정 ──
+// ── 신청함: 지정·지원 신청 + 휴무충당 불가 (chungdang_apply, 대리 입력 실작동) ──
+const APPLY_KINDS: Record<string, string> = {
+  designated: "지정근무",
+  support: "지원근무",
+  no_holiday_fill: "휴무충당 불가",
+};
+
+function OperatorApply({ opName }: { opName: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [kind, setKind] = useState("designated");
+  const [workDate, setWorkDate] = useState("");
+  const [q, setQ] = useState("");
+  const [people, setPeople] = useState<any[]>([]);
+  const [picked, setPicked] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("chungdang_apply")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) showToast("불러오기 실패: " + error.message, "error");
+    setItems(data || []);
+    setLoading(false);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const searchPeople = async (text: string) => {
+    setQ(text);
+    setPicked(null);
+    if (!text.trim()) {
+      setPeople([]);
+      return;
+    }
+    let query = supabase
+      .from("members")
+      .select("id, name, employee_number, work_type, is_support_target")
+      .or(`name.ilike.%${text.trim()}%,employee_number.ilike.%${text.trim()}%`)
+      .limit(8);
+    if (kind === "support") query = query.eq("is_support_target", true);
+    if (kind === "designated") query = query.eq("work_type", "교번");
+    const { data, error } = await query;
+    if (error) {
+      showToast("검색 실패: " + error.message, "error");
+      return;
+    }
+    setPeople((data || []).filter((m: any) => !String(m.name || "").includes("결원")));
+  };
+
+  const save = async () => {
+    if (!picked) {
+      showToast("사람을 선택하세요", "error");
+      return;
+    }
+    if (!workDate) {
+      showToast("날짜를 선택하세요", "error");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("chungdang_apply").insert({
+      member_id: picked.id,
+      member_name: picked.name,
+      kind,
+      work_date: workDate,
+      via: opName,
+    });
+    setSaving(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`${picked.name} · ${APPLY_KINDS[kind]} 입력됨`);
+    setFormOpen(false);
+    setQ("");
+    setPeople([]);
+    setPicked(null);
+    setWorkDate("");
+    load();
+  };
+
+  const cancelItem = async (it: any) => {
+    const { error } = await supabase
+      .from("chungdang_apply")
+      .update({ status: "canceled" })
+      .eq("id", it.id);
+    if (error) {
+      showToast("취소 실패: " + error.message, "error");
+      return;
+    }
+    showToast("취소됨 (기록은 남습니다)");
+    load();
+  };
+
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+  const inputSt: React.CSSProperties = {
+    width: "100%",
+    border: "1px solid #E5E7EB",
+    borderRadius: 12,
+    padding: "12px 14px",
+    fontSize: 14,
+    fontFamily: "inherit",
+    WebkitAppearance: "none",
+    appearance: "none",
+    boxSizing: "border-box",
+    background: "#fff",
+  };
+
+  // ── 대리 입력 폼 ──
+  if (formOpen) {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <button
+            onClick={() => setFormOpen(false)}
+            style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            ‹ 뒤로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>대리 입력</div>
+        </div>
+
+        <div
+          style={{
+            background: "#CCFBF1",
+            color: OP_TEAL_DARK,
+            borderRadius: 12,
+            padding: "10px 12px",
+            fontSize: 11.5,
+            fontWeight: 700,
+            lineHeight: 1.7,
+            marginBottom: 12,
+          }}
+        >
+          당사자 동의를 받고 입력하세요. 이력에 「대리 입력 · {opName}」으로 남습니다.
+        </div>
+
+        <div style={card}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>종류</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            {Object.entries(APPLY_KINDS).map(([k, label]) => (
+              <div
+                key={k}
+                onClick={() => {
+                  setKind(k);
+                  setQ("");
+                  setPeople([]);
+                  setPicked(null);
+                }}
+                style={{
+                  flex: 1,
+                  textAlign: "center",
+                  padding: "11px 0",
+                  borderRadius: 12,
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  background: kind === k ? "#F0FDFA" : "#F9FAFB",
+                  border: kind === k ? "1.5px solid #99F6E4" : "1.5px solid transparent",
+                  color: kind === k ? OP_TEAL_DARK : "#9CA3AF",
+                }}
+              >
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
+            누구 {kind === "support" ? "(지원근무 대상자만 검색됨)" : kind === "designated" ? "(교번 근무자만 검색됨)" : ""}
+          </div>
+          {picked ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                background: "#F0FDFA",
+                border: "1.5px solid #99F6E4",
+                borderRadius: 12,
+                padding: "12px 14px",
+                marginBottom: 16,
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>{picked.name}</div>
+                <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600 }}>{picked.employee_number}</div>
+              </div>
+              <button
+                onClick={() => {
+                  setPicked(null);
+                  setQ("");
+                }}
+                style={{ border: 0, background: "#fff", borderRadius: 9, padding: "7px 12px", fontSize: 12, fontWeight: 800, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
+              >
+                변경
+              </button>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              <input
+                value={q}
+                onChange={(e) => searchPeople(e.target.value)}
+                placeholder="이름 또는 사번 검색"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                style={inputSt}
+              />
+              {people.length > 0 && (
+                <div style={{ border: "1px solid #E9EDEC", borderRadius: 12, marginTop: 8, overflow: "hidden" }}>
+                  {people.map((m) => (
+                    <div
+                      key={m.id}
+                      onClick={() => setPicked(m)}
+                      style={{
+                        padding: "11px 14px",
+                        borderBottom: "1px solid #F3F4F6",
+                        cursor: "pointer",
+                        background: "#fff",
+                      }}
+                    >
+                      <span style={{ fontSize: 13.5, fontWeight: 700 }}>{m.name}</span>
+                      <span style={{ fontSize: 11.5, color: "#9CA3AF", marginLeft: 8 }}>{m.employee_number}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
+            {kind === "no_holiday_fill" ? "불가한 날짜" : "근무할 날짜 (본인 휴무일)"}
+          </div>
+          <input
+            type="date"
+            value={workDate}
+            onChange={(e) => setWorkDate(e.target.value)}
+            style={{ ...inputSt, marginBottom: 4 }}
+          />
+        </div>
+
+        <button
+          onClick={save}
+          disabled={saving}
+          style={{
+            width: "100%",
+            border: 0,
+            borderRadius: 14,
+            background: "linear-gradient(135deg,#0F766E,#0D9488)",
+            color: "#fff",
+            fontSize: 14.5,
+            fontWeight: 800,
+            padding: "16px 0",
+            fontFamily: "inherit",
+            cursor: "pointer",
+            opacity: saving ? 0.6 : 1,
+          }}
+        >
+          {saving ? "저장 중…" : "입력 저장"}
+        </button>
+      </div>
+    );
+  }
+
+  // ── 목록 ──
+  const statusBadge = (st: string) => {
+    const map: Record<string, [string, string, string]> = {
+      applied: ["신청", "#DBEAFE", "#1D4ED8"],
+      canceled: ["취소", "#F3F4F6", "#9CA3AF"],
+      changed: ["변경", "#FEF3C7", "#92400E"],
+      confirmed: ["확정", "#CCFBF1", "#0F766E"],
+      done: ["완료", "#D1FAE5", "#065F46"],
+    };
+    const [label, bg, fg] = map[st] || [st, "#F3F4F6", "#6B7280"];
+    return (
+      <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 8px", borderRadius: 7, background: bg, color: fg }}>
+        {label}
+      </span>
+    );
+  };
+
+  return (
+    <div>
+      {(["designated", "support", "no_holiday_fill"] as const).map((k) => {
+        const list = items.filter((it) => it.kind === k);
+        const active = list.filter((it) => it.status !== "canceled").length;
+        return (
+          <div style={card} key={k}>
+            <div style={ttl}>
+              {APPLY_KINDS[k]}{" "}
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: k === "no_holiday_fill" ? "#FEE2E2" : "#CCFBF1",
+                  color: k === "no_holiday_fill" ? "#991B1B" : OP_TEAL_DARK,
+                  padding: "3px 9px",
+                  borderRadius: 20,
+                }}
+              >
+                {active}건
+              </span>
+            </div>
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>불러오는 중…</div>
+            ) : list.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
+                {k === "no_holiday_fill"
+                  ? "휴무충당은 신청받지 않습니다. 못 하는 사람만 여기 기록됩니다."
+                  : "아직 입력이 없습니다."}
+              </div>
+            ) : (
+              list.map((it, i) => (
+                <div key={it.id} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        color: it.status === "canceled" ? "#C4C7CC" : "#111827",
+                        textDecoration: it.status === "canceled" ? "line-through" : "none",
+                      }}
+                    >
+                      {it.member_name}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                      {it.work_date} · {it.via === "app" ? "앱 신청" : `대리 입력 · ${it.via}`}
+                    </div>
+                  </div>
+                  {statusBadge(it.status)}
+                  {it.status === "applied" && (
+                    <button
+                      onClick={() => cancelItem(it)}
+                      style={{ border: 0, borderRadius: 9, background: "#F3F4F6", color: "#6B7280", fontSize: 11.5, fontWeight: 800, padding: "7px 11px", fontFamily: "inherit", cursor: "pointer" }}
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        );
+      })}
+
+      <button
+        onClick={() => setFormOpen(true)}
+        style={{
+          width: "100%",
+          border: 0,
+          borderRadius: 14,
+          background: "linear-gradient(135deg,#0F766E,#0D9488)",
+          color: "#fff",
+          fontSize: 14.5,
+          fontWeight: 800,
+          padding: "16px 0",
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        + 대리 입력
+      </button>
+    </div>
+  );
+}
+
 // ── 순위표: 주간 점수판 / 야간 개수판 (별개 장부) + 지도 기관사 지정 ──
 function OperatorRank() {
   const [board, setBoard] = useState<"주간" | "야간">("주간");
@@ -15480,7 +15873,7 @@ function OperatorSupport() {
   );
 }
 
-function OperatorMockPanel({ tab }: { tab: string }) {
+function OperatorMockPanel({ tab, opName }: { tab: string; opName: string }) {
   const card: React.CSSProperties = {
     background: "#fff",
     borderRadius: 16,
@@ -15534,42 +15927,7 @@ function OperatorMockPanel({ tab }: { tab: string }) {
   if (tab === "home") return <OperatorHome />;
   if (tab === "support") return <OperatorSupport />;
 
-  if (tab === "apply")
-    return (
-      <div>
-        {notReady}
-        <div style={card}>
-          <div style={ttl}>
-            지정근무 신청 <span style={pill}>교번 · 0건</span>
-          </div>
-          <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
-            아직 신청이 없습니다.
-            <br />
-            교번 근무자가 휴무일에 신청할 수 있습니다.
-          </div>
-        </div>
-        <div style={card}>
-          <div style={ttl}>
-            지원근무 신청 <span style={pill}>교대 · 0건</span>
-          </div>
-          <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
-            아직 신청이 없습니다.
-            <br />
-            지원근무 대상자가 휴무일에 신청할 수 있습니다.
-          </div>
-        </div>
-        <div style={card}>
-          <div style={ttl}>
-            휴무충당 불가 <span style={{ fontSize: 11, fontWeight: 700, background: "#FEE2E2", color: "#991B1B", padding: "3px 9px", borderRadius: 20 }}>0건</span>
-          </div>
-          <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13, lineHeight: 1.7 }}>
-            휴무충당은 신청받지 않습니다.
-            <br />
-            그날 휴무자 전원이 후보이고, 못 하는 사람만 여기서 빠집니다.
-          </div>
-        </div>
-      </div>
-    );
+  if (tab === "apply") return <OperatorApply opName={opName} />;
 
   if (tab === "rank") return <OperatorRank />;
 
@@ -15749,7 +16107,7 @@ function OperatorScreen() {
         ))}
       </div>
 
-      <OperatorMockPanel tab={tab} />
+      <OperatorMockPanel tab={tab} opName={me.name} />
     </div>
   );
 }
