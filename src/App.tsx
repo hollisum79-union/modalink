@@ -14261,6 +14261,15 @@ function OperatorHome() {
       if (w.type !== "주간" && w.type !== "야간") return;
       list.push({ dia: String(w.dia), name: m.name, reason, region: m.work_group });
     });
+    // ② 결원(공석) — 사람이 없는 자리. 근무표에 이미 등록됨. 운전 다이아에 걸리면 빈 자리.
+    opMembers.forEach((m) => {
+      if (!String(m.name).includes("결원")) return;
+      const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+      if (!w) return;
+      if (String(w.dia).startsWith("대기")) return; // 대기 결원은 대기 뱃지에서 처리
+      if (w.type !== "주간" && w.type !== "야간") return;
+      list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
+    });
     list.sort(
       (a, b) =>
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
