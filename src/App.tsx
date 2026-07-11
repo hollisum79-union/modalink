@@ -14153,8 +14153,12 @@ function OperatorHome() {
     if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
     const list = opMembers
       .map((m) => {
+        // 결원은 사람이 아님 → 대기에서 제외
+        if (String(m.name).includes("결원")) return null;
         const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
         if (!w || !String(w.dia).startsWith("대기")) return null;
+        // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
+        if (String(w.dia).includes("~") || w.type === "비번") return null;
         return { slot: String(w.dia), name: m.name, usable: true, note: "", region: m.work_group };
       })
       .filter(Boolean) as any[];
