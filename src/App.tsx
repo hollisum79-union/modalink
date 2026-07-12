@@ -14406,18 +14406,30 @@ function OperatorHome() {
     const endD = isRange ? absEnd || startD : targetStr;
 
     const saveAbsence = async () => {
+      console.log("[유고저장] 클릭됨. 시도값:", {
+        emp: absSel?.employee_number,
+        name: absSel?.name,
+        reason: finalReason,
+        isRange,
+        work_date: startD,
+        end_date: endD,
+      });
       setAbsMsg("저장 중…");
       if (!absSel) return setAbsMsg("⚠️ 사람을 먼저 선택하세요");
       if (!finalReason) return setAbsMsg("⚠️ 사유를 선택/입력하세요");
       if (isRange && endD < startD) return setAbsMsg("⚠️ 종료일이 시작일보다 빠릅니다");
       try {
-        const { error } = await supabase.from("operator_absence").insert({
-          work_date: startD,
-          end_date: endD,
-          employee_number: String(absSel.employee_number),
-          member_name: absSel.name,
-          reason: finalReason,
-        });
+        const { data, error } = await supabase
+          .from("operator_absence")
+          .insert({
+            work_date: startD,
+            end_date: endD,
+            employee_number: String(absSel.employee_number),
+            member_name: absSel.name,
+            reason: finalReason,
+          })
+          .select();
+        console.log("[유고저장] 응답 data:", data, " error:", error);
         if (error) {
           setAbsMsg("❌ 저장 실패: " + error.message);
           return;
@@ -14430,6 +14442,7 @@ function OperatorHome() {
         setAbsEnd("");
         setAbsReload((k) => k + 1);
       } catch (e: any) {
+        console.log("[유고저장] 예외:", e);
         setAbsMsg("❌ 저장 오류: " + (e?.message || String(e)));
       }
     };
