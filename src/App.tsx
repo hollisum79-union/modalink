@@ -14094,6 +14094,44 @@ function OperatorHome() {
   }, []);
   const isWide = winW >= 900;
 
+  // ── 실데이터: 교번 인원 · 교번표 · 시작이력 · 수락된 교체 (읽기 전용) ──
+  const [opMembers, setOpMembers] = useState<any[]>([]);
+  const [opRotation, setOpRotation] = useState<any[]>([]);
+  const [opStartHist, setOpStartHist] = useState<any[]>([]);
+  const [opSwaps, setOpSwaps] = useState<any[]>([]);
+  const [opLoaded, setOpLoaded] = useState(false);
+  // 결원 펼침 (뱃지 눌렀을 때 어느 시간대의 결원 목록을 보여줄지)
+  const [openVacant, setOpenVacant] = useState<string | null>(null);
+  // 유고 입력 화면 상태
+  const [showAbsence, setShowAbsence] = useState(false);
+  const [absSearch, setAbsSearch] = useState("");
+  const [absSel, setAbsSel] = useState<any>(null);
+  const [absReason, setAbsReason] = useState("휴가"); // 휴가/휴직/병가/기타
+  const [absSub, setAbsSub] = useState("연차"); // 휴가 종류 또는 휴직 구분
+  const [absEtc, setAbsEtc] = useState("");
+  const [absStart, setAbsStart] = useState(""); // 휴직·병가 기간 시작
+  const [absEnd, setAbsEnd] = useState(""); // 휴직·병가 기간 종료
+  const [absMsg, setAbsMsg] = useState(""); // 저장 결과 메시지 (화면에 남김)
+  const [absReload, setAbsReload] = useState(0);
+  useEffect(() => {
+    (async () => {
+      const [mRes, rRes, hRes, sRes] = await Promise.all([
+        supabase
+          .from("members")
+          .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+          .eq("work_type", "교번"),
+        supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+        supabase.from("kyobun_start_history").select("*"),
+        supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+      ]);
+      setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
+      setOpRotation(rRes.data || []);
+      setOpStartHist(hRes.data || []);
+      setOpSwaps(sRes.data || []);
+      setOpLoaded(true);
+    })();
+  }, []);
+
   // 기본 날짜 = 오늘 + 2일 (이틀 전 정리)
   const [dayOffset, setDayOffset] = useState(2);
   const target = new Date();
@@ -14108,35 +14146,48 @@ function OperatorHome() {
     return n >= 60 ? "야간" : "주간";
   };
 
-  // ── 예시 데이터: 날짜별로 다르게 (규칙 확정 후 실제 근무표와 연결) ──
-  const emptyByDay: Record<number, any[]> = {
-    1: [
-      { dia: "15", name: "안진모", reason: "대체휴가", region: "대공원" },
-      { dia: "63", name: "남훈식", reason: "연차", region: "도봉" },
-    ],
-    2: [
-      { dia: "32", name: "김철수", reason: "연차", region: "대공원" },
-      { dia: "47", name: "이영희", reason: "유고 · 육아휴직", region: "도봉" },
-      { dia: "71", name: "박민수", reason: "대체휴가", region: "대공원" },
-    ],
-    3: [{ dia: "9", name: "유지훈", reason: "촉진연차", region: "대공원" }],
-  };
-  const empty = emptyByDay[dayOffset] || [];
-  // 평일 대기 구성 (실제): 주간 — 대공원 1·2·3·5·6·7 / 도봉 8, 야간 — 대공원 61·62·63 / 도봉 64·65
-  const standby = [
-    { slot: "대기1", name: "정하늘", usable: true, note: "", region: "대공원" },
-    { slot: "대기2", name: "오세영", usable: true, note: "", region: "대공원" },
-    { slot: "대기3", name: "임도현", usable: false, note: "대체휴가", region: "대공원" },
-    { slot: "대기5", name: "구민재", usable: true, note: "", region: "대공원" },
-    { slot: "대기6", name: "서지운", usable: true, note: "", region: "대공원" },
-    { slot: "대기7", name: "문가온", usable: true, note: "", region: "대공원" },
-    { slot: "대기8", name: "황도윤", usable: true, note: "", region: "도봉" },
-    { slot: "대기61", name: "최바다", usable: true, note: "", region: "대공원" },
-    { slot: "대기62", name: "노하람", usable: true, note: "", region: "대공원" },
-    { slot: "대기63", name: "강산", usable: false, note: "연차", region: "대공원" },
-    { slot: "대기64", name: "백서준", usable: true, note: "", region: "도봉" },
-    { slot: "대기65", name: "유채원", usable: true, note: "", region: "도봉" },
-  ];
+  // 빈 자리(결원)는 아래에서 휴가 데이터(leave_history)로 계산 → const empty
+  // ── 대기 근무자 (실데이터): 그날 교번 계산에서 dia가 "대기"로 시작하는 사람 ──
+  //    usable/note(휴가로 못 씀)는 3-3에서 휴가 연동 시 채움. 지금은 전원 가능으로 표시.
+  const standby = React.useMemo(() => {
+    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
+    const list = opMembers
+      .map((m) => {
+        // 결원은 사람이 아님 → 대기에서 제외
+        if (String(m.name).includes("결원")) return null;
+        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+        if (!w || !String(w.dia).startsWith("대기")) return null;
+        // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
+        if (String(w.dia).includes("~") || w.type === "비번") return null;
+        return { slot: String(w.dia), name: m.name, usable: true, note: "", region: m.work_group };
+      })
+      .filter(Boolean) as any[];
+    // 대기 번호 오름차순 (주간 1~59 → 야간 60~)
+    list.sort(
+      (a, b) =>
+        Number(String(a.slot).replace(/[^0-9]/g, "")) - Number(String(b.slot).replace(/[^0-9]/g, ""))
+    );
+    return list;
+  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
+
+  // ── 결원 대기 (뱃지 총인원·펼침용): 이름에 "결원" 들어간 사람이 걸린 대기 자리 ──
+  const standbyVacant = React.useMemo(() => {
+    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
+    const list = opMembers
+      .map((m) => {
+        if (!String(m.name).includes("결원")) return null;
+        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+        if (!w || !String(w.dia).startsWith("대기")) return null;
+        if (String(w.dia).includes("~") || w.type === "비번") return null;
+        return { slot: String(w.dia), name: m.name, region: m.work_group };
+      })
+      .filter(Boolean) as any[];
+    list.sort(
+      (a, b) =>
+        Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""))
+    );
+    return list;
+  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
 
   // 대상 날짜 문자열 (로컬)
   const targetStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
@@ -14154,6 +14205,81 @@ function OperatorHome() {
       setDesigApplies(data || []);
     })();
   }, [targetStr]);
+
+  // 그 날짜의 휴가자 (실데이터 · leave_history) → 빈 자리 계산 재료
+  const [opLeaves, setOpLeaves] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("leave_history")
+        .select("employee_number, leave_type, used_date, status")
+        .eq("used_date", targetStr)
+        .neq("status", "취소");
+      setOpLeaves(data || []);
+    })();
+  }, [targetStr]);
+
+  // 그 날짜의 직접 입력 결근 (실데이터 · operator_absence)
+  const [opAbsences, setOpAbsences] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("operator_absence")
+        .select("*")
+        .lte("work_date", targetStr)
+        .gte("end_date", targetStr)
+        .order("created_at", { ascending: true });
+      setOpAbsences(data || []);
+    })();
+  }, [targetStr, absReload]);
+
+  // ── 빈 자리(결원) (실데이터): 앱 휴가 + 직접 입력 유고 → 그 사람 다이아가 실제 운전 다이아면 빈 자리 ──
+  const empty = React.useMemo(() => {
+    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
+    const LV_LABEL: Record<string, string> = {
+      annual: "연차",
+      tempAnnual: "가연차",
+      promotedAnnual: "촉진연차",
+      substitute: "대체휴가",
+      study: "학습휴가",
+      longService: "장기재직휴가",
+      petition: "청원휴가",
+    };
+    // 사번별 사유 (앱 휴가 먼저, 직접 입력이 있으면 그게 우선)
+    const reasonByEmp = new Map<string, string>();
+    opLeaves.forEach((lv) =>
+      reasonByEmp.set(String(lv.employee_number), LV_LABEL[lv.leave_type] || lv.leave_type || "휴가")
+    );
+    opAbsences.forEach((ab) =>
+      reasonByEmp.set(String(ab.employee_number), ab.reason || "유고")
+    );
+    const byEmp = new Map(opMembers.map((m) => [String(m.employee_number), m]));
+    const list: any[] = [];
+    reasonByEmp.forEach((reason, emp) => {
+      const m = byEmp.get(emp);
+      if (!m) return;
+      const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+      if (!w) return;
+      // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
+      if (String(w.dia).startsWith("대기")) return;
+      if (w.type !== "주간" && w.type !== "야간") return;
+      list.push({ dia: String(w.dia), name: m.name, reason, region: m.work_group });
+    });
+    // ② 결원(공석) — 사람이 없는 자리. 근무표에 이미 등록됨. 운전 다이아에 걸리면 빈 자리.
+    opMembers.forEach((m) => {
+      if (!String(m.name).includes("결원")) return;
+      const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+      if (!w) return;
+      if (String(w.dia).startsWith("대기")) return; // 대기 결원은 대기 뱃지에서 처리
+      if (w.type !== "주간" && w.type !== "야간") return;
+      list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
+    });
+    list.sort(
+      (a, b) =>
+        Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
+    );
+    return list;
+  }, [opMembers, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -14263,6 +14389,323 @@ function OperatorHome() {
     { off: 1, step: "2차 확정", note: "1차 완료 · 하경수", hot: true },
     { off: 2, step: "1차 작성", note: "아직 아무것도 없음", hot: false },
   ];
+
+  // ── 유고 입력 화면 ──
+  if (showAbsence) {
+    const HYUGA = ["연차", "가연차", "촉진연차", "대체휴가", "학습휴가", "장기재직", "청원휴가"];
+    const HYUJIK = ["휴직", "육아휴직"];
+    const cands = opMembers
+      .filter((m) => !String(m.name).includes("결원"))
+      .filter((m) => absSearch.trim() === "" || String(m.name).includes(absSearch.trim()))
+      .slice(0, 8);
+    const finalReason =
+      absReason === "휴가" || absReason === "휴직" ? absSub : absReason === "병가" ? "병가" : absEtc.trim();
+
+    const isRange = absReason === "휴직" || absReason === "병가" || absReason === "기타";
+    const startD = isRange ? absStart || targetStr : targetStr;
+    const endD = isRange ? absEnd || startD : targetStr;
+
+    const saveAbsence = async () => {
+      console.log("[유고저장] 클릭됨. 시도값:", {
+        emp: absSel?.employee_number,
+        name: absSel?.name,
+        reason: finalReason,
+        isRange,
+        work_date: startD,
+        end_date: endD,
+      });
+      setAbsMsg("저장 중…");
+      if (!absSel) return setAbsMsg("⚠️ 사람을 먼저 선택하세요");
+      if (!finalReason) return setAbsMsg("⚠️ 사유를 선택/입력하세요");
+      if (isRange && endD < startD) return setAbsMsg("⚠️ 종료일이 시작일보다 빠릅니다");
+      try {
+        const { data, error } = await supabase
+          .from("operator_absence")
+          .insert({
+            work_date: startD,
+            end_date: endD,
+            employee_number: String(absSel.employee_number),
+            member_name: absSel.name,
+            reason: finalReason,
+          })
+          .select();
+        console.log("[유고저장] 응답 data:", data, " error:", error);
+        if (error) {
+          const full = [error.message, error.code, error.details, error.hint]
+            .filter(Boolean)
+            .join(" | ");
+          setAbsMsg("❌ 저장 실패: " + full);
+          return;
+        }
+        setAbsMsg(`✓ ${absSel.name} · ${finalReason} 추가됨`);
+        setAbsSel(null);
+        setAbsSearch("");
+        setAbsEtc("");
+        setAbsStart("");
+        setAbsEnd("");
+        setAbsReload((k) => k + 1);
+      } catch (e: any) {
+        console.log("[유고저장] 예외:", e);
+        setAbsMsg("❌ 저장 오류: " + (e?.message || String(e)));
+      }
+    };
+    const delAbsence = async (id: any) => {
+      const { error } = await supabase.from("operator_absence").delete().eq("id", id);
+      if (error) return showToast("삭제 실패: " + error.message, "error");
+      setAbsReload((k) => k + 1);
+    };
+
+    const rzBtn = (label: string) => (
+      <button
+        key={label}
+        onClick={() => {
+          setAbsReason(label);
+          if (label === "휴가") setAbsSub("연차");
+          else if (label === "휴직") setAbsSub("휴직");
+        }}
+        style={{
+          fontSize: 13.5,
+          fontWeight: 800,
+          padding: "9px 18px",
+          borderRadius: 11,
+          border: absReason === label ? `1.5px solid ${OP_TEAL}` : "1.5px solid #E5E7EB",
+          background: absReason === label ? OP_TEAL : "#fff",
+          color: absReason === label ? "#fff" : "#6B7280",
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    );
+    const chip = (label: string) => (
+      <button
+        key={label}
+        onClick={() => setAbsSub(label)}
+        style={{
+          fontSize: 12.5,
+          fontWeight: 800,
+          padding: "7px 13px",
+          borderRadius: 9,
+          border: absSub === label ? `1.5px solid ${OP_TEAL_DARK}` : "1.5px solid #E5E7EB",
+          background: absSub === label ? "#CCFBF1" : "#fff",
+          color: absSub === label ? OP_TEAL_DARK : "#6B7280",
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    );
+
+    return (
+      <div style={{ maxWidth: 460, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <button
+            onClick={() => setShowAbsence(false)}
+            style={{ border: 0, background: "transparent", color: OP_TEAL_DARK, fontSize: 14, fontWeight: 800, fontFamily: "inherit", cursor: "pointer", padding: 0 }}
+          >
+            ‹ 뒤로
+          </button>
+          <span style={{ fontSize: 12.5, color: OP_TEAL_DARK, fontWeight: 800, background: "#F0FDFA", borderRadius: 8, padding: "4px 10px" }}>
+            {mm}/{dd} ({dow})
+          </span>
+        </div>
+
+        <div style={{ ...card }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>
+            유고 입력 <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: OP_TEAL, borderRadius: 6, padding: "2px 7px", marginLeft: 6 }}>빌드 v10</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 14 }}>
+            병가 · 휴가 · 휴직 · 기타 결근을 모두 유고로 관리합니다.
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>누구인가요?</div>
+          <input
+            value={absSel ? absSel.name : absSearch}
+            onChange={(e) => {
+              setAbsSel(null);
+              setAbsSearch(e.target.value);
+            }}
+            placeholder="이름 검색"
+            style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 12, padding: "12px 14px", fontSize: 14, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+          />
+          {!absSel &&
+            absSearch.trim() !== "" &&
+            cands.map((m) => (
+              <div
+                key={m.id}
+                onClick={() => {
+                  setAbsSel(m);
+                  setAbsSearch("");
+                }}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 12px", border: "1px solid #F0F0F2", borderRadius: 12, marginTop: 6, cursor: "pointer" }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, background: m.work_group === "도봉" ? "#FCE7F3" : "#F1F5F4", color: m.work_group === "도봉" ? "#BE185D" : "#4B5563" }}>
+                  {m.work_group}
+                </span>
+              </div>
+            ))}
+          {absSel && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 12px", border: `1.5px solid ${OP_TEAL}`, background: "#F0FDFA", borderRadius: 12, marginTop: 6 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{absSel.name}</span>
+              <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, background: absSel.work_group === "도봉" ? "#FCE7F3" : "#F1F5F4", color: absSel.work_group === "도봉" ? "#BE185D" : "#4B5563" }}>
+                {absSel.work_group}
+              </span>
+              <span style={{ marginLeft: "auto", color: OP_TEAL, fontWeight: 900 }}>✓</span>
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", margin: "16px 0 8px" }}>사유</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["휴가", "휴직", "병가", "기타"].map(rzBtn)}
+          </div>
+
+          {absReason === "휴가" && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>휴가 종류</div>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{HYUGA.map(chip)}</div>
+            </div>
+          )}
+          {absReason === "휴직" && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>휴직 구분</div>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{HYUJIK.map(chip)}</div>
+            </div>
+          )}
+          {absReason === "기타" && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>직접 입력</div>
+              <input
+                value={absEtc}
+                onChange={(e) => setAbsEtc(e.target.value)}
+                placeholder="사유를 입력하세요"
+                style={{ width: "100%", border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+              />
+            </div>
+          )}
+
+          {isRange && (
+            <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>기간</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="date"
+                  value={absStart || targetStr}
+                  onChange={(e) => setAbsStart(e.target.value)}
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+                />
+                <span style={{ color: "#9CA3AF", fontWeight: 800 }}>~</span>
+                <input
+                  type="date"
+                  value={absEnd || absStart || targetStr}
+                  onChange={(e) => setAbsEnd(e.target.value)}
+                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>
+                이 기간 매일 자동으로 유고로 잡힙니다.
+              </div>
+              {(() => {
+                const fmt = (s: string) => {
+                  const p = String(s).split("-");
+                  return p.length === 3 ? `${p[0]}.${Number(p[1])}.${Number(p[2])}` : s;
+                };
+                const s = absStart || targetStr;
+                const e = absEnd || absStart || targetStr;
+                const days =
+                  Math.round(
+                    (new Date(e).getTime() - new Date(s).getTime()) / 86400000
+                  ) + 1;
+                const valid = e >= s;
+                return (
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: valid ? OP_TEAL_DARK : "#DC2626", marginTop: 6 }}>
+                    선택: {fmt(s)} ~ {fmt(e)}
+                    {valid ? (days === 1 ? " (하루)" : ` (${days}일)`) : " · 종료일이 시작일보다 빠릅니다"}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <button
+            onClick={saveAbsence}
+            style={{ width: "100%", marginTop: 16, border: 0, borderRadius: 13, background: OP_TEAL, color: "#fff", fontSize: 14.5, fontWeight: 800, padding: "14px 0", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            {absSel ? `+ ${absSel.name} · ${finalReason || "사유 선택"} 추가` : "+ 추가"}
+          </button>
+
+          {absMsg && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                fontSize: 12.5,
+                fontWeight: 800,
+                textAlign: "center",
+                background: absMsg.startsWith("✓") ? "#ECFDF5" : absMsg.startsWith("저장 중") ? "#F3F4F6" : "#FEF2F2",
+                color: absMsg.startsWith("✓") ? "#065F46" : absMsg.startsWith("저장 중") ? "#6B7280" : "#B91C1C",
+              }}
+            >
+              {absMsg}
+            </div>
+          )}
+
+          <div style={{ height: 1, background: "#F0F0F2", margin: "20px 0 8px" }} />
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
+            이 날짜 유고 ({opAbsences.length})
+          </div>
+          {opAbsences.length === 0 ? (
+            <div style={{ textAlign: "center", color: "#C4C7CC", fontSize: 12.5, padding: "16px 0" }}>
+              직접 입력한 결근이 없습니다.
+            </div>
+          ) : (
+            opAbsences.map((ab, i) => {
+              const m = opMembers.find((x) => String(x.employee_number) === String(ab.employee_number));
+              const w = m ? calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist) : null;
+              const diaTxt =
+                w && !String(w.dia).startsWith("대기") && (w.type === "주간" || w.type === "야간")
+                  ? `운전 다이아 ${w.dia}`
+                  : "그날 운전 근무 아님 (빈자리 미반영)";
+              const md = (s: string) => {
+                const p = String(s).split("-");
+                return p.length === 3 ? `${Number(p[1])}/${Number(p[2])}` : s;
+              };
+              const periodTxt =
+                ab.end_date && ab.end_date !== ab.work_date
+                  ? `${md(ab.work_date)}~${md(ab.end_date)} · `
+                  : "";
+              return (
+                <div key={ab.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === opAbsences.length - 1 ? 0 : "1px solid #F5F5F7" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>
+                      {ab.member_name || (m ? m.name : ab.employee_number)}
+                      {m && (
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: m.work_group === "도봉" ? "#FCE7F3" : "#F1F5F4", color: m.work_group === "도봉" ? "#BE185D" : "#4B5563" }}>
+                          {m.work_group}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
+                      {ab.reason} · {periodTxt}{diaTxt}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => delAbsence(ab.id)}
+                    style={{ border: 0, borderRadius: 10, background: "#FEF2F2", color: "#DC2626", fontSize: 12, fontWeight: 800, padding: "8px 12px", fontFamily: "inherit", cursor: "pointer" }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ── 채우기 팝업 ──
   if (fillDia) {
@@ -14553,7 +14996,9 @@ function OperatorHome() {
         lineHeight: 1.6,
       }}
     >
-      아래 내용은 예시입니다. 규칙이 확정되면 실제 근무표와 연결됩니다.
+      {opLoaded
+        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 유고 등 앱에 없는 결근은 '+휴가·유고 입력'으로 곧 추가됩니다. 확정 도장은 아직 예시입니다."
+        : "실제 근무 데이터를 불러오는 중…"}
     </div>
   );
 
@@ -14604,6 +15049,19 @@ function OperatorHome() {
               <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
                 {e.name}
                 <span style={chip(shiftOf(e.dia))}>{shiftOf(e.dia)}</span>
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    padding: "2px 7px",
+                    borderRadius: 6,
+                    marginLeft: 6,
+                    background: e.region === "도봉" ? "#FCE7F3" : "#F1F5F4",
+                    color: e.region === "도봉" ? "#BE185D" : "#4B5563",
+                  }}
+                >
+                  {e.region}
+                </span>
               </div>
               <div style={meta}>
                 {a ? (
@@ -14651,12 +15109,16 @@ function OperatorHome() {
           Number(String(p.slot).replace(/[^0-9]/g, ""))
       );
     const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
+    const vacList = standbyVacant.filter((x) => shiftOf(x.slot) === sec);
+    const total = list.length + vacList.length;
+    const open = openVacant === sec;
     let ord = 0;
     return (
       <div style={card} key={sec}>
         <div style={ttl}>
           {sec} 대기{" "}
           <span
+            onClick={() => vacList.length > 0 && setOpenVacant(open ? null : sec)}
             style={{
               fontSize: 11,
               fontWeight: 700,
@@ -14664,11 +15126,79 @@ function OperatorHome() {
               color: avail > 0 ? OP_TEAL_DARK : "#991B1B",
               padding: "3px 9px",
               borderRadius: 20,
+              cursor: vacList.length > 0 ? "pointer" : "default",
+              userSelect: "none",
             }}
           >
-            충당 가능 {avail}명 / {list.length}명
+            가능 {avail}명 · 총 {total}명
+            {vacList.length > 0 && (
+              <span style={{ color: "#9CA3AF", fontWeight: 700 }}> (결원 {vacList.length})</span>
+            )}
+            {vacList.length > 0 && (
+              <span style={{ fontSize: 9, color: "#9CA3AF", marginLeft: 3 }}>{open ? "▲" : "▼"}</span>
+            )}
           </span>
         </div>
+        {open && vacList.length > 0 && (
+          <div
+            style={{
+              background: "#F9FAFB",
+              border: "1px solid #EEF0F2",
+              borderRadius: 12,
+              padding: "10px 12px",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
+              결원 자리 ({vacList.length})
+            </div>
+            {vacList.map((v) => (
+              <div
+                key={v.slot}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}
+              >
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 800,
+                    color: "#B45309",
+                    background: "#FEF9C3",
+                    borderRadius: 7,
+                    padding: "4px 8px",
+                  }}
+                >
+                  {v.slot}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "2px 7px",
+                    borderRadius: 6,
+                    background: v.region === "도봉" ? "#FCE7F3" : "#F1F5F4",
+                    color: v.region === "도봉" ? "#BE185D" : "#4B5563",
+                  }}
+                >
+                  {v.region}
+                </span>
+                <span style={{ fontSize: 12.5, color: "#6B7280", fontWeight: 700 }}>비어 있음</span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "1px 6px",
+                    borderRadius: 5,
+                    background: "#F3F4F6",
+                    color: "#9CA3AF",
+                    marginLeft: "auto",
+                  }}
+                >
+                  {v.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         {list.length === 0 ? (
           <div style={{ textAlign: "center", padding: "20px 0", color: "#C4C7CC", fontSize: 12.5 }}>
             {sec} 대기가 없습니다.
@@ -14743,6 +15273,7 @@ function OperatorHome() {
 
   const inputBtn = (
     <button
+      onClick={() => setShowAbsence(true)}
       style={{
         width: "100%",
         border: "1px solid #E9EDEC",
