@@ -14431,7 +14431,10 @@ function OperatorHome() {
           .select();
         console.log("[유고저장] 응답 data:", data, " error:", error);
         if (error) {
-          setAbsMsg("❌ 저장 실패: " + error.message);
+          const full = [error.message, error.code, error.details, error.hint]
+            .filter(Boolean)
+            .join(" | ");
+          setAbsMsg("❌ 저장 실패: " + full);
           return;
         }
         setAbsMsg(`✓ ${absSel.name} · ${finalReason} 추가됨`);
@@ -14510,7 +14513,9 @@ function OperatorHome() {
         </div>
 
         <div style={{ ...card }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>유고 입력</div>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>
+            유고 입력 <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: OP_TEAL, borderRadius: 6, padding: "2px 7px", marginLeft: 6 }}>빌드 v9</span>
+          </div>
           <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 14 }}>
             병가 · 휴가 · 휴직 · 기타 결근을 모두 유고로 관리합니다.
           </div>
