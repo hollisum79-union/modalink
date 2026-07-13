@@ -50,6 +50,24 @@ function showToast(message: string, type: "success" | "error" = "success") {
   } catch (e) {}
 }
 
+// ── 교번 배열 개정판 선택 ──
+// schedule_rotation에 적용일(effective_date)이 다른 여러 판이 있을 때,
+// 그 날짜에 적용되는 판(적용일 <= 날짜 중 가장 최신)을 고른다.
+// 적용일이 없는 옛 데이터는 원본 판("2026-06-01")으로 취급 → SQL 실행 전에도 안전.
+const ROTATION_BASE_DATE = "2026-06-01";
+function pickRotationVersion(rotationData: any[], groupName: string, dateStr: string): string {
+  let ver = "";
+  let earliest = "";
+  for (const r of rotationData) {
+    if (r.group_name !== groupName) continue;
+    const ed = String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
+    if (!earliest || ed < earliest) earliest = ed;
+    if (ed <= dateStr && ed > ver) ver = ed;
+  }
+  // 날짜가 모든 판보다 이전이면 가장 오래된 판 사용
+  return ver || earliest;
+}
+
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
@@ -81,8 +99,15 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: 
         mem.schedule_total) %
         mem.schedule_total) +
       1;
+    const _vy = target.getFullYear();
+    const _vm = String(target.getMonth() + 1).padStart(2, "0");
+    const _vd = String(target.getDate()).padStart(2, "0");
+    const _rotVer = pickRotationVersion(rotationData, groupName, `${_vy}-${_vm}-${_vd}`);
     const row = rotationData.find(
-      (r) => r.group_name === groupName && r.position === pos
+      (r) =>
+        r.group_name === groupName &&
+        String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10) === _rotVer &&
+        r.position === pos
     );
     return row ? { dia: row.dia_value, type: row.work_type } : null;
   };
@@ -17596,12 +17621,403 @@ function OperatorScreen({ onExit }: { onExit?: () => void }) {
   );
 }
 
+// ── 관리자: 교번 배열 관리 (개정판 시스템 · append-only) ──
+// 저장 = 새 적용일 판을 통째로 insert. 옛 판은 그대로 남아 과거 날짜 계산에 계속 쓰임.
+// 기존 행 update/delete 없음 → 급여·주행키로 과거 기록 왜곡 없음.
+function RotationEditScreen() {
+  const GROUPS = ["대공원 114", "도봉 41"];
+  const [group, setGroup] = useState("대공원 114");
+  const [allRows, setAllRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewVer, setViewVer] = useState("");
+  const [edits, setEdits] = useState<Record<number, { dia_value?: string; work_type?: string }>>({});
+  const [sheetPos, setSheetPos] = useState<number | null>(null);
+  const [sheetDia, setSheetDia] = useState("");
+  const [sheetWt, setSheetWt] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [effDate, setEffDate] = useState(todayLocalStr());
+  const [saving, setSaving] = useState(false);
+
+  const edOf = (r: any) => String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("schedule_rotation")
+      .select("*")
+      .in("group_name", GROUPS)
+      .order("position");
+    if (error) showToast("불러오기 실패: " + error.message, "error");
+    setAllRows(data || []);
+    setLoading(false);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  // 이 그룹의 판 목록 (적용일 내림차순 · 최신이 앞)
+  const versions = React.useMemo(() => {
+    const s = new Set<string>();
+    allRows.forEach((r) => {
+      if (r.group_name === group) s.add(edOf(r));
+    });
+    return Array.from(s).sort().reverse();
+  }, [allRows, group]);
+
+  // 그룹·데이터 바뀌면 최신 판 보기 + 수정 초기화
+  useEffect(() => {
+    setViewVer(versions[0] || "");
+    setEdits({});
+  }, [group, allRows]);
+
+  const baseRows = React.useMemo(
+    () =>
+      allRows
+        .filter((r) => r.group_name === group && edOf(r) === viewVer)
+        .sort((a, b) => a.position - b.position),
+    [allRows, group, viewVer]
+  );
+  const curRows = baseRows.map((r) => ({ ...r, ...(edits[r.position] || {}) }));
+  const changedList = curRows.filter((r, i) => r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type);
+  const isLatest = versions.length > 0 && viewVer === versions[0];
+
+  const openSheet = (r: any) => {
+    setSheetPos(r.position);
+    setSheetDia(String(r.dia_value ?? ""));
+    setSheetWt(String(r.work_type ?? ""));
+  };
+  const applySheet = () => {
+    if (sheetPos == null) return;
+    const v = sheetDia.trim();
+    if (!v) {
+      showToast("다이아 값을 입력하세요", "error");
+      return;
+    }
+    setEdits((prev) => ({ ...prev, [sheetPos]: { dia_value: v, work_type: sheetWt } }));
+    setSheetPos(null);
+  };
+
+  const save = async () => {
+    if (changedList.length === 0) return;
+    if (!effDate) {
+      showToast("적용일을 선택하세요", "error");
+      return;
+    }
+    if (versions.includes(effDate)) {
+      showToast(`이미 ${effDate} 적용 판이 있습니다. 다른 적용일을 고르세요.`, "error");
+      return;
+    }
+    setSaving(true);
+    const rows = curRows.map((r) => ({
+      group_name: group,
+      position: r.position,
+      dia_value: r.dia_value,
+      work_type: r.work_type,
+      effective_date: effDate,
+    }));
+    const { error } = await supabase.from("schedule_rotation").insert(rows);
+    setSaving(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`${effDate} 적용 개정판 저장됨 (옛 판은 이력에 남습니다)`);
+    setConfirmOpen(false);
+    setEdits({});
+    load();
+  };
+
+  const WT_STYLE: Record<string, { bg: string; fg: string }> = {
+    주간: { bg: "#EEF2FF", fg: "#4F46E5" },
+    야간: { bg: "#1F2937", fg: "#E0E7FF" },
+    비번: { bg: "#F3F4F6", fg: "#6B7280" },
+    휴무: { bg: "#D1FAE5", fg: "#065F46" },
+  };
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+  };
+  const mdLabel = (s: string) => (s ? `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}` : "");
+
+  return (
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>교번 배열 관리</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+        근무표·급여의 뿌리 데이터입니다. 저장 전 변경 내용을 꼭 확인하세요.
+      </div>
+
+      {/* 그룹 선택 */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, background: "#fff", padding: 4, borderRadius: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+        {GROUPS.map((g) => (
+          <button
+            key={g}
+            onClick={() => setGroup(g)}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              borderRadius: 10,
+              border: 0,
+              background: group === g ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "transparent",
+              color: group === g ? "#fff" : "#6B7280",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {g}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ background: "#EEF2FF", color: "#3730A3", borderRadius: 12, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginBottom: 12 }}>
+        📅 개정은 <b>적용일부터만</b> 반영됩니다. 지나간 날짜의 근무표·급여·주행키로는 옛 판 그대로 유지되고, 저장한 판은 모두 이력에 남습니다.
+      </div>
+
+      {/* 배열 표 */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>
+            {viewVer ? `${mdLabel(viewVer)} 적용 판` : "배열"} ({baseRows.length}일 순환)
+            {!isLatest && viewVer && (
+              <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#FEF3C7", color: "#92400E" }}>
+                옛 판 보는 중
+              </span>
+            )}
+          </span>
+          <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>행을 탭해서 수정</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 1fr", fontSize: 10.5, color: "#9CA3AF", fontWeight: 800, padding: "4px 8px 8px" }}>
+          <span>순번</span>
+          <span>다이아</span>
+          <span>근무형태</span>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>불러오는 중...</div>
+        ) : baseRows.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>배열 데이터가 없습니다.</div>
+        ) : (
+          curRows.map((r, i) => {
+            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type;
+            const ws = WT_STYLE[String(r.work_type)] || { bg: "#F3F4F6", fg: "#6B7280" };
+            return (
+              <div
+                key={r.position}
+                onClick={() => openSheet(r)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "44px 1fr 1fr",
+                  alignItems: "center",
+                  padding: "9px 8px",
+                  borderTop: "1px solid #F3F4F6",
+                  fontSize: 13.5,
+                  cursor: "pointer",
+                  borderRadius: 8,
+                  background: ch ? "#FEF3C7" : "transparent",
+                }}
+              >
+                <span style={{ color: "#9CA3AF", fontWeight: 700, fontSize: 12 }}>{r.position}</span>
+                <span style={{ fontWeight: 800, color: "#111827" }}>
+                  {String(r.dia_value)}
+                  {ch && <span style={{ color: "#B45309", fontSize: 11 }}> ✎</span>}
+                </span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, justifySelf: "start", background: ws.bg, color: ws.fg }}>
+                  {String(r.work_type)}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 개정 이력 */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>개정 이력</span>
+          <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>모든 판이 남습니다</span>
+        </div>
+        {versions.map((v, i) => (
+          <div key={v} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: i === 0 ? 0 : "1px solid #F3F4F6", fontSize: 12.5, color: "#374151" }}>
+            <span>
+              <b style={{ color: i === 0 ? "#4F46E5" : "#6B7280" }}>{v} 적용</b>
+              {i === 0 && <span style={{ color: "#059669", fontWeight: 800 }}> ← 현재</span>}
+              {i === versions.length - 1 && versions.length > 1 && <span style={{ color: "#9CA3AF" }}> (원본)</span>}
+            </span>
+            <button
+              onClick={() => {
+                setViewVer(v);
+                setEdits({});
+              }}
+              style={{ border: "1.5px solid #C7D2FE", background: viewVer === v ? "#EEF2FF" : "#fff", color: "#4F46E5", fontSize: 11, fontWeight: 800, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              {viewVer === v ? "보는 중" : "보기"}
+            </button>
+          </div>
+        ))}
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+          옛 판을 열어 그대로 새 적용일로 저장하면 되돌리기(롤백)가 됩니다.
+        </div>
+      </div>
+
+      {/* 저장 버튼 */}
+      <button
+        disabled={changedList.length === 0 || saving}
+        onClick={() => {
+          setEffDate(todayLocalStr());
+          setConfirmOpen(true);
+        }}
+        style={{
+          width: "100%",
+          border: 0,
+          borderRadius: 14,
+          padding: "15px 0",
+          fontSize: 14.5,
+          fontWeight: 800,
+          cursor: changedList.length > 0 && !saving ? "pointer" : "default",
+          background: changedList.length > 0 && !saving ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "#E5E7EB",
+          color: changedList.length > 0 && !saving ? "#fff" : "#9CA3AF",
+          fontFamily: "inherit",
+          marginBottom: 20,
+        }}
+      >
+        변경 내용 확인 ({changedList.length}칸)
+      </button>
+
+      {/* 편집 바텀시트 */}
+      {sheetPos != null && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSheetPos(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }}
+        >
+          <div style={{ background: "#fff", width: "100%", maxWidth: 430, borderRadius: "20px 20px 0 0", padding: "18px 18px calc(26px + env(safe-area-inset-bottom, 0px))" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>순번 {sheetPos} 수정</div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 12 }}>숫자 다이아 또는 "대기7", "73~", "휴무"처럼 입력</div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>다이아</div>
+            <input
+              value={sheetDia}
+              onChange={(e) => setSheetDia(e.target.value)}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 16, fontWeight: 800, boxSizing: "border-box", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+            />
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>근무형태</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {["주간", "야간", "비번", "휴무"].map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setSheetWt(w)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 0",
+                    borderRadius: 10,
+                    border: sheetWt === w ? "1.5px solid #4F46E5" : "1.5px solid #E5E7EB",
+                    background: sheetWt === w ? "#EEF2FF" : "#fff",
+                    color: sheetWt === w ? "#4F46E5" : "#6B7280",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+              <button
+                onClick={() => setSheetPos(null)}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#F3F4F6", color: "#6B7280", fontFamily: "inherit" }}
+              >
+                취소
+              </button>
+              <button
+                onClick={applySheet}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#4F46E5", color: "#fff", fontFamily: "inherit" }}
+              >
+                적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 저장 확인 모달 */}
+      {confirmOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmOpen(false);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}
+        >
+          <div style={{ background: "#fff", borderRadius: 20, padding: "20px 18px", width: "100%", maxWidth: 390, maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 4 }}>변경 내용 확인</div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+              {group} · {mdLabel(viewVer)} 판 기준 · 아래 내용대로 새 개정판을 만들까요?
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, marginBottom: 6 }}>적용일 (이 날부터 새 판으로 계산)</div>
+            <input
+              type="date"
+              value={effDate}
+              onChange={(e) => setEffDate(e.target.value)}
+              style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: "1.5px solid #C7D2FE", fontSize: 15, fontWeight: 800, marginBottom: 12, background: "#EEF2FF", color: "#3730A3", boxSizing: "border-box", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+            />
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 2, color: "#374151", marginBottom: 10 }}>
+              {changedList.map((r) => {
+                const o = baseRows.find((b) => b.position === r.position);
+                return (
+                  <div key={r.position}>
+                    순번 {r.position} ·{" "}
+                    {String(o?.dia_value) !== String(r.dia_value) && (
+                      <b style={{ color: "#B45309" }}>
+                        다이아 {String(o?.dia_value)} → {String(r.dia_value)}
+                      </b>
+                    )}
+                    {String(o?.work_type) !== String(r.work_type) && (
+                      <b style={{ color: "#B45309" }}>
+                        {String(o?.dia_value) !== String(r.dia_value) ? " · " : ""}형태 {String(o?.work_type)} → {String(r.work_type)}
+                      </b>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6 }}>
+              🛡️ 저장하면 "{effDate} 적용 개정판"이 새로 만들어지고, 옛 판은 그대로 남아 과거 날짜 계산에 계속 쓰입니다.
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={() => setConfirmOpen(false)}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#F3F4F6", color: "#6B7280", fontFamily: "inherit" }}
+              >
+                돌아가기
+              </button>
+              <button
+                disabled={saving}
+                onClick={save}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: saving ? "#9CA3AF" : "#059669", color: "#fff", fontFamily: "inherit" }}
+              >
+                {saving ? "저장 중..." : "개정판 저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaTimeTab, setDiaTimeTab] = useState("편승용");
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
-    if (["workmanage", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
+    if (["workmanage", "rotationedit", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
     return "home";
   };
   // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 한 단계 위 ──
@@ -17983,6 +18399,7 @@ useEffect(() => {
         {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
         {activeMenu === "hometips" && <TipAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
+        {activeMenu === "rotationedit" && <RotationEditScreen />}
         {activeMenu === "memberlist" && <MemberManageScreen user={user} />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "worktime" && <WorkTimeAdmin />}
@@ -17997,6 +18414,7 @@ useEffect(() => {
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
               { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
+              { id: "rotationedit", label: "교번 배열 관리", desc: "개정판 만들기·개정 이력" },
               { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
               { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
               { id: "tempdia", label: "임시·변형 다이아 관리", desc: "임시·변형 다이아 추가·숨김" },
@@ -21154,8 +21572,15 @@ const getKyobunWork = (member: any, date: Date) => {
         ((((effStart - 1 + diff) % mem.schedule_total) +
           mem.schedule_total) %
           mem.schedule_total) + 1;
+      const _vy = target.getFullYear();
+      const _vm = String(target.getMonth() + 1).padStart(2, "0");
+      const _vd = String(target.getDate()).padStart(2, "0");
+      const _rotVer = pickRotationVersion(rotationData, groupName, `${_vy}-${_vm}-${_vd}`);
       const row = rotationData.find(
-        (r) => r.group_name === groupName && r.position === pos
+        (r) =>
+          r.group_name === groupName &&
+          String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10) === _rotVer &&
+          r.position === pos
       );
       return row ? { dia: row.dia_value, type: row.work_type } : null;
     };
