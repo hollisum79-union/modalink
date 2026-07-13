@@ -14401,7 +14401,7 @@ function OperatorHome() {
     const finalReason =
       absReason === "휴가" || absReason === "휴직" ? absSub : absReason === "병가" ? "병가" : absEtc.trim();
 
-    const isRange = absReason === "휴직" || absReason === "병가";
+    const isRange = absReason === "휴직" || absReason === "병가" || absReason === "기타";
     const startD = isRange ? absStart || targetStr : targetStr;
     const endD = isRange ? absEnd || startD : targetStr;
 
