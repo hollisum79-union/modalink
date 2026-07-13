@@ -17637,6 +17637,7 @@ function RotationEditScreen() {
   const [saving, setSaving] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [ratioOpen, setRatioOpen] = useState(false);
 
   const edOf = (r: any) => String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
 
@@ -17886,14 +17887,34 @@ function RotationEditScreen() {
         ))}
       </div>
 
-      {/* 주간·야간·대기 비율 카드 */}
+      {/* 주간·야간·대기 비율 카드 (접기/펼치기) */}
       {!loading && ratioStats.length > 0 && (
         <div style={card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>주간 · 야간 · 대기 비율</span>
-            <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600 }}>지금 보는 판 기준</span>
+          <div
+            onClick={() => setRatioOpen(!ratioOpen)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>📊 주간 · 야간 · 대기 비율</span>
+            <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{ratioOpen ? "닫기 ▲" : "열기 ▼"}</span>
           </div>
-          {ratioStats.map((s, si) => {
+          {/* 접힌 상태: 한 줄 요약 */}
+          {!ratioOpen && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 8, fontSize: 11.5, fontWeight: 700, color: "#6B7280" }}>
+              {ratioStats.map((s) => {
+                const [rd, rn] = ratio10(s.day + s.sbDay, s.night + s.sbNight);
+                return (
+                  <span key={s.name}>
+                    {s.name.replace(" 114", "").replace(" 41", "")}{" "}
+                    <b style={{ color: "#4F46E5" }}>{rd}</b>
+                    <span style={{ color: "#C4C7CC" }}>:</span>
+                    <b style={{ color: "#1F2937" }}>{rn}</b>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {ratioOpen && <div style={{ marginTop: 12 }} />}
+          {ratioOpen && ratioStats.map((s, si) => {
             const [rd, rn] = ratio10(s.day + s.sbDay, s.night + s.sbNight);
             const pct = (x: number) => (s.total > 0 ? Math.round((x / s.total) * 100) : 0);
             const sb = s.sbDay + s.sbNight;
@@ -17909,7 +17930,7 @@ function RotationEditScreen() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                   <span style={{ fontSize: 12.5, fontWeight: 800, color: "#374151" }}>
                     {s.name}
-                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600, marginLeft: 4 }}>교번수 {s.total}칸</span>
+                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600, marginLeft: 4 }}>교번수 {s.total}개</span>
                   </span>
                   <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: -0.3 }}>
                     <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700, marginRight: 4 }}>주:야</span>
@@ -17932,19 +17953,21 @@ function RotationEditScreen() {
                   )}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 10.5, fontWeight: 700 }}>
-                  <span style={{ color: "#4F46E5" }}>주간 {s.day}칸 · {pct(s.day)}%</span>
-                  <span style={{ color: "#1F2937" }}>야간 {s.night}칸 · {pct(s.night)}%</span>
+                  <span style={{ color: "#4F46E5" }}>주간 {s.day}개 · {pct(s.day)}%</span>
+                  <span style={{ color: "#1F2937" }}>야간 {s.night}개 · {pct(s.night)}%</span>
                   <span style={{ color: "#B45309" }}>
-                    대기 {sb}칸 · {pct(sb)}% (주{s.sbDay}·야{s.sbNight})
+                    대기 {sb}개 · {pct(sb)}% (주{s.sbDay}·야{s.sbNight})
                   </span>
-                  <span style={{ color: "#9CA3AF" }}>비번·휴무 {s.rest}칸 · {pct(s.rest)}%</span>
+                  <span style={{ color: "#9CA3AF" }}>비번·휴무 {s.rest}개 · {pct(s.rest)}%</span>
                 </div>
               </div>
             );
           })}
-          <div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
-            주:야 비율은 10 기준, <b>대기 포함</b> (대기 번호 59 이하=주간 · 60 이상=야간). %는 교번수(전체 칸) 대비. 개정판을 바꿔 보면 그 판 기준으로 다시 계산됩니다.
-          </div>
+          {ratioOpen && (
+            <div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+              주:야 비율은 10 기준, <b>대기 포함</b> (대기 번호 59 이하=주간 · 60 이상=야간). %는 교번수(전체 개수) 대비 · 지금 보는 판 기준. 개정판을 바꿔 보면 자동으로 다시 계산됩니다.
+            </div>
+          )}
         </div>
       )}
 
