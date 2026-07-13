@@ -17640,6 +17640,60 @@ function RotationEditScreen() {
 
   const edOf = (r: any) => String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
 
+  // ── 주간·야간·대기 비율 (대공원/도봉/합산 · 지금 보는 판 기준) ──
+  const ratioStats = React.useMemo(() => {
+    const calcGroup = (g: string) => {
+      // 선택 그룹은 보고 있는 판, 다른 그룹은 최신 판
+      let ver = "";
+      if (g === group) ver = viewVer;
+      else
+        allRows.forEach((r) => {
+          if (r.group_name !== g) return;
+          const ed = edOf(r);
+          if (ed > ver) ver = ed;
+        });
+      const rows = allRows.filter((r) => r.group_name === g && edOf(r) === ver);
+      let day = 0, night = 0, sbDay = 0, sbNight = 0, rest = 0;
+      rows.forEach((r) => {
+        const dv = String(r.dia_value);
+        const wt = String(r.work_type);
+        if (dv.startsWith("대기")) {
+          const n = Number(dv.replace(/[^0-9]/g, ""));
+          if (n >= 60) sbNight++;
+          else sbDay++;
+        } else if (wt === "주간") day++;
+        else if (wt === "야간") night++;
+        else rest++;
+      });
+      return { total: rows.length, day, night, sbDay, sbNight, rest };
+    };
+    const a = calcGroup("대공원 114");
+    const b = calcGroup("도봉 41");
+    const sum = {
+      total: a.total + b.total,
+      day: a.day + b.day,
+      night: a.night + b.night,
+      sbDay: a.sbDay + b.sbDay,
+      sbNight: a.sbNight + b.sbNight,
+      rest: a.rest + b.rest,
+    };
+    return [
+      { name: "대공원 114", ...a },
+      { name: "도봉 41", ...b },
+      { name: "합산", ...sum },
+    ].filter((x) => x.total > 0);
+  }, [allRows, group, viewVer]);
+
+  // 주:야 비율 (10 기준 · 대기 포함) — 딱 떨어지면 정수, 아니면 소수 1자리
+  const ratio10 = (d: number, n: number): [string, string] => {
+    const t = d + n;
+    if (t === 0) return ["-", "-"];
+    const rd = Math.round((d / t) * 100) / 10;
+    const rn = Math.round((10 - rd) * 10) / 10; // 합이 항상 10
+    const f = (x: number) => (Math.abs(x - Math.round(x)) < 0.05 ? String(Math.round(x)) : x.toFixed(1));
+    return [f(rd), f(rn)];
+  };
+
   // 다이아 값으로 근무형태 추정 (붙여넣기에 형태가 없을 때)
   const inferWt = (dia: string) => {
     if (dia.includes("~")) return "비번";
@@ -17831,6 +17885,68 @@ function RotationEditScreen() {
           </button>
         ))}
       </div>
+
+      {/* 주간·야간·대기 비율 카드 */}
+      {!loading && ratioStats.length > 0 && (
+        <div style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>주간 · 야간 · 대기 비율</span>
+            <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600 }}>지금 보는 판 기준</span>
+          </div>
+          {ratioStats.map((s, si) => {
+            const [rd, rn] = ratio10(s.day + s.sbDay, s.night + s.sbNight);
+            const pct = (x: number) => (s.total > 0 ? Math.round((x / s.total) * 100) : 0);
+            const sb = s.sbDay + s.sbNight;
+            const segs = [
+              { w: pct(s.day), label: "주간", bg: "linear-gradient(90deg,#6366F1,#4F46E5)", fg: "#fff" },
+              { w: pct(s.night), label: "야간", bg: "#1F2937", fg: "#E0E7FF" },
+              { w: pct(sb), label: "대기", bg: "#F59E0B", fg: "#fff" },
+              { w: pct(s.rest), label: "비번·휴무", bg: "#E5E7EB", fg: "#9CA3AF" },
+            ];
+            const isSum = s.name === "합산";
+            return (
+              <div key={s.name} style={{ marginBottom: si === ratioStats.length - 1 ? 2 : 16, borderTop: isSum ? "1px dashed #E5E7EB" : 0, paddingTop: isSum ? 13 : 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: "#374151" }}>
+                    {s.name}
+                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600, marginLeft: 4 }}>교번수 {s.total}칸</span>
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: -0.3 }}>
+                    <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700, marginRight: 4 }}>주:야</span>
+                    <span style={{ color: "#4F46E5" }}>{rd}</span>
+                    <span style={{ color: "#C4C7CC", fontSize: 13, margin: "0 2px" }}>:</span>
+                    <span style={{ color: "#1F2937" }}>{rn}</span>
+                  </span>
+                </div>
+                <div style={{ display: "flex", height: 14, borderRadius: 999, overflow: "hidden", background: "#F3F4F6", marginBottom: 7 }}>
+                  {segs.map(
+                    (g) =>
+                      g.w > 0 && (
+                        <div
+                          key={g.label}
+                          style={{ width: `${g.w}%`, background: g.bg, color: g.fg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800 }}
+                        >
+                          {g.w >= 12 ? g.label : ""}
+                        </div>
+                      )
+                  )}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 10.5, fontWeight: 700 }}>
+                  <span style={{ color: "#4F46E5" }}>주간 {s.day}칸 · {pct(s.day)}%</span>
+                  <span style={{ color: "#1F2937" }}>야간 {s.night}칸 · {pct(s.night)}%</span>
+                  <span style={{ color: "#B45309" }}>
+                    대기 {sb}칸 · {pct(sb)}% (주{s.sbDay}·야{s.sbNight})
+                  </span>
+                  <span style={{ color: "#9CA3AF" }}>비번·휴무 {s.rest}칸 · {pct(s.rest)}%</span>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+            주:야 비율은 10 기준, <b>대기 포함</b> (대기 번호 59 이하=주간 · 60 이상=야간). %는 교번수(전체 칸) 대비. 개정판을 바꿔 보면 그 판 기준으로 다시 계산됩니다.
+          </div>
+        </div>
+      )}
 
       <div style={{ background: "#EEF2FF", color: "#3730A3", borderRadius: 12, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginBottom: 12 }}>
         📅 개정은 <b>적용일부터만</b> 반영됩니다. 지나간 날짜의 근무표·급여·주행키로는 옛 판 그대로 유지되고, 저장한 판은 모두 이력에 남습니다.
