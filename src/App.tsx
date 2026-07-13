@@ -11058,7 +11058,6 @@ function ScheduleUpdateAdmin() {
     </div>
   );
 }
-// function SalaryTableScreen 부터 끝 } 까지 전체를 이걸로 교체하세요
 
 function SalaryTableScreen() {
   const [rows, setRows] = React.useState<any[]>([]);
@@ -11223,7 +11222,6 @@ function SalaryTableScreen() {
   );
 }
 
-// 아래 WorkTimeAdmin 함수 전체를 GitHub의 기존 WorkTimeAdmin 함수와 통째로 교체하세요
 
 function WorkTimeAdmin() {
   const [rows, setRows] = React.useState<any[]>([]);
@@ -17806,7 +17804,6 @@ function RotationEditScreen() {
 
   return (
     <div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>교번 배열 관리</div>
       <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
         근무표·급여의 뿌리 데이터입니다. 저장 전 변경 내용을 꼭 확인하세요.
       </div>
@@ -18129,9 +18126,10 @@ function RotationEditScreen() {
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaTimeTab, setDiaTimeTab] = useState("편승용");
+  const [diaMgrTab, setDiaMgrTab] = useState("시간표"); // 다이아 관리 탭
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
-    if (["workmanage", "rotationedit", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
+    if (["workmanage", "diamgr"].includes(activeMenu)) return "workgroup";
     return "home";
   };
   // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 한 단계 위 ──
@@ -18513,25 +18511,49 @@ useEffect(() => {
         {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
         {activeMenu === "hometips" && <TipAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
-        {activeMenu === "rotationedit" && <RotationEditScreen />}
+        {activeMenu === "diamgr" && (
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>다이아 관리</div>
+            <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>다이아 하나하나의 정보는 전부 여기서 관리합니다.</div>
+            <div style={{ display: "flex", gap: 5, background: "#fff", padding: 4, borderRadius: 12, marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+              {["시간표", "근무행로", "임시·변형"].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setDiaMgrTab(t)}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    padding: "9px 2px",
+                    borderRadius: 9,
+                    border: 0,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    background: diaMgrTab === t ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "transparent",
+                    color: diaMgrTab === t ? "#fff" : "#6B7280",
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {activeMenu === "memberlist" && <MemberManageScreen user={user} />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "worktime" && <WorkTimeAdmin />}
         {activeMenu === "deduction" && <DeductionAdmin />}
-        {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "salarytable" && <SalaryTableScreen />}
-        {activeMenu === "routeinput" && <RouteInputScreen />}
-        {activeMenu === "tempdia" && <TempDiaAdmin />}
+        {activeMenu === "diamgr" && diaMgrTab === "근무행로" && <RouteInputScreen />}
+        {activeMenu === "diamgr" && diaMgrTab === "임시·변형" && <TempDiaAdmin />}
         {activeMenu === "operator" && <OperatorScreen onExit={() => setActiveMenu("home")} />}
         {activeMenu === "workgroup" && (
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
-              { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
-              { id: "rotationedit", label: "교번 배열 관리", desc: "개정판 만들기·개정 이력" },
-              { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
-              { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
-              { id: "tempdia", label: "임시·변형 다이아 관리", desc: "임시·변형 다이아 추가·숨김" },
+              { id: "workmanage", label: "🗓 근무표 관리", desc: "배열 개정·순번 배치·휴무 지정·업데이트 기록" },
+              { id: "diamgr", label: "🚈 다이아 관리", desc: "시간표·근무행로·임시·변형 다이아" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
@@ -19052,7 +19074,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
   </div>
 )}
         
-{activeMenu === "kyobundia" && (
+{activeMenu === "diamgr" && diaMgrTab === "시간표" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
     <div style={{ fontSize: 16, fontWeight: 800, color: "#4338CA", marginBottom: 14 }}>🕐 다이아 시간 입력</div>
     <div style={{ display: "flex", gap: 8, background: "#F3F4F6", padding: 5, borderRadius: 12, marginBottom: 16 }}>
@@ -20275,220 +20297,7 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
   );
 }
 
-// ===== 근무표 화면 (ScheduleScreen) =====
-// 순환표 데이터 - 검증 완료
-const 대공원순환: string[] = [
-  "4",
-  "71",
-  "71~",
-  "휴1",
-  "29",
-  "67",
-  "67~",
-  "휴2",
-  "대기1",
-  "63",
-  "63~",
-  "휴3",
-  "7",
-  "74",
-  "74~",
-  "휴4",
-  "13",
-  "대기7",
-  "휴5",
-  "15",
-  "79",
-  "79~",
-  "휴6",
-  "26",
-  "66",
-  "66~",
-  "휴7",
-  "17",
-  "휴71",
-  "휴72",
-  "휴8",
-  "18",
-  "69",
-  "69~",
-  "휴9",
-  "1",
-  "10",
-  "휴10",
-  "대기2",
-  "62",
-  "62~",
-  "휴11",
-  "8",
-  "75",
-  "75~",
-  "휴12",
-  "12",
-  "72",
-  "72~",
-  "휴13",
-  "27",
-  "73",
-  "73~",
-  "휴14",
-  "2",
-  "대기5",
-  "휴15",
-  "19",
-  "78",
-  "78~",
-  "휴16",
-  "25",
-  "대기62",
-  "대기62~",
-  "휴17",
-  "대기3",
-  "64",
-  "64~",
-  "휴18",
-  "14",
-  "77",
-  "77~",
-  "휴19",
-  "5",
-  "22",
-  "휴20",
-  "3",
-  "76",
-  "76~",
-  "휴21",
-  "28",
-  "70",
-  "70~",
-  "휴22",
-  "20",
-  "68",
-  "68~",
-  "휴23",
-  "6",
-  "대기63",
-  "대기63~",
-  "휴24",
-  "11",
-  "대기6",
-  "휴25",
-  "휴51",
-  "61",
-  "61~",
-  "휴26",
-  "21",
-  "65",
-  "65~",
-  "휴27",
-  "16",
-  "80",
-  "80~",
-  "휴28",
-  "23",
-  "대기64",
-  "대기64~",
-  "휴29",
-  "9",
-  "24",
-  "휴30",
-];
 
-const 도봉순환: string[] = [
-  "31",
-  "36",
-  "휴31",
-  "30",
-  "84",
-  "84~",
-  "휴32",
-  "대기8",
-  "82",
-  "82~",
-  "휴33",
-  "38",
-  "대기66",
-  "대기66~",
-  "휴34",
-  "33",
-  "83",
-  "83~",
-  "휴35",
-  "39",
-  "81",
-  "81~",
-  "휴36",
-  "32",
-  "휴37",
-  "40",
-  "85",
-  "85~",
-  "휴38",
-  "35",
-  "86",
-  "86~",
-  "휴39",
-  "34",
-  "87",
-  "87~",
-  "휴40",
-  "37",
-  "대기65",
-  "대기65~",
-  "휴41",
-];
-
-const 순환표: { [key: string]: string[] } = {
-  대공원: 대공원순환,
-  도봉: 도봉순환,
-};
-
-function 그날다이아(
-  소속: string,
-  시작다이아: string,
-  기준날짜: string,
-  보고싶은날짜: Date,
-  휴무지정: string[]
-): string | null {
-  const 표 = 순환표[소속];
-  if (!표) return null;
-  const 시작idx = 표.indexOf(String(시작다이아));
-  if (시작idx === -1) return null;
-  const 칸수 = 표.length;
-  const ms =
-    new Date(보고싶은날짜).setHours(0, 0, 0, 0) -
-    new Date(기준날짜).setHours(0, 0, 0, 0);
-  const 지난일수 = Math.round(ms / (1000 * 60 * 60 * 24));
-  let idx = (시작idx + 지난일수) % 칸수;
-  if (idx < 0) idx += 칸수;
-  const 원래 = 표[idx];
-  if (휴무지정.includes(원래)) return "휴무";
-  return 원래;
-}
-
-function 근무유형(다이아: string | null): string {
-  if (!다이아) return "기타";
-  if (다이아.endsWith("~")) return "비번";
-  if (다이아.startsWith("휴")) return "휴무";
-  if (다이아.startsWith("대기")) return "대기";
-  const n = parseInt(다이아, 10);
-  if (!isNaN(n)) return n >= 61 ? "야간" : "주간";
-  return "기타";
-}
-
-const 유형색: { [key: string]: { bg: string; fg: string; label: string } } = {
-  주간: { bg: "#EEF2FF", fg: "#3730A3", label: "주간" },
-  야간: { bg: "#312E81", fg: "#FFFFFF", label: "야간" },
-  비번: { bg: "#F3F4F6", fg: "#6B7280", label: "비번" },
-  휴무: { bg: "#FEF2F2", fg: "#DC2626", label: "휴무" },
-  대기: { bg: "#FEFCE8", fg: "#CA8A04", label: "대기" },
-  기타: { bg: "#FFFFFF", fg: "#111827", label: "기타" },
-};
-// ===== 관리자: 근무 관리 화면 (WorkManageScreen) =====
-// 이 전체를 App.tsx 안, function MemberManageScreen(...) { ... } 끝나는 곳 근처
-// (다른 화면 컴포넌트들 옆)에 붙여넣으세요.
-
-// ===== 관리자: 근무 관리 화면 (WorkManageScreen) - Supabase 저장 버전 =====
 // ── 관리자: 기관사 순번 일괄 배치 (붙여넣기 → kyobun_start_history 일괄 insert · append-only) ──
 // members.start_position은 절대 직접 수정하지 않고 이력 레이어로만 변경 (기존 원칙 유지).
 function StartBatchAssign() {
@@ -20700,7 +20509,6 @@ function StartBatchAssign() {
   );
 }
 
-// 기존 function WorkManageScreen() {...} 전체를 이걸로 교체하세요.
 
 function DiaTimetableUpload() {
   const [ttDayType, setTtDayType] = React.useState("평일");
@@ -20930,7 +20738,10 @@ function StartHistoryAdmin() {
   );
 }
 
+// ── 관리자: 근무표 관리 (배열 개정 · 순번 배치 · 휴무 지정 · 업데이트 기록 통합) ──
 function WorkManageScreen() {
+  const [mgrTab, setMgrTab] = React.useState("배열 개정");
+  const MGR_TABS = ["배열 개정", "순번 배치", "휴무 지정", "업데이트 기록"];
   const [휴무목록, set휴무목록] = React.useState<
     { id: number; dia: string; 소속: string }[]
   >([]);
@@ -20982,9 +20793,44 @@ function WorkManageScreen() {
 
   return (
     <div>
-      <ScheduleUpdateAdmin />
-      <StartHistoryAdmin />
-      <StartBatchAssign />
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>근무표 관리</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+        개정 순서대로: ① 배열 개정 → ② 순번 배치 → 필요하면 ③ 휴무 지정 → ④ 기록
+      </div>
+      <div style={{ display: "flex", gap: 5, background: "#fff", padding: 4, borderRadius: 12, marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+        {MGR_TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setMgrTab(t)}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "9px 2px",
+              borderRadius: 9,
+              border: 0,
+              fontSize: 11.5,
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              background: mgrTab === t ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "transparent",
+              color: mgrTab === t ? "#fff" : "#6B7280",
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {mgrTab === "배열 개정" && <RotationEditScreen />}
+      {mgrTab === "순번 배치" && (
+        <div>
+          <StartBatchAssign />
+          <StartHistoryAdmin />
+        </div>
+      )}
+      {mgrTab === "업데이트 기록" && <ScheduleUpdateAdmin />}
+      {mgrTab === "휴무 지정" && (
+      <>
       <div
         style={{
           background: "#FEF2F2",
@@ -21137,12 +20983,13 @@ function WorkManageScreen() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
 
 // ============================================================
-// [추가 위치] App.tsx에서 function SalaryScreen 바로 앞에 붙여넣기
 // ============================================================
 
 // ============================================================
@@ -21588,12 +21435,10 @@ if (data) {
     load();
   }, []);
   // ============================================================
-  // [추가 위치 1] ScheduleScreen 안에서
   // const [loadingMembers 바로 아래에 추가
   // ============================================================
 
   // ============================================================
-  // [추가 위치 2] 교번 순환표 useEffect 바로 아래에 추가
   // ============================================================
   // 공휴일 불러오기 (한국천문연구원 API)
   React.useEffect(() => {
@@ -21605,7 +21450,6 @@ if (data) {
         const json = await res.json();
         if (json.holidays) setHolidays(json.holidays);
       } catch (e) {
-        console.log("공휴일 불러오기 실패", e);
       }
     };
     fetchHolidays();
@@ -24694,7 +24538,6 @@ function MySettingsScreen({
         .eq("employee_number", user.employee_number)
         .maybeSingle();
       if (error) {
-        console.log("user 정보 가져오기 실패:", error);
         return;
       }
       if (data) {
@@ -24739,7 +24582,6 @@ function MySettingsScreen({
                 pay_step_next_date: currentStep >= 40 ? null : newNextDate,
               })
               .eq("employee_number", user.employee_number);
-            console.log(`자동 승급: ${data.pay_step}호봉 → ${currentStep}호봉`);
           }
         }
       }
@@ -28993,7 +28835,6 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
         .eq("employee_number", user.employee_number)
         .maybeSingle();
       if (error) {
-        console.log("휴가 정보 가져오기 실패:", error);
         return;
       }
       if (data) {
@@ -36154,7 +35995,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
               localStorage.setItem(cacheKey, JSON.stringify(json.holidays));
             }
           })
-          .catch((e) => console.log("공휴일 불러오기 실패", e));
+          .catch(() => {});
       }
       const emp = user?.employee_number;
       const t2 = performance.now();
@@ -36338,7 +36179,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       );
       return true;
     } catch (e: any) {
-      console.log("푸시 구독 실패:", e);
       showToast("알림 설정 실패: " + (e?.message || e), "error");
       return false;
     }
@@ -36355,7 +36195,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       }
       return true;
     } catch (e) {
-      console.log("푸시 해제 실패:", e);
       return false;
     }
   };
