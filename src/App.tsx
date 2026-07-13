@@ -14233,6 +14233,18 @@ function OperatorHome() {
     })();
   }, [targetStr, absReload]);
 
+  // 지원근무 대상자 (is_support_target · 2개월 1회 의무 대상)
+  const [opSupport, setOpSupport] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("members")
+        .select("id, name, employee_number, work_group")
+        .eq("is_support_target", true);
+      setOpSupport(data || []);
+    })();
+  }, []);
+
   // ── 빈 자리(결원) (실데이터): 앱 휴가 + 직접 입력 유고 → 그 사람 다이아가 실제 운전 다이아면 빈 자리 ──
   const empty = React.useMemo(() => {
     if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
@@ -14827,6 +14839,30 @@ function OperatorHome() {
                 </div>
                 <button
                   onClick={() => pick(c.name, "대기충당")}
+                  style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  배정
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={secTtl}>② 지원근무자</div>
+        <div style={{ ...card, marginBottom: 4 }}>
+          {opSupport.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+              지정된 지원근무 대상자가 없습니다.
+            </div>
+          ) : (
+            opSupport.map((c, i) => (
+              <div key={c.id} style={{ ...row, borderBottom: i === opSupport.length - 1 ? 0 : row.borderBottom }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{c.name}</div>
+                  <div style={meta}>지원근무 대상 · {c.work_group}</div>
+                </div>
+                <button
+                  onClick={() => pick(c.name, "지원근무")}
                   style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
                 >
                   배정
