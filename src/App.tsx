@@ -12867,6 +12867,14 @@ function fmtHours(n: any): string {
   const s = total % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+function hmLabel(n: any): string {
+  const total = Math.round((Number(n) || 0) * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h && m) return `${h}시간 ${m}분`;
+  if (h) return `${h}시간`;
+  return `${m}분`;
+}
 function ImageZoomViewer({ src, onClose }: { src: string; onClose: () => void }) {
   const wrapRef = React.useRef<any>(null);
   const stageRef = React.useRef<any>(null);
@@ -14265,6 +14273,21 @@ function OperatorHome() {
     })();
   }, [targetStr]);
 
+  // 공휴일 (근무표와 같은 소스 · read-holidays)
+  const [opHolidays, setOpHolidays] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/.netlify/functions/read-holidays?year=" + target.getFullYear())
+      .then((r) => r.json())
+      .then((hj) => { if (hj.holidays) setOpHolidays(hj.holidays); })
+      .catch(() => {});
+  }, [targetStr]);
+
+  // 채우는 다이아의 그 날짜 기준 정보 (kyobun_dia · dia_image · 읽기 전용)
+  const [fillDiaRow, setFillDiaRow] = useState<any>(null);
+  const [fillDiaImg, setFillDiaImg] = useState<string>("");
+  const [fillDayType, setFillDayType] = useState<string>("");
+  const [fillZoom, setFillZoom] = useState(false);
+
   // ── 빈 자리(결원) (실데이터): 앱 휴가 + 직접 입력 유고 → 그 사람 다이아가 실제 운전 다이아면 빈 자리 ──
   const empty = React.useMemo(() => {
     if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
@@ -14315,6 +14338,47 @@ function OperatorHome() {
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
+
+  // 채우는 다이아의 그 날짜 기준 정보 로드 (kyobun_dia · dia_image · 읽기 전용)
+  useEffect(() => {
+    if (!fillDia) { setFillDiaRow(null); setFillDiaImg(""); setFillDayType(""); return; }
+    (async () => {
+      const isHol = (d: Date) => {
+        const day = d.getDay();
+        if (day === 0 || day === 6) return true;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return (opHolidays || []).includes(`${y}-${m}-${dd}`);
+      };
+      const tomo = new Date(target);
+      tomo.setDate(tomo.getDate() + 1);
+      const th = isHol(target), mh = isHol(tomo);
+      const shift = shiftOf(fillDia);
+      let dayType = "";
+      if (shift === "주간") dayType = th ? "휴일" : "평일";
+      else {
+        if (!th && !mh) dayType = "평평";
+        else if (!th && mh) dayType = "평휴";
+        else if (th && mh) dayType = "휴휴";
+        else dayType = "휴평";
+      }
+      setFillDayType(dayType);
+      const { data: diaRows } = await supabase
+        .from("kyobun_dia")
+        .select("dia_no, day_type, work_hours, night_hours, start_time, end_time, distance_km")
+        .eq("dia_no", Number(fillDia));
+      const row = (diaRows || []).find((r: any) => r.day_type === dayType) || (diaRows || [])[0] || null;
+      setFillDiaRow(row);
+      const { data: imgRow } = await supabase
+        .from("dia_image")
+        .select("image")
+        .eq("dia_no", String(fillDia))
+        .eq("category", dayType)
+        .maybeSingle();
+      setFillDiaImg(imgRow && imgRow.image ? imgRow.image : "");
+    })();
+  }, [fillDia, targetStr, opHolidays]);
   const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
 
   const stampsByDay: Record<number, any[]> = {
@@ -14804,6 +14868,58 @@ function OperatorHome() {
         >
           {slot.name}({slot.region}) · {slot.reason} 자리입니다. 같은 소속 → 높은 번호 순 추천입니다 (예시 데이터).
         </div>
+
+        {/* 이 다이아 정보 (그 날짜 기준 · 읽기 전용) */}
+        <div style={{ background: "#fff", border: "1px solid #E9EDEC", borderRadius: 16, padding: 16, marginTop: 10, marginBottom: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: OP_TEAL_DARK, marginBottom: 12 }}>
+            이 다이아 ({fillDia}번){fillDayType ? ` · ${fillDayType} 기준` : ""}
+          </div>
+          {fillDiaRow ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {[
+                  { k: "출근", v: (fillDiaRow.start_time || "-").slice(0, 5) },
+                  { k: "퇴근", v: (fillDiaRow.end_time || "-").slice(0, 5) },
+                  { k: "인정시간", v: hmLabel(fillDiaRow.work_hours) },
+                  { k: "주행키로", v: (fillDiaRow.distance_km != null ? Number(fillDiaRow.distance_km).toFixed(1) : "-") + " km" },
+                ].map((m) => (
+                  <div key={m.k} style={{ background: "#F9FAFB", borderRadius: 12, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 4 }}>{m.k}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{m.v}</div>
+                  </div>
+                ))}
+              </div>
+              {Number(fillDiaRow.night_hours) > 0 && (
+                <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 10 }}>
+                  야간 {hmLabel(fillDiaRow.night_hours)} 포함
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ textAlign: "center", padding: "12px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+              다이아 시간 정보가 없습니다.
+            </div>
+          )}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>근무행로</div>
+            {fillDiaImg ? (
+              <img
+                src={fillDiaImg}
+                alt="근무행로"
+                onClick={() => setFillZoom(true)}
+                style={{ width: "100%", borderRadius: 12, border: "1px solid #E5E7EB", cursor: "zoom-in", display: "block" }}
+              />
+            ) : (
+              <div style={{ textAlign: "center", padding: "18px 0", color: "#C4C7CC", fontSize: 12.5, background: "#F9FAFB", borderRadius: 12 }}>
+                등록된 근무행로 사진이 없습니다.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {fillZoom && fillDiaImg && (
+          <ImageZoomViewer src={fillDiaImg} onClose={() => setFillZoom(false)} />
+        )}
 
         <div style={secTtl}>⓪ 지정근무 신청자 (실데이터)</div>
         <div style={{ ...card, marginBottom: 4 }}>
