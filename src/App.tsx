@@ -28864,6 +28864,537 @@ function DistanceScreen({ onBack, user }) {
   );
 }
 
+// ── 지원근무 신청 (조합원 본인 · chungdang_apply 재사용 · work_adjust/leave_history 읽기만) ──
+function SupportApplySection({ user, notify }: { user: any; notify: (msg: string, type?: string) => void }) {
+  const _t = new Date();
+  const todayStr = `${_t.getFullYear()}-${String(_t.getMonth() + 1).padStart(2, "0")}-${String(_t.getDate()).padStart(2, "0")}`;
+  // 이번 2개월분 블록 (1-2 / 3-4 / … / 11-12월)
+  const by = _t.getFullYear();
+  const bStartM = _t.getMonth() - (_t.getMonth() % 2); // 0-based
+  const blockStart = `${by}-${String(bStartM + 1).padStart(2, "0")}-01`;
+  const blockLastDay = new Date(by, bStartM + 2, 0).getDate();
+  const blockEnd = `${by}-${String(bStartM + 2).padStart(2, "0")}-${String(blockLastDay).padStart(2, "0")}`;
+  const blockLabel = `${by}년 ${bStartM + 1}-${bStartM + 2}월분`;
+
+  const [rows, setRows] = useState<any[]>([]); // 내 신청 이력
+  const [workDone, setWorkDone] = useState<any[]>([]); // 이번 분 실제 지원근무 기록 (읽기만)
+  const [leaveOk, setLeaveOk] = useState(false); // 유지 중 신청일에 휴가 썼는지
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [calY, setCalY] = useState(_t.getFullYear());
+  const [calM, setCalM] = useState(_t.getMonth()); // 0-based
+  const [pickDate, setPickDate] = useState("");
+  const [changing, setChanging] = useState(false); // 날짜 변경 모드
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const [applyRes, workRes] = await Promise.all([
+      supabase
+        .from("chungdang_apply")
+        .select("*")
+        .eq("kind", "support")
+        .eq("member_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabase
+        .from("work_adjust")
+        .select("work_date")
+        .eq("adjust_type", "support")
+        .eq("employee_number", user.employee_number)
+        .gte("work_date", blockStart)
+        .lte("work_date", blockEnd),
+    ]);
+    const list = applyRes.data || [];
+    setRows(list);
+    setWorkDone(workRes.data || []);
+    const act = list.find(
+      (r: any) => r.status === "applied" && r.work_date >= blockStart && r.work_date <= blockEnd
+    );
+    if (act) {
+      const { data: lv } = await supabase
+        .from("leave_history")
+        .select("id")
+        .eq("employee_number", user.employee_number)
+        .eq("used_date", act.work_date)
+        .neq("status", "취소")
+        .limit(1);
+      setLeaveOk(!!(lv && lv.length > 0));
+    } else {
+      setLeaveOk(false);
+    }
+    setLoading(false);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  // ── 완료 판정: ①실제 지원근무 ②신청 유지 + 그날 휴가 ──
+  const activeApply =
+    rows.find((r: any) => r.status === "applied" && r.work_date >= blockStart && r.work_date <= blockEnd) || null;
+  const doneByWork = workDone.length > 0;
+  const doneByLeave = !!activeApply && leaveOk;
+  const done = doneByWork || doneByLeave;
+
+  const kdate = (s: string) => {
+    if (!s) return "";
+    const parts = s.split("-").map(Number);
+    const wd = ["일", "월", "화", "수", "목", "금", "토"][new Date(parts[0], parts[1] - 1, parts[2]).getDay()];
+    return `${parts[1]}월 ${parts[2]}일 (${wd})`;
+  };
+  const kwhen = (iso: string) => (iso ? iso.slice(5, 16).replace("T", " ").replace("-", "/") : "");
+
+  const apply = async () => {
+    if (!pickDate) {
+      notify("날짜를 선택하세요", "error");
+      return;
+    }
+    setSaving(true);
+    if (changing && activeApply) {
+      const { error: e1 } = await supabase
+        .from("chungdang_apply")
+        .update({ status: "changed" })
+        .eq("id", activeApply.id);
+      if (e1) {
+        setSaving(false);
+        notify("변경 실패: " + e1.message, "error");
+        return;
+      }
+    }
+    const { error } = await supabase.from("chungdang_apply").insert({
+      member_id: user.id,
+      member_name: user.name,
+      kind: "support",
+      work_date: pickDate,
+      via: "본인",
+    });
+    setSaving(false);
+    if (error) {
+      notify("신청 실패: " + error.message, "error");
+      return;
+    }
+    notify(changing ? "날짜 변경됨 (기록은 남습니다)" : "지원근무 신청 완료");
+    setChanging(false);
+    setPickDate("");
+    load();
+  };
+
+  const cancelApply = async () => {
+    if (!activeApply) return;
+    const { error } = await supabase
+      .from("chungdang_apply")
+      .update({ status: "canceled" })
+      .eq("id", activeApply.id);
+    if (error) {
+      notify("취소 실패: " + error.message, "error");
+      return;
+    }
+    notify("신청 취소됨 (기록은 남습니다)");
+    setConfirmCancel(false);
+    load();
+  };
+
+  // ── 달력 (이번 2개월분 안에서만 이동) ──
+  const calFirstDow = new Date(calY, calM, 1).getDay();
+  const calDays = new Date(calY, calM + 1, 0).getDate();
+  const canPrev = calM > bStartM;
+  const canNext = calM < bStartM + 1;
+  const dowNames = ["일", "월", "화", "수", "목", "금", "토"];
+
+  const card: any = {
+    background: "#fff",
+    borderRadius: 20,
+    padding: "16px 18px",
+    boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+    marginBottom: 12,
+  };
+  const badgeStyle = (bg: string, fg: string): any => ({
+    fontSize: 11,
+    fontWeight: 700,
+    padding: "3px 10px",
+    borderRadius: 999,
+    background: bg,
+    color: fg,
+  });
+
+  if (loading)
+    return (
+      <div style={{ ...card, textAlign: "center", color: "#9CA3AF", fontSize: 13, padding: "36px 18px" }}>
+        불러오는 중...
+      </div>
+    );
+
+  const showCalendar = !done && (changing || !activeApply);
+
+  return (
+    <>
+      {/* 내 상태 */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>내 상태 · {blockLabel}</span>
+          {done ? (
+            <span style={badgeStyle("#D1FAE5", "#065F46")}>완료</span>
+          ) : activeApply ? (
+            <span style={badgeStyle("#EEF2FF", "#4F46E5")}>신청 유지 중</span>
+          ) : (
+            <span style={badgeStyle("#FEE2E2", "#991B1B")}>미완료</span>
+          )}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#374151", padding: "5px 0" }}>
+          <span style={{ color: "#6B7280", fontSize: 12 }}>이름</span>
+          <span style={{ fontWeight: 700, color: "#111827" }}>
+            {user?.name} ({user?.employee_number})
+          </span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#374151", padding: "5px 0" }}>
+          <span style={{ color: "#6B7280", fontSize: 12 }}>이번 분</span>
+          <span>
+            {kdate(blockStart)} ~ {kdate(blockEnd)}
+          </span>
+        </div>
+        {done ? (
+          <div
+            style={{
+              background: "#ECFDF5",
+              border: "1px solid #A7F3D0",
+              borderRadius: 10,
+              padding: "10px 12px",
+              fontSize: 12.5,
+              color: "#065F46",
+              lineHeight: 1.6,
+              marginTop: 8,
+            }}
+          >
+            {doneByWork
+              ? `✅ 완료 처리됨 — ${kdate(workDone[0].work_date)} 지원근무 기록이 확인되었습니다.`
+              : `✅ 완료 처리됨 — 신청을 유지한 ${kdate(activeApply.work_date)}에 휴가 사용이 확인되었습니다.`}
+          </div>
+        ) : activeApply ? (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0" }}>
+              <span style={{ color: "#6B7280", fontSize: 12 }}>현재 신청</span>
+              <span style={{ fontWeight: 800, color: "#4F46E5", fontSize: 15 }}>{kdate(activeApply.work_date)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#374151", padding: "5px 0" }}>
+              <span style={{ color: "#6B7280", fontSize: 12 }}>신청일</span>
+              <span>
+                {kwhen(activeApply.created_at)} · {activeApply.via || "본인"}
+              </span>
+            </div>
+            {!changing && !confirmCancel && (
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button
+                  onClick={() => {
+                    setChanging(true);
+                    setPickDate("");
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "11px 0",
+                    borderRadius: 10,
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    background: "#fff",
+                    color: "#4F46E5",
+                    border: "1.5px solid #4F46E5",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  📅 날짜 변경
+                </button>
+                <button
+                  onClick={() => setConfirmCancel(true)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 0",
+                    borderRadius: 10,
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    background: "#fff",
+                    color: "#EF4444",
+                    border: "1.5px solid #FCA5A5",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  신청 취소
+                </button>
+              </div>
+            )}
+            {confirmCancel && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12.5, color: "#991B1B", marginBottom: 8, lineHeight: 1.6 }}>
+                  정말 취소할까요? 취소하면 이번 분은 <b>미완료</b>가 되고, 기록은 그대로 남습니다.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={cancelApply}
+                    style={{
+                      flex: 1,
+                      padding: "11px 0",
+                      borderRadius: 10,
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      background: "#EF4444",
+                      color: "#fff",
+                      border: "none",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    네, 취소합니다
+                  </button>
+                  <button
+                    onClick={() => setConfirmCancel(false)}
+                    style={{
+                      flex: 1,
+                      padding: "11px 0",
+                      borderRadius: 10,
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      background: "#F3F4F6",
+                      color: "#6B7280",
+                      border: "1px solid #E5E7EB",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    아니요
+                  </button>
+                </div>
+              </div>
+            )}
+            {changing && (
+              <div style={{ fontSize: 12, color: "#92400E", background: "#FEF3C7", borderRadius: 8, padding: "8px 10px", marginTop: 10, lineHeight: 1.6 }}>
+                아래 달력에서 새 날짜를 고르세요. 날짜를 바꾸면 기존 신청은 <b>변경으로 종료</b> 처리되고 기록이 남습니다.
+                <button
+                  onClick={() => {
+                    setChanging(false);
+                    setPickDate("");
+                  }}
+                  style={{
+                    marginLeft: 8,
+                    padding: "2px 8px",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    background: "#fff",
+                    border: "1px solid #FDE68A",
+                    color: "#92400E",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  변경 그만두기
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0" }}>
+            <span style={{ color: "#6B7280", fontSize: 12 }}>현재 신청</span>
+            <span style={{ color: "#9CA3AF" }}>없음</span>
+          </div>
+        )}
+      </div>
+
+      {/* 날짜 선택 달력 */}
+      {showCalendar && (
+        <div style={card}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 10 }}>
+            {changing ? "새 날짜 선택" : "신청할 날짜 선택"}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <button
+              onClick={() => canPrev && setCalM(calM - 1)}
+              style={{
+                border: "1px solid #E5E7EB",
+                background: "#fff",
+                borderRadius: 8,
+                width: 30,
+                height: 30,
+                fontSize: 14,
+                color: canPrev ? "#6B7280" : "#E5E7EB",
+                cursor: canPrev ? "pointer" : "default",
+                fontFamily: "inherit",
+              }}
+            >
+              ‹
+            </button>
+            <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>
+              {calY}년 {calM + 1}월
+            </span>
+            <button
+              onClick={() => canNext && setCalM(calM + 1)}
+              style={{
+                border: "1px solid #E5E7EB",
+                background: "#fff",
+                borderRadius: 8,
+                width: 30,
+                height: 30,
+                fontSize: 14,
+                color: canNext ? "#6B7280" : "#E5E7EB",
+                cursor: canNext ? "pointer" : "default",
+                fontFamily: "inherit",
+              }}
+            >
+              ›
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
+            {dowNames.map((d, i) => (
+              <div
+                key={"dow" + d}
+                style={{
+                  textAlign: "center",
+                  fontSize: 10.5,
+                  color: i === 0 ? "#FCA5A5" : i === 6 ? "#93C5FD" : "#9CA3AF",
+                  fontWeight: 700,
+                  padding: "4px 0",
+                }}
+              >
+                {d}
+              </div>
+            ))}
+            {Array.from({ length: calFirstDow }, (_, i) => (
+              <div key={"pad" + i} />
+            ))}
+            {Array.from({ length: calDays }, (_, i) => {
+              const d = i + 1;
+              const ds = `${calY}-${String(calM + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+              const dow = (calFirstDow + i) % 7;
+              const disabled = ds < todayStr || ds < blockStart || ds > blockEnd;
+              const sel = pickDate === ds;
+              return (
+                <div
+                  key={ds}
+                  onClick={() => !disabled && setPickDate(ds)}
+                  style={{
+                    aspectRatio: "1",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 9,
+                    fontSize: 12.5,
+                    cursor: disabled ? "default" : "pointer",
+                    background: sel ? "#4F46E5" : "transparent",
+                    color: sel
+                      ? "#fff"
+                      : disabled
+                      ? "#D1D5DB"
+                      : dow === 0
+                      ? "#EF4444"
+                      : dow === 6
+                      ? "#3B82F6"
+                      : "#374151",
+                    fontWeight: sel ? 800 : 500,
+                  }}
+                >
+                  {d}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+            ⚠️ 지원근무는 <b style={{ color: "#6B7280" }}>본인 휴무일</b>에만 할 수 있습니다. 본인 교대 휴무일을 확인하고
+            신청하세요.
+          </div>
+          <button
+            disabled={!pickDate || saving}
+            onClick={apply}
+            style={{
+              width: "100%",
+              marginTop: 10,
+              padding: "13px 0",
+              borderRadius: 12,
+              fontSize: 14.5,
+              fontWeight: 700,
+              border: "none",
+              cursor: pickDate && !saving ? "pointer" : "default",
+              background: pickDate && !saving ? "linear-gradient(135deg, #4F46E5 0%, #6D28D9 100%)" : "#E5E7EB",
+              color: pickDate && !saving ? "#fff" : "#9CA3AF",
+              fontFamily: "inherit",
+            }}
+          >
+            {saving ? "저장 중..." : pickDate ? `${kdate(pickDate)} ${changing ? "변경하기" : "신청하기"}` : "날짜를 선택하세요"}
+          </button>
+        </div>
+      )}
+
+      {/* 신청 이력 */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>신청 이력</span>
+          <span style={{ fontSize: 11, color: "#9CA3AF" }}>모든 기록이 남습니다</span>
+        </div>
+        {rows.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "#9CA3AF", padding: "6px 0" }}>아직 신청 이력이 없습니다.</div>
+        ) : (
+          rows.map((r: any) => {
+            const isActive = activeApply && r.id === activeApply.id;
+            const ended = r.status === "canceled" || r.status === "changed";
+            const stLabel =
+              r.status === "canceled" ? "취소됨" : r.status === "changed" ? "변경으로 종료" : isActive ? "유지 중" : "신청";
+            const stColor = ended ? "#9CA3AF" : isActive ? "#4F46E5" : "#6B7280";
+            return (
+              <div
+                key={r.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "8px 0",
+                  borderBottom: "1px solid #F3F4F6",
+                  fontSize: 12.5,
+                }}
+              >
+                <span
+                  style={{
+                    color: ended ? "#9CA3AF" : "#374151",
+                    textDecoration: ended ? "line-through" : "none",
+                    fontWeight: 600,
+                  }}
+                >
+                  {kdate(r.work_date)}
+                </span>
+                <span style={{ color: "#9CA3AF", fontSize: 11 }}>
+                  {kwhen(r.created_at)} · {r.via || "본인"}
+                </span>
+                <span style={{ color: stColor, fontWeight: 700, fontSize: 11.5 }}>{stLabel}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 규칙 안내 */}
+      <div
+        style={{
+          background: "#EEF2FF",
+          border: "1px solid #C7D2FE",
+          borderRadius: 12,
+          padding: "12px 14px",
+          fontSize: 12,
+          color: "#3730A3",
+          lineHeight: 1.7,
+          marginBottom: 12,
+        }}
+      >
+        <b>완료로 인정되는 경우</b>
+        <br />
+        ✔️ 신청한 날 실제로 지원근무를 함
+        <br />
+        ✔️ 신청을 유지했는데(변경·취소 안 함) 그날 휴가를 씀
+        <br />
+        <br />
+        <b>미완료가 되는 경우</b>
+        <br />
+        ✖️ 신청 후 날짜를 변경하거나 취소함 (기록은 남습니다)
+      </div>
+    </>
+  );
+}
+
 function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: any; user: any; initialDate?: any; initialTab?: any }) {
   const [activeTab, setActiveTab] = useState(initialTab || "대기충당");
   const [diaPhoto, setDiaPhoto] = useState(null);
@@ -28875,6 +29406,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
 
   // 휴무충당 모드: "기록" 또는 "신청"
   const [holidayMode, setHolidayMode] = useState("기록");
+  // 지원근무 모드: "기록" 또는 "신청" (신청은 대상자만)
+  const [supportMode, setSupportMode] = useState("기록");
   const [requests, setRequests] = useState([]); // 신청 목록
  const [confirmModal, setConfirmModal] = useState(null);
   const [toast, setToast] = useState(null);
@@ -29377,24 +29910,84 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
           </div>
         )}
 
+        {/* 지원근무 모드 전환 (대상자만) */}
+        {activeTab === "지원근무" && user?.is_support_target && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 12,
+              padding: 4,
+              background: "#fff",
+              borderRadius: 12,
+              boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+            }}
+          >
+            <button
+              onClick={() => setSupportMode("기록")}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                borderRadius: 10,
+                border: "none",
+                background:
+                  supportMode === "기록"
+                    ? "linear-gradient(135deg, #4F46E5 0%, #6D28D9 100%)"
+                    : "transparent",
+                color: supportMode === "기록" ? "#fff" : "#6B7280",
+                fontSize: 13,
+                fontWeight: supportMode === "기록" ? 700 : 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              📝 기록
+            </button>
+            <button
+              onClick={() => setSupportMode("신청")}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                borderRadius: 10,
+                border: "none",
+                background:
+                  supportMode === "신청"
+                    ? "linear-gradient(135deg, #4F46E5 0%, #6D28D9 100%)"
+                    : "transparent",
+                color: supportMode === "신청" ? "#fff" : "#6B7280",
+                fontSize: 13,
+                fontWeight: supportMode === "신청" ? 700 : 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              📅 신청
+            </button>
+          </div>
+        )}
+
         {/* 안내 박스 */}
-        <div
-          style={{
-            background: "#EEF0FF",
-            borderRadius: 12,
-            padding: "12px 16px",
-            marginBottom: 16,
-            fontSize: 13,
-            color: "#4F46E5",
-          }}
-        >
-          {activeTab === "휴무충당" && holidayMode === "신청"
-            ? "📨 신청 후 사업소 관리자가 확인합니다."
-            : "💡 야간 근무는 자동으로 임금계산기에 반영됩니다."}
-        </div>
+        {!(activeTab === "지원근무" && supportMode === "신청" && user?.is_support_target) && (
+          <div
+            style={{
+              background: "#EEF0FF",
+              borderRadius: 12,
+              padding: "12px 16px",
+              marginBottom: 16,
+              fontSize: 13,
+              color: "#4F46E5",
+            }}
+          >
+            {activeTab === "휴무충당" && holidayMode === "신청"
+              ? "📨 신청 후 사업소 관리자가 확인합니다."
+              : "💡 야간 근무는 자동으로 임금계산기에 반영됩니다."}
+          </div>
+        )}
 
        {/* 다이아 입력 */}
-        {activeTab === "다이아" ? (
+        {activeTab === "지원근무" && supportMode === "신청" && user?.is_support_target ? (
+          <SupportApplySection user={user} notify={showToast} />
+        ) : activeTab === "다이아" ? (
           <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937", marginBottom: 16 }}>교번 다이아 시간표 등록</div>
             <label style={{ display: "block", padding: 16, border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
