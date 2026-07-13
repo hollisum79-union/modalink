@@ -50,6 +50,24 @@ function showToast(message: string, type: "success" | "error" = "success") {
   } catch (e) {}
 }
 
+// ── 교번 배열 개정판 선택 ──
+// schedule_rotation에 적용일(effective_date)이 다른 여러 판이 있을 때,
+// 그 날짜에 적용되는 판(적용일 <= 날짜 중 가장 최신)을 고른다.
+// 적용일이 없는 옛 데이터는 원본 판("2026-06-01")으로 취급 → SQL 실행 전에도 안전.
+const ROTATION_BASE_DATE = "2026-06-01";
+function pickRotationVersion(rotationData: any[], groupName: string, dateStr: string): string {
+  let ver = "";
+  let earliest = "";
+  for (const r of rotationData) {
+    if (r.group_name !== groupName) continue;
+    const ed = String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
+    if (!earliest || ed < earliest) earliest = ed;
+    if (ed <= dateStr && ed > ver) ver = ed;
+  }
+  // 날짜가 모든 판보다 이전이면 가장 오래된 판 사용
+  return ver || earliest;
+}
+
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
@@ -81,8 +99,15 @@ function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: 
         mem.schedule_total) %
         mem.schedule_total) +
       1;
+    const _vy = target.getFullYear();
+    const _vm = String(target.getMonth() + 1).padStart(2, "0");
+    const _vd = String(target.getDate()).padStart(2, "0");
+    const _rotVer = pickRotationVersion(rotationData, groupName, `${_vy}-${_vm}-${_vd}`);
     const row = rotationData.find(
-      (r) => r.group_name === groupName && r.position === pos
+      (r) =>
+        r.group_name === groupName &&
+        String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10) === _rotVer &&
+        r.position === pos
     );
     return row ? { dia: row.dia_value, type: row.work_type } : null;
   };
@@ -10248,7 +10273,7 @@ function MemberManageScreen({ user }: any) {
     }
   };
 
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [vacantNum, setVacantNum] = useState("");
 
   // 다음 빈 결원 번호 추천 (예: 결원03)
@@ -10852,7 +10877,16 @@ function MemberManageScreen({ user }: any) {
               어떻게 처리할까요?
             </div>
 
-            {/* 결원 처리 (퇴사·전출) */}
+            {/* 결원 처리 (퇴사·전출) — 자리 개념이 있는 교번·통상만 */}
+            {!(deleteTarget.work_type === "교번" || deleteTarget.work_type === "통상") && (
+              <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 12, padding: "12px 14px", marginBottom: 14, textAlign: "left", fontSize: 12, color: "#6B7280", lineHeight: 1.7 }}>
+                <b style={{ color: "#374151" }}>💡 {deleteTarget.work_type || "이"} 근무자는 결원 처리가 없어요</b>
+                <br />
+                결원(자리 보존)은 자리 개념이 있는 <b>교번·통상</b>에만 씁니다. 교대 등은 아래 <b>완전 삭제</b>로
+                정리하고, 새 인원은 <b>사업소 인원추가</b>로 넣으면 됩니다.
+              </div>
+            )}
+            {(deleteTarget.work_type === "교번" || deleteTarget.work_type === "통상") && (
             <div style={{ border: "1.5px solid #C7D2FE", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "left" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 10 }}>결원 처리 (퇴사·전출)</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -10878,6 +10912,7 @@ function MemberManageScreen({ user }: any) {
                 결원{(vacantNum || "").padStart(2, "0")}으로 처리
               </button>
             </div>
+            )}
 
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -11033,7 +11068,6 @@ function ScheduleUpdateAdmin() {
     </div>
   );
 }
-// function SalaryTableScreen 부터 끝 } 까지 전체를 이걸로 교체하세요
 
 function SalaryTableScreen() {
   const [rows, setRows] = React.useState<any[]>([]);
@@ -11198,7 +11232,6 @@ function SalaryTableScreen() {
   );
 }
 
-// 아래 WorkTimeAdmin 함수 전체를 GitHub의 기존 WorkTimeAdmin 함수와 통째로 교체하세요
 
 function WorkTimeAdmin() {
   const [rows, setRows] = React.useState<any[]>([]);
@@ -17596,12 +17629,664 @@ function OperatorScreen({ onExit }: { onExit?: () => void }) {
   );
 }
 
+// ── 관리자: 교번 배열 관리 (개정판 시스템 · append-only) ──
+// 저장 = 새 적용일 판을 통째로 insert. 옛 판은 그대로 남아 과거 날짜 계산에 계속 쓰임.
+// 기존 행 update/delete 없음 → 급여·주행키로 과거 기록 왜곡 없음.
+function RotationEditScreen() {
+  const GROUPS = ["대공원 114", "도봉 41"];
+  const [group, setGroup] = useState("대공원 114");
+  const [allRows, setAllRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewVer, setViewVer] = useState("");
+  const [edits, setEdits] = useState<Record<number, { dia_value?: string; work_type?: string }>>({});
+  const [sheetPos, setSheetPos] = useState<number | null>(null);
+  const [sheetDia, setSheetDia] = useState("");
+  const [sheetWt, setSheetWt] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [effDate, setEffDate] = useState(todayLocalStr());
+  const [saving, setSaving] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [ratioOpen, setRatioOpen] = useState(false);
+
+  const edOf = (r: any) => String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
+
+  // ── 주간·야간·대기 비율 (대공원/도봉/합산 · 지금 보는 판 기준) ──
+  const ratioStats = React.useMemo(() => {
+    const calcGroup = (g: string) => {
+      // 선택 그룹은 보고 있는 판, 다른 그룹은 최신 판
+      let ver = "";
+      if (g === group) ver = viewVer;
+      else
+        allRows.forEach((r) => {
+          if (r.group_name !== g) return;
+          const ed = edOf(r);
+          if (ed > ver) ver = ed;
+        });
+      const rows = allRows.filter((r) => r.group_name === g && edOf(r) === ver);
+      let day = 0, night = 0, sbDay = 0, sbNight = 0, rest = 0;
+      rows.forEach((r) => {
+        const dv = String(r.dia_value);
+        const wt = String(r.work_type);
+        if (dv.startsWith("대기")) {
+          const n = Number(dv.replace(/[^0-9]/g, ""));
+          if (n >= 60) sbNight++;
+          else sbDay++;
+        } else if (wt === "주간") day++;
+        else if (wt === "야간") night++;
+        else rest++;
+      });
+      return { total: rows.length, day, night, sbDay, sbNight, rest };
+    };
+    const a = calcGroup("대공원 114");
+    const b = calcGroup("도봉 41");
+    const sum = {
+      total: a.total + b.total,
+      day: a.day + b.day,
+      night: a.night + b.night,
+      sbDay: a.sbDay + b.sbDay,
+      sbNight: a.sbNight + b.sbNight,
+      rest: a.rest + b.rest,
+    };
+    return [
+      { name: "대공원 114", ...a },
+      { name: "도봉 41", ...b },
+      { name: "합산", ...sum },
+    ].filter((x) => x.total > 0);
+  }, [allRows, group, viewVer]);
+
+  // 주:야 비율 (10 기준 · 대기 포함) — 딱 떨어지면 정수, 아니면 소수 1자리
+  const ratio10 = (d: number, n: number): [string, string] => {
+    const t = d + n;
+    if (t === 0) return ["-", "-"];
+    const rd = Math.round((d / t) * 100) / 10;
+    const rn = Math.round((10 - rd) * 10) / 10; // 합이 항상 10
+    const f = (x: number) => (Math.abs(x - Math.round(x)) < 0.05 ? String(Math.round(x)) : x.toFixed(1));
+    return [f(rd), f(rn)];
+  };
+
+  // 다이아 값으로 근무형태 추정 (붙여넣기에 형태가 없을 때)
+  const inferWt = (dia: string) => {
+    if (dia.includes("~")) return "비번";
+    if (dia.startsWith("휴")) return "휴무";
+    const n = Number(dia.replace(/[^0-9]/g, ""));
+    return n >= 60 ? "야간" : "주간";
+  };
+
+  // 붙여넣은 텍스트 → 변경 미리보기(edits)로 적용
+  const applyPaste = () => {
+    const WT = ["주간", "야간", "비번", "휴무"];
+    const lines = pasteText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    if (lines.length !== baseRows.length) {
+      showToast(`줄 수가 다릅니다 — 붙여넣은 ${lines.length}줄 · 배열 ${baseRows.length}칸. 순번 1번부터 끝까지 전체를 붙여넣으세요.`, "error");
+      return;
+    }
+    const newEdits: Record<number, { dia_value: string; work_type: string }> = {};
+    for (let i = 0; i < lines.length; i++) {
+      const cols = lines[i].split(/[\t, ]+/).filter(Boolean);
+      let dia = "";
+      let wt = "";
+      if (cols.length >= 3 && /^\d+$/.test(cols[0]) && Number(cols[0]) === i + 1) {
+        // "순번 다이아 형태" 3열
+        dia = cols[1];
+        wt = cols[2];
+      } else if (cols.length >= 2 && WT.includes(cols[cols.length - 1])) {
+        // "다이아 형태" 2열
+        dia = cols.slice(0, cols.length - 1).join("");
+        wt = cols[cols.length - 1];
+      } else {
+        // 다이아만
+        dia = cols.join("");
+      }
+      if (!dia) {
+        showToast(`${i + 1}번째 줄을 읽을 수 없어요: "${lines[i]}"`, "error");
+        return;
+      }
+      if (!wt) wt = inferWt(dia);
+      if (!WT.includes(wt)) {
+        showToast(`${i + 1}번째 줄: 근무형태 "${wt}"를 알 수 없어요 (주간/야간/비번/휴무)`, "error");
+        return;
+      }
+      const b = baseRows[i];
+      if (String(b.dia_value) !== dia || String(b.work_type) !== wt) {
+        newEdits[b.position] = { dia_value: dia, work_type: wt };
+      }
+    }
+    const n = Object.keys(newEdits).length;
+    setEdits(newEdits);
+    if (n === 0) {
+      showToast("붙여넣은 내용이 현재 판과 완전히 동일합니다");
+    } else {
+      showToast(`${n}칸 변경 미리보기 적용됨 — 표에서 노란 칸 확인 후 저장하세요`);
+      setPasteOpen(false);
+    }
+  };
+
+  const [vacCnt, setVacCnt] = useState<number | null>(null);
+  const load = async () => {
+    setLoading(true);
+    const [{ data, error }, vRes] = await Promise.all([
+      supabase.from("schedule_rotation").select("*").in("group_name", GROUPS).order("position"),
+      supabase
+        .from("members")
+        .select("id, start_position, work_type")
+        .in("work_type", ["교번", "통상"])
+        .ilike("name", "%결원%"),
+    ]);
+    if (error) showToast("불러오기 실패: " + error.message, "error");
+    setAllRows(data || []);
+    setVacCnt(
+      (((vRes.data as any[]) || []).filter((m) => (m.work_type === "통상" ? true : m.start_position != null))).length
+    );
+    setLoading(false);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  // 이 그룹의 판 목록 (적용일 내림차순 · 최신이 앞)
+  const versions = React.useMemo(() => {
+    const s = new Set<string>();
+    allRows.forEach((r) => {
+      if (r.group_name === group) s.add(edOf(r));
+    });
+    return Array.from(s).sort().reverse();
+  }, [allRows, group]);
+
+  // 그룹·데이터 바뀌면 최신 판 보기 + 수정 초기화
+  useEffect(() => {
+    setViewVer(versions[0] || "");
+    setEdits({});
+  }, [group, allRows]);
+
+  const baseRows = React.useMemo(
+    () =>
+      allRows
+        .filter((r) => r.group_name === group && edOf(r) === viewVer)
+        .sort((a, b) => a.position - b.position),
+    [allRows, group, viewVer]
+  );
+  const curRows = baseRows.map((r) => ({ ...r, ...(edits[r.position] || {}) }));
+  const changedList = curRows.filter((r, i) => r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type);
+  const isLatest = versions.length > 0 && viewVer === versions[0];
+
+  const openSheet = (r: any) => {
+    setSheetPos(r.position);
+    setSheetDia(String(r.dia_value ?? ""));
+    setSheetWt(String(r.work_type ?? ""));
+  };
+  const applySheet = () => {
+    if (sheetPos == null) return;
+    const v = sheetDia.trim();
+    if (!v) {
+      showToast("다이아 값을 입력하세요", "error");
+      return;
+    }
+    setEdits((prev) => ({ ...prev, [sheetPos]: { dia_value: v, work_type: sheetWt } }));
+    setSheetPos(null);
+  };
+
+  const save = async () => {
+    if (changedList.length === 0) return;
+    if (!effDate) {
+      showToast("적용일을 선택하세요", "error");
+      return;
+    }
+    if (versions.includes(effDate)) {
+      showToast(`이미 ${effDate} 적용 판이 있습니다. 다른 적용일을 고르세요.`, "error");
+      return;
+    }
+    setSaving(true);
+    const rows = curRows.map((r) => ({
+      group_name: group,
+      position: r.position,
+      dia_value: r.dia_value,
+      work_type: r.work_type,
+      effective_date: effDate,
+    }));
+    const { error } = await supabase.from("schedule_rotation").insert(rows);
+    setSaving(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`${effDate} 적용 개정판 저장됨 (옛 판은 이력에 남습니다)`);
+    setConfirmOpen(false);
+    setEdits({});
+    load();
+  };
+
+  const WT_STYLE: Record<string, { bg: string; fg: string }> = {
+    주간: { bg: "#EEF2FF", fg: "#4F46E5" },
+    야간: { bg: "#1F2937", fg: "#E0E7FF" },
+    비번: { bg: "#F3F4F6", fg: "#6B7280" },
+    휴무: { bg: "#D1FAE5", fg: "#065F46" },
+  };
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
+  };
+  const mdLabel = (s: string) => (s ? `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}` : "");
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+        근무표·급여의 뿌리 데이터입니다. 저장 전 변경 내용을 꼭 확인하세요.
+      </div>
+
+      {/* 그룹 선택 */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, background: "#fff", padding: 4, borderRadius: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+        {GROUPS.map((g) => (
+          <button
+            key={g}
+            onClick={() => setGroup(g)}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              borderRadius: 10,
+              border: 0,
+              background: group === g ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "transparent",
+              color: group === g ? "#fff" : "#6B7280",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {g}
+          </button>
+        ))}
+      </div>
+
+      {/* 주간·야간·대기 비율 카드 (접기/펼치기) */}
+      {!loading && ratioStats.length > 0 && (
+        <div style={card}>
+          <div
+            onClick={() => setRatioOpen(!ratioOpen)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>📊 주간 · 야간 · 대기 비율</span>
+            <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{ratioOpen ? "닫기 ▲" : "열기 ▼"}</span>
+          </div>
+          {/* 접힌 상태: 한 줄 요약 */}
+          {!ratioOpen && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 8, fontSize: 11.5, fontWeight: 700, color: "#6B7280" }}>
+              {ratioStats.map((s) => {
+                const [rd, rn] = ratio10(s.day + s.sbDay, s.night + s.sbNight);
+                return (
+                  <span key={s.name}>
+                    {s.name.replace(" 114", "").replace(" 41", "")}{" "}
+                    <b style={{ color: "#4F46E5" }}>{rd}</b>
+                    <span style={{ color: "#C4C7CC" }}>:</span>
+                    <b style={{ color: "#1F2937" }}>{rn}</b>
+                  </span>
+                );
+              })}
+              {vacCnt != null && vacCnt > 0 && <span style={{ color: "#DC2626" }}>🕳 결원 {vacCnt}</span>}
+            </div>
+          )}
+          {ratioOpen && <div style={{ marginTop: 12 }} />}
+          {ratioOpen && ratioStats.map((s, si) => {
+            const [rd, rn] = ratio10(s.day + s.sbDay, s.night + s.sbNight);
+            const pct = (x: number) => (s.total > 0 ? Math.round((x / s.total) * 100) : 0);
+            const sb = s.sbDay + s.sbNight;
+            const segs = [
+              { w: pct(s.day), label: "주간", bg: "linear-gradient(90deg,#6366F1,#4F46E5)", fg: "#fff" },
+              { w: pct(s.night), label: "야간", bg: "#1F2937", fg: "#E0E7FF" },
+              { w: pct(sb), label: "대기", bg: "#F59E0B", fg: "#fff" },
+              { w: pct(s.rest), label: "비번·휴무", bg: "#E5E7EB", fg: "#9CA3AF" },
+            ];
+            const isSum = s.name === "합산";
+            return (
+              <div key={s.name} style={{ marginBottom: si === ratioStats.length - 1 ? 2 : 16, borderTop: isSum ? "1px dashed #E5E7EB" : 0, paddingTop: isSum ? 13 : 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: "#374151" }}>
+                    {s.name}
+                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 600, marginLeft: 4 }}>교번수 {s.total}개</span>
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: -0.3 }}>
+                    <span style={{ fontSize: 10, color: "#9CA3AF", fontWeight: 700, marginRight: 4 }}>주:야</span>
+                    <span style={{ color: "#4F46E5" }}>{rd}</span>
+                    <span style={{ color: "#C4C7CC", fontSize: 13, margin: "0 2px" }}>:</span>
+                    <span style={{ color: "#1F2937" }}>{rn}</span>
+                  </span>
+                </div>
+                <div style={{ display: "flex", height: 14, borderRadius: 999, overflow: "hidden", background: "#F3F4F6", marginBottom: 7 }}>
+                  {segs.map(
+                    (g) =>
+                      g.w > 0 && (
+                        <div
+                          key={g.label}
+                          style={{ width: `${g.w}%`, background: g.bg, color: g.fg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800 }}
+                        >
+                          {g.w >= 12 ? g.label : ""}
+                        </div>
+                      )
+                  )}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 10.5, fontWeight: 700 }}>
+                  <span style={{ color: "#4F46E5" }}>주간 {s.day}개 · {pct(s.day)}%</span>
+                  <span style={{ color: "#1F2937" }}>야간 {s.night}개 · {pct(s.night)}%</span>
+                  <span style={{ color: "#B45309" }}>
+                    대기 {sb}개 · {pct(sb)}% (주{s.sbDay}·야{s.sbNight})
+                  </span>
+                  <span style={{ color: "#9CA3AF" }}>비번·휴무 {s.rest}개 · {pct(s.rest)}%</span>
+                </div>
+              </div>
+            );
+          })}
+          {ratioOpen && (
+            <div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+              주:야 비율은 10 기준, <b>대기 포함</b> (대기 번호 59 이하=주간 · 60 이상=야간). %는 교번수(전체 개수) 대비 · 지금 보는 판 기준. 개정판을 바꿔 보면 자동으로 다시 계산됩니다.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ background: "#EEF2FF", color: "#3730A3", borderRadius: 12, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginBottom: 12 }}>
+        📅 개정은 <b>적용일부터만</b> 반영됩니다. 지나간 날짜의 근무표·급여·주행키로는 옛 판 그대로 유지되고, 저장한 판은 모두 이력에 남습니다.
+      </div>
+
+      {/* 붙여넣기 입력 */}
+      <div style={card}>
+        <div
+          onClick={() => setPasteOpen(!pasteOpen)}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>📋 엑셀 붙여넣기로 입력</span>
+          <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{pasteOpen ? "닫기 ▲" : "열기 ▼"}</span>
+        </div>
+        {pasteOpen && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 11.5, color: "#6B7280", lineHeight: 1.7, marginBottom: 8 }}>
+              엑셀에서 <b>다이아 열 전체({baseRows.length}칸)</b>를 복사해 아래에 붙여넣으세요.
+              <br />
+              한 줄 = 한 순번. 형태 열까지 같이 복사해도 되고(예: "71 야간"), 다이아만 있으면 형태는 자동 판정됩니다 (~=비번, 휴=휴무, 60번 이상=야간).
+            </div>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder={"4\n71\n71~\n휴1\n29\n..."}
+              rows={8}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+              <span style={{ fontSize: 11.5, color: pasteText.trim() ? "#4F46E5" : "#9CA3AF", fontWeight: 700 }}>
+                {pasteText.trim() ? `${pasteText.split(/\r?\n/).filter((l) => l.trim()).length}줄 / ${baseRows.length}칸` : ""}
+              </span>
+              <button
+                onClick={applyPaste}
+                disabled={!pasteText.trim()}
+                style={{
+                  border: 0,
+                  borderRadius: 10,
+                  padding: "10px 18px",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: pasteText.trim() ? "pointer" : "default",
+                  background: pasteText.trim() ? "#4F46E5" : "#E5E7EB",
+                  color: pasteText.trim() ? "#fff" : "#9CA3AF",
+                  fontFamily: "inherit",
+                }}
+              >
+                변경 미리보기
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 배열 표 */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>
+            {viewVer ? `${mdLabel(viewVer)} 적용 판` : "배열"} ({baseRows.length}일 순환)
+            {!isLatest && viewVer && (
+              <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#FEF3C7", color: "#92400E" }}>
+                옛 판 보는 중
+              </span>
+            )}
+          </span>
+          <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>행을 탭해서 수정</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 1fr", fontSize: 10.5, color: "#9CA3AF", fontWeight: 800, padding: "4px 8px 8px" }}>
+          <span>순번</span>
+          <span>다이아</span>
+          <span>근무형태</span>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>불러오는 중...</div>
+        ) : baseRows.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>배열 데이터가 없습니다.</div>
+        ) : (
+          curRows.map((r, i) => {
+            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type;
+            const ws = WT_STYLE[String(r.work_type)] || { bg: "#F3F4F6", fg: "#6B7280" };
+            return (
+              <div
+                key={r.position}
+                onClick={() => openSheet(r)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "44px 1fr 1fr",
+                  alignItems: "center",
+                  padding: "9px 8px",
+                  borderTop: "1px solid #F3F4F6",
+                  fontSize: 13.5,
+                  cursor: "pointer",
+                  borderRadius: 8,
+                  background: ch ? "#FEF3C7" : "transparent",
+                }}
+              >
+                <span style={{ color: "#9CA3AF", fontWeight: 700, fontSize: 12 }}>{r.position}</span>
+                <span style={{ fontWeight: 800, color: "#111827" }}>
+                  {String(r.dia_value)}
+                  {ch && <span style={{ color: "#B45309", fontSize: 11 }}> ✎</span>}
+                </span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, justifySelf: "start", background: ws.bg, color: ws.fg }}>
+                  {String(r.work_type)}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 개정 이력 */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>개정 이력</span>
+          <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>모든 판이 남습니다</span>
+        </div>
+        {versions.map((v, i) => (
+          <div key={v} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: i === 0 ? 0 : "1px solid #F3F4F6", fontSize: 12.5, color: "#374151" }}>
+            <span>
+              <b style={{ color: i === 0 ? "#4F46E5" : "#6B7280" }}>{v} 적용</b>
+              {i === 0 && <span style={{ color: "#059669", fontWeight: 800 }}> ← 현재</span>}
+              {i === versions.length - 1 && versions.length > 1 && <span style={{ color: "#9CA3AF" }}> (원본)</span>}
+            </span>
+            <button
+              onClick={() => {
+                setViewVer(v);
+                setEdits({});
+              }}
+              style={{ border: "1.5px solid #C7D2FE", background: viewVer === v ? "#EEF2FF" : "#fff", color: "#4F46E5", fontSize: 11, fontWeight: 800, borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              {viewVer === v ? "보는 중" : "보기"}
+            </button>
+          </div>
+        ))}
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+          옛 판을 열어 그대로 새 적용일로 저장하면 되돌리기(롤백)가 됩니다.
+        </div>
+      </div>
+
+      {/* 저장 버튼 */}
+      <button
+        disabled={changedList.length === 0 || saving}
+        onClick={() => {
+          setEffDate(todayLocalStr());
+          setConfirmOpen(true);
+        }}
+        style={{
+          width: "100%",
+          border: 0,
+          borderRadius: 14,
+          padding: "15px 0",
+          fontSize: 14.5,
+          fontWeight: 800,
+          cursor: changedList.length > 0 && !saving ? "pointer" : "default",
+          background: changedList.length > 0 && !saving ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "#E5E7EB",
+          color: changedList.length > 0 && !saving ? "#fff" : "#9CA3AF",
+          fontFamily: "inherit",
+          marginBottom: 20,
+        }}
+      >
+        변경 내용 확인 ({changedList.length}칸)
+      </button>
+
+      {/* 편집 바텀시트 */}
+      {sheetPos != null && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSheetPos(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }}
+        >
+          <div style={{ background: "#fff", width: "100%", maxWidth: 430, borderRadius: "20px 20px 0 0", padding: "18px 18px calc(26px + env(safe-area-inset-bottom, 0px))" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", marginBottom: 4 }}>순번 {sheetPos} 수정</div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 12 }}>숫자 다이아 또는 "대기7", "73~", "휴무"처럼 입력</div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>다이아</div>
+            <input
+              value={sheetDia}
+              onChange={(e) => setSheetDia(e.target.value)}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 16, fontWeight: 800, boxSizing: "border-box", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+            />
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>근무형태</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {["주간", "야간", "비번", "휴무"].map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setSheetWt(w)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 0",
+                    borderRadius: 10,
+                    border: sheetWt === w ? "1.5px solid #4F46E5" : "1.5px solid #E5E7EB",
+                    background: sheetWt === w ? "#EEF2FF" : "#fff",
+                    color: sheetWt === w ? "#4F46E5" : "#6B7280",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+              <button
+                onClick={() => setSheetPos(null)}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#F3F4F6", color: "#6B7280", fontFamily: "inherit" }}
+              >
+                취소
+              </button>
+              <button
+                onClick={applySheet}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#4F46E5", color: "#fff", fontFamily: "inherit" }}
+              >
+                적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 저장 확인 모달 */}
+      {confirmOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmOpen(false);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}
+        >
+          <div style={{ background: "#fff", borderRadius: 20, padding: "20px 18px", width: "100%", maxWidth: 390, maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 4 }}>변경 내용 확인</div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+              {group} · {mdLabel(viewVer)} 판 기준 · 아래 내용대로 새 개정판을 만들까요?
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, marginBottom: 6 }}>적용일 (이 날부터 새 판으로 계산)</div>
+            <input
+              type="date"
+              value={effDate}
+              onChange={(e) => setEffDate(e.target.value)}
+              style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: "1.5px solid #C7D2FE", fontSize: 15, fontWeight: 800, marginBottom: 12, background: "#EEF2FF", color: "#3730A3", boxSizing: "border-box", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+            />
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 2, color: "#374151", marginBottom: 10 }}>
+              {changedList.map((r) => {
+                const o = baseRows.find((b) => b.position === r.position);
+                return (
+                  <div key={r.position}>
+                    순번 {r.position} ·{" "}
+                    {String(o?.dia_value) !== String(r.dia_value) && (
+                      <b style={{ color: "#B45309" }}>
+                        다이아 {String(o?.dia_value)} → {String(r.dia_value)}
+                      </b>
+                    )}
+                    {String(o?.work_type) !== String(r.work_type) && (
+                      <b style={{ color: "#B45309" }}>
+                        {String(o?.dia_value) !== String(r.dia_value) ? " · " : ""}형태 {String(o?.work_type)} → {String(r.work_type)}
+                      </b>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6 }}>
+              🛡️ 저장하면 "{effDate} 적용 개정판"이 새로 만들어지고, 옛 판은 그대로 남아 과거 날짜 계산에 계속 쓰입니다.
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={() => setConfirmOpen(false)}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#F3F4F6", color: "#6B7280", fontFamily: "inherit" }}
+              >
+                돌아가기
+              </button>
+              <button
+                disabled={saving}
+                onClick={save}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: saving ? "#9CA3AF" : "#059669", color: "#fff", fontFamily: "inherit" }}
+              >
+                {saving ? "저장 중..." : "개정판 저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [diaTimeTab, setDiaTimeTab] = useState("편승용");
+  const [diaMgrTab, setDiaMgrTab] = useState("시간표"); // 다이아 관리 탭
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
-    if (["workmanage", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
+    if (["workmanage", "diamgr"].includes(activeMenu)) return "workgroup";
     return "home";
   };
   // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 한 단계 위 ──
@@ -17983,23 +18668,49 @@ useEffect(() => {
         {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
         {activeMenu === "hometips" && <TipAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
+        {activeMenu === "diamgr" && (
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>다이아 관리</div>
+            <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>다이아 하나하나의 정보는 전부 여기서 관리합니다.</div>
+            <div style={{ display: "flex", gap: 5, background: "#fff", padding: 4, borderRadius: 12, marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+              {["시간표", "근무행로", "임시·변형"].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setDiaMgrTab(t)}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    padding: "9px 2px",
+                    borderRadius: 9,
+                    border: 0,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    background: diaMgrTab === t ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "transparent",
+                    color: diaMgrTab === t ? "#fff" : "#6B7280",
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {activeMenu === "memberlist" && <MemberManageScreen user={user} />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "worktime" && <WorkTimeAdmin />}
         {activeMenu === "deduction" && <DeductionAdmin />}
-        {activeMenu === "scheduleupdate" && <ScheduleUpdateAdmin />}
         {activeMenu === "salarytable" && <SalaryTableScreen />}
-        {activeMenu === "routeinput" && <RouteInputScreen />}
-        {activeMenu === "tempdia" && <TempDiaAdmin />}
+        {activeMenu === "diamgr" && diaMgrTab === "근무행로" && <RouteInputScreen />}
+        {activeMenu === "diamgr" && diaMgrTab === "임시·변형" && <TempDiaAdmin />}
         {activeMenu === "operator" && <OperatorScreen onExit={() => setActiveMenu("home")} />}
         {activeMenu === "workgroup" && (
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
-              { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
-              { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
-              { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
-              { id: "tempdia", label: "임시·변형 다이아 관리", desc: "임시·변형 다이아 추가·숨김" },
+              { id: "workmanage", label: "🗓 근무표 관리", desc: "배열 개정·순번 배치·휴무 지정·업데이트 기록" },
+              { id: "diamgr", label: "🚈 다이아 관리", desc: "시간표·근무행로·임시·변형 다이아" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
@@ -18520,7 +19231,7 @@ await supabase.from("canteen").delete().eq("station", canteenStation).in("menu_d
   </div>
 )}
         
-{activeMenu === "kyobundia" && (
+{activeMenu === "diamgr" && diaMgrTab === "시간표" && (
   <div style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
     <div style={{ fontSize: 16, fontWeight: 800, color: "#4338CA", marginBottom: 14 }}>🕐 다이아 시간 입력</div>
     <div style={{ display: "flex", gap: 8, background: "#F3F4F6", padding: 5, borderRadius: 12, marginBottom: 16 }}>
@@ -19743,221 +20454,495 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
   );
 }
 
-// ===== 근무표 화면 (ScheduleScreen) =====
-// 순환표 데이터 - 검증 완료
-const 대공원순환: string[] = [
-  "4",
-  "71",
-  "71~",
-  "휴1",
-  "29",
-  "67",
-  "67~",
-  "휴2",
-  "대기1",
-  "63",
-  "63~",
-  "휴3",
-  "7",
-  "74",
-  "74~",
-  "휴4",
-  "13",
-  "대기7",
-  "휴5",
-  "15",
-  "79",
-  "79~",
-  "휴6",
-  "26",
-  "66",
-  "66~",
-  "휴7",
-  "17",
-  "휴71",
-  "휴72",
-  "휴8",
-  "18",
-  "69",
-  "69~",
-  "휴9",
-  "1",
-  "10",
-  "휴10",
-  "대기2",
-  "62",
-  "62~",
-  "휴11",
-  "8",
-  "75",
-  "75~",
-  "휴12",
-  "12",
-  "72",
-  "72~",
-  "휴13",
-  "27",
-  "73",
-  "73~",
-  "휴14",
-  "2",
-  "대기5",
-  "휴15",
-  "19",
-  "78",
-  "78~",
-  "휴16",
-  "25",
-  "대기62",
-  "대기62~",
-  "휴17",
-  "대기3",
-  "64",
-  "64~",
-  "휴18",
-  "14",
-  "77",
-  "77~",
-  "휴19",
-  "5",
-  "22",
-  "휴20",
-  "3",
-  "76",
-  "76~",
-  "휴21",
-  "28",
-  "70",
-  "70~",
-  "휴22",
-  "20",
-  "68",
-  "68~",
-  "휴23",
-  "6",
-  "대기63",
-  "대기63~",
-  "휴24",
-  "11",
-  "대기6",
-  "휴25",
-  "휴51",
-  "61",
-  "61~",
-  "휴26",
-  "21",
-  "65",
-  "65~",
-  "휴27",
-  "16",
-  "80",
-  "80~",
-  "휴28",
-  "23",
-  "대기64",
-  "대기64~",
-  "휴29",
-  "9",
-  "24",
-  "휴30",
-];
 
-const 도봉순환: string[] = [
-  "31",
-  "36",
-  "휴31",
-  "30",
-  "84",
-  "84~",
-  "휴32",
-  "대기8",
-  "82",
-  "82~",
-  "휴33",
-  "38",
-  "대기66",
-  "대기66~",
-  "휴34",
-  "33",
-  "83",
-  "83~",
-  "휴35",
-  "39",
-  "81",
-  "81~",
-  "휴36",
-  "32",
-  "휴37",
-  "40",
-  "85",
-  "85~",
-  "휴38",
-  "35",
-  "86",
-  "86~",
-  "휴39",
-  "34",
-  "87",
-  "87~",
-  "휴40",
-  "37",
-  "대기65",
-  "대기65~",
-  "휴41",
-];
+// ── 관리자: 결원 현황 (자동 집계 + 사유 기록 vacancy_log · append-only) ──
+// 결원 = 이름에 "결원" 포함된 교번 근무자. 수·순번·오늘 근무는 기존 데이터로 자동 계산.
+// 사유·발생일·메모만 vacancy_log에 기록 (덮어쓰기 없음 · 수정 = 새 기록 추가).
+function VacancyStatus() {
+  const VC_REASONS = ["퇴사", "전출", "휴직(장기)", "기타"];
+  const [open, setOpen] = React.useState(false);
+  const [vcMembers, setVcMembers] = React.useState<any[]>([]);
+  const [vcRotation, setVcRotation] = React.useState<any[]>([]);
+  const [vcHist, setVcHist] = React.useState<any[]>([]);
+  const [vcLogs, setVcLogs] = React.useState<any[]>([]);
+  const [vcLoaded, setVcLoaded] = React.useState(false);
+  const [sheet, setSheet] = React.useState<any>(null); // 사유 입력 대상 결원
+  const [reason, setReason] = React.useState("퇴사");
+  const [occDate, setOccDate] = React.useState("");
+  const [memo, setMemo] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
 
-const 순환표: { [key: string]: string[] } = {
-  대공원: 대공원순환,
-  도봉: 도봉순환,
-};
+  const load = async () => {
+    const [mRes, rRes, hRes, lRes] = await Promise.all([
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type, tongsang_base_date, tongsang_base_dia")
+        .in("work_type", ["교번", "통상"]),
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
+      supabase.from("vacancy_log").select("*").order("created_at", { ascending: false }),
+    ]);
+    setVcMembers(
+      ((mRes.data as any[]) || []).filter((m) => (m.work_type === "통상" ? true : m.start_position != null))
+    );
+    setVcRotation(rRes.data || []);
+    setVcHist(hRes.data || []);
+    setVcLogs(lRes.data || []); // 테이블이 아직 없으면 빈 배열 (사유 저장 시 에러로 안내됨)
+    setVcLoaded(true);
+  };
+  React.useEffect(() => {
+    load();
+  }, []);
 
-function 그날다이아(
-  소속: string,
-  시작다이아: string,
-  기준날짜: string,
-  보고싶은날짜: Date,
-  휴무지정: string[]
-): string | null {
-  const 표 = 순환표[소속];
-  if (!표) return null;
-  const 시작idx = 표.indexOf(String(시작다이아));
-  if (시작idx === -1) return null;
-  const 칸수 = 표.length;
-  const ms =
-    new Date(보고싶은날짜).setHours(0, 0, 0, 0) -
-    new Date(기준날짜).setHours(0, 0, 0, 0);
-  const 지난일수 = Math.round(ms / (1000 * 60 * 60 * 24));
-  let idx = (시작idx + 지난일수) % 칸수;
-  if (idx < 0) idx += 칸수;
-  const 원래 = 표[idx];
-  if (휴무지정.includes(원래)) return "휴무";
-  return 원래;
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const todayS = todayLocalStr();
+
+  const effStartOf = (mem: any) => {
+    const hit = vcHist
+      .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= todayS)
+      .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+    return hit ? Number(hit.start_position) : Number(mem.start_position);
+  };
+
+  const vcHolidays = getCachedHolidays(today.getFullYear());
+  const vacants = vcMembers
+    .filter((m) => String(m.name || "").includes("결원"))
+    .map((m) => {
+      const isTs = m.work_type === "통상";
+      const w1 = isTs
+        ? calcTongsangWork(m, today, vcHolidays)
+        : vcRotation.length > 0
+        ? calcKyobunWork(m, today, vcRotation, [], [], vcHist)
+        : null;
+      const w2 = isTs
+        ? calcTongsangWork(m, tomorrow, vcHolidays)
+        : vcRotation.length > 0
+        ? calcKyobunWork(m, tomorrow, vcRotation, [], [], vcHist)
+        : null;
+      const log = vcLogs.find((l) => String(l.member_id) === String(m.id)) || null;
+      return { ...m, isTs, pos: isTs ? 0 : effStartOf(m), w1, w2, log };
+    })
+    .sort((a, b) => {
+      if (a.isTs !== b.isTs) return a.isTs ? 1 : -1; // 교번 먼저, 통상 뒤
+      return a.work_group === b.work_group ? a.pos - b.pos : String(a.work_group).localeCompare(String(b.work_group), "ko");
+    });
+
+  const cntDae = vacants.filter((v) => v.work_group === "대공원").length;
+  const cntDo = vacants.filter((v) => v.work_group === "도봉").length;
+  const cntKb = vacants.filter((v) => !v.isTs).length;
+  const cntTs = vacants.filter((v) => v.isTs).length;
+
+  const REASON_COLOR: Record<string, string> = { 퇴사: "#DC2626", 전출: "#D97706", "휴직(장기)": "#7C3AED", 기타: "#6B7280" };
+  const wLabel = (w: any) => (w ? `${w.dia}${w.type === "주간" || w.type === "야간" ? ` (${w.type})` : w.type ? ` (${w.type})` : ""}` : "-");
+  const mdOf = (s: string) => (s ? `${Number(String(s).slice(5, 7))}/${Number(String(s).slice(8, 10))}` : "");
+
+  const openSheet = (v: any) => {
+    setSheet(v);
+    setReason(v.log ? v.log.reason : "퇴사");
+    setOccDate(v.log && v.log.occurred_date ? String(v.log.occurred_date).slice(0, 10) : "");
+    setMemo(v.log && v.log.memo ? v.log.memo : "");
+  };
+  const saveLog = async () => {
+    if (!sheet) return;
+    setSaving(true);
+    const { error } = await supabase.from("vacancy_log").insert({
+      member_id: String(sheet.id),
+      member_name: sheet.name,
+      reason,
+      occurred_date: occDate || null,
+      memo: memo.trim() || null,
+    });
+    setSaving(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`${sheet.name} 사유 기록됨`);
+    setSheet(null);
+    load();
+  };
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>🕳 결원 현황</span>
+        <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{open ? "닫기 ▲" : "열기 ▼"}</span>
+      </div>
+      {!open && vcLoaded && (
+        <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: "#6B7280" }}>
+          대공원 <b style={{ color: "#DC2626" }}>{cntDae}</b> · 도봉 <b style={{ color: "#DC2626" }}>{cntDo}</b> · 전체{" "}
+          <b style={{ color: "#DC2626" }}>{vacants.length}</b>
+          <span style={{ color: "#9CA3AF", marginLeft: 6 }}>(교번 {cntKb} · 통상 {cntTs})</span>
+          {vacants.some((v) => !v.log) && <span style={{ color: "#9CA3AF", marginLeft: 8 }}>사유 미입력 {vacants.filter((v) => !v.log).length}</span>}
+        </div>
+      )}
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+            {[
+              [cntDae, "대공원", "#FEF2F2", "#DC2626"],
+              [cntDo, "도봉", "#FEF2F2", "#DC2626"],
+              [vacants.length, "전체", "#F3F4F6", "#1F2937"],
+            ].map(([n, l, bg, fg]: any) => (
+              <div key={l} style={{ flex: 1, background: bg, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: fg }}>{vcLoaded ? n : "–"}</div>
+                <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginTop: 2 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+          {vacants.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "16px 0", color: "#9CA3AF", fontSize: 13 }}>
+              {vcLoaded ? "결원이 없습니다." : "불러오는 중..."}
+            </div>
+          ) : (
+            vacants.map((v, i) => (
+              <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", borderTop: i === 0 ? 0 : "1px solid #F3F4F6" }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: v.isTs ? "#FFF7ED" : "#FEF2F2", color: v.isTs ? "#C2410C" : "#DC2626", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: v.isTs ? 11 : 13, flexShrink: 0 }}>
+                  {v.isTs ? (v.w1 ? v.w1.dia : "51~54") : v.pos}
+                  <span style={{ fontSize: 8.5, fontWeight: 700, color: v.isTs ? "#FB923C" : "#F87171" }}>{v.isTs ? "통상" : "순번"}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>
+                    {v.name}
+                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginLeft: 5 }}>
+                      {v.work_group}
+                      {v.isTs ? " · 통상" : ""}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6B7280", marginTop: 3 }}>
+                    {v.isTs && v.tongsang_base_dia == null
+                      ? "통상 51~54 · 기준다이아 미설정"
+                      : `오늘: ${v.isTs && !v.w1 ? "휴무" : wLabel(v.w1)} · 내일: ${v.isTs && !v.w2 ? "휴무" : wLabel(v.w2)}`}
+                  </div>
+                  {v.log ? (
+                    <div style={{ fontSize: 11, fontWeight: 800, marginTop: 3, color: REASON_COLOR[v.log.reason] || "#6B7280" }}>
+                      {v.log.reason}
+                      {v.log.occurred_date ? ` · ${mdOf(v.log.occurred_date)} 발생` : ""}
+                      {v.log.memo ? ` · ${v.log.memo}` : ""}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, fontWeight: 600, marginTop: 3, color: "#9CA3AF" }}>사유 미입력</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => openSheet(v)}
+                  style={{
+                    border: v.log ? "1.5px solid #E5E7EB" : "1.5px solid #FCA5A5",
+                    background: "#fff",
+                    color: v.log ? "#9CA3AF" : "#DC2626",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    borderRadius: 8,
+                    padding: "7px 10px",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    flexShrink: 0,
+                  }}
+                >
+                  {v.log ? "수정" : "사유 적기"}
+                </button>
+              </div>
+            ))
+          )}
+          <div style={{ background: "#EEF2FF", borderRadius: 12, padding: "12px 14px", marginTop: 12, fontSize: 12.5, color: "#3730A3", lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 결원 채우기 · 만들기</div>
+            <b>신규 전입:</b> 관리자 → 조합원 관리 → "결원" 검색 → 채울 자리 수정 → 이름·사번을 그 사람 것으로 변경 → 저장 후 본인에게 가입 안내 (순서 꼭 지키기!)
+            <br />
+            <b>퇴직:</b> 조합원 관리에서 그 사람 이름을 다시 "결원○○"로 되돌린 뒤, 여기서 사유를 적어두세요.
+          </div>
+          <div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+            결원 수·순번·근무는 조합원 명단에서 자동 집계됩니다. 사유 수정도 새 기록으로 쌓입니다(덮어쓰기 없음).
+          </div>
+        </div>
+      )}
+
+      {/* 사유 입력 시트 */}
+      {sheet && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSheet(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }}
+        >
+          <div style={{ background: "#fff", width: "100%", maxWidth: 430, borderRadius: "20px 20px 0 0", padding: "18px 18px calc(24px + env(safe-area-inset-bottom, 0px))" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
+              {sheet.name} · 순번 {sheet.pos} ({sheet.work_group})
+            </div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", margin: "4px 0 6px" }}>
+              무엇 때문에 생긴 결원인가요? 기록해 두면 현황에서 항상 보입니다.
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>사유</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {VC_REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setReason(r)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 0",
+                    borderRadius: 10,
+                    border: reason === r ? "1.5px solid #DC2626" : "1.5px solid #E5E7EB",
+                    background: reason === r ? "#FEF2F2" : "#fff",
+                    color: reason === r ? "#DC2626" : "#6B7280",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>발생일 (그 자리가 빈 날 · 선택)</div>
+            <input
+              type="date"
+              value={occDate}
+              onChange={(e) => setOccDate(e.target.value)}
+              style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 14, fontWeight: 700, boxSizing: "border-box", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none", background: "#fff" }}
+            />
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>메모 (선택 · 예: 누구 자리였는지)</div>
+            <input
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="김OO 퇴사 자리"
+              style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => setSheet(null)}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#F3F4F6", color: "#6B7280", fontFamily: "inherit" }}
+              >
+                취소
+              </button>
+              <button
+                disabled={saving}
+                onClick={saveLog}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: saving ? "#9CA3AF" : "#DC2626", color: "#fff", fontFamily: "inherit" }}
+              >
+                {saving ? "저장 중..." : "기록 저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function 근무유형(다이아: string | null): string {
-  if (!다이아) return "기타";
-  if (다이아.endsWith("~")) return "비번";
-  if (다이아.startsWith("휴")) return "휴무";
-  if (다이아.startsWith("대기")) return "대기";
-  const n = parseInt(다이아, 10);
-  if (!isNaN(n)) return n >= 61 ? "야간" : "주간";
-  return "기타";
+// ── 관리자: 기관사 순번 일괄 배치 (붙여넣기 → kyobun_start_history 일괄 insert · append-only) ──
+// members.start_position은 절대 직접 수정하지 않고 이력 레이어로만 변경 (기존 원칙 유지).
+function StartBatchAssign() {
+  const [open, setOpen] = React.useState(false);
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [hist, setHist] = React.useState<any[]>([]);
+  const [text, setText] = React.useState("");
+  const [effDate, setEffDate] = React.useState("");
+  const [preview, setPreview] = React.useState<any[] | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const load = async () => {
+    const [mRes, hRes] = await Promise.all([
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+        .eq("work_type", "교번"),
+      supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
+    ]);
+    if (mRes.data) setMembers((mRes.data as any[]).filter((m) => m.start_position != null));
+    if (hRes.data) setHist(hRes.data as any[]);
+  };
+  React.useEffect(() => {
+    if (open && members.length === 0) load();
+  }, [open]);
+
+  const effStartOf = (mem: any, dateStr: string) => {
+    const hit = hist
+      .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= dateStr)
+      .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+    return hit ? Number(hit.start_position) : Number(mem.start_position);
+  };
+
+  const makePreview = () => {
+    if (!effDate) {
+      showToast("적용일을 먼저 선택하세요", "error");
+      return;
+    }
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    if (lines.length === 0) return;
+    const rows: any[] = [];
+    const usedMember = new Set<string>();
+    const usedPos = new Map<string, string>(); // work_group|pos -> name
+    for (let i = 0; i < lines.length; i++) {
+      const cols = lines[i].split(/[\t, ]+/).filter(Boolean);
+      if (cols.length < 2) {
+        showToast(`${i + 1}번째 줄: "이름 순번" 또는 "사번 순번" 형식이어야 해요`, "error");
+        return;
+      }
+      const posStr = cols[cols.length - 1];
+      const pos = Number(posStr);
+      if (!Number.isInteger(pos) || pos < 1) {
+        showToast(`${i + 1}번째 줄: 순번 "${posStr}"이 숫자가 아니에요`, "error");
+        return;
+      }
+      const who = cols.slice(0, cols.length - 1).join(" ");
+      // 사번 정확 일치 우선, 그다음 이름 정확 일치
+      let m = members.find((x) => String(x.employee_number) === who);
+      if (!m) {
+        const byName = members.filter((x) => String(x.name) === who);
+        if (byName.length > 1) {
+          showToast(`${i + 1}번째 줄: "${who}" 이름이 ${byName.length}명이에요. 사번으로 적어주세요.`, "error");
+          return;
+        }
+        m = byName[0];
+      }
+      if (!m) {
+        showToast(`${i + 1}번째 줄: "${who}"를 교번 근무자에서 찾을 수 없어요`, "error");
+        return;
+      }
+      if (usedMember.has(String(m.id))) {
+        showToast(`"${m.name}"이(가) 두 번 나왔어요. 한 사람당 한 줄만 적어주세요.`, "error");
+        return;
+      }
+      usedMember.add(String(m.id));
+      if (pos > Number(m.schedule_total)) {
+        showToast(`${i + 1}번째 줄: ${m.name} 순번 ${pos}가 배열 길이(${m.schedule_total})보다 커요`, "error");
+        return;
+      }
+      const posKey = `${m.work_group}|${pos}`;
+      if (usedPos.has(posKey)) {
+        showToast(`순번 ${pos}(${m.work_group})가 ${usedPos.get(posKey)}·${m.name} 두 명에게 배정됐어요`, "error");
+        return;
+      }
+      usedPos.set(posKey, m.name);
+      const from = effStartOf(m, effDate);
+      rows.push({ member: m, from, to: pos });
+    }
+    const changed = rows.filter((r) => r.from !== r.to);
+    if (changed.length === 0) {
+      showToast("붙여넣은 순번이 현재와 모두 동일합니다");
+      setPreview(null);
+      return;
+    }
+    setPreview(changed);
+  };
+
+  const save = async () => {
+    if (!preview || preview.length === 0) return;
+    setSaving(true);
+    const note = `일괄 배치 ${preview.length}명`;
+    const { error } = await supabase.from("kyobun_start_history").insert(
+      preview.map((r) => ({
+        member_id: r.member.id,
+        effective_date: effDate,
+        start_position: String(r.to),
+        note,
+      }))
+    );
+    setSaving(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`저장 완료! ${effDate}부터 ${preview.length}명 순번이 바뀝니다.`);
+    setText("");
+    setPreview(null);
+    load();
+  };
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>📋 순번 일괄 배치 (붙여넣기)</span>
+        <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{open ? "닫기 ▲" : "열기 ▼"}</span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11.5, color: "#6B7280", lineHeight: 1.7, marginBottom: 10 }}>
+            개정 등으로 여러 명의 순번이 한꺼번에 바뀔 때 씁니다. 엑셀에서 <b>"이름(또는 사번) + 새 순번"</b> 두 열을 복사해 붙여넣으세요.
+            <br />
+            예: "김광현 17" — 한 줄에 한 명. 순번이 그대로인 사람은 안 적어도 됩니다.
+            <br />
+            저장은 시작점 이력으로만 남습니다 (원본 순번은 건드리지 않음 · 적용일 이후에만 반영).
+          </div>
+          <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, marginBottom: 6 }}>적용일</div>
+          <input
+            type="date"
+            value={effDate}
+            onChange={(e) => {
+              setEffDate(e.target.value);
+              setPreview(null);
+            }}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none", background: "#fff" }}
+          />
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setPreview(null);
+            }}
+            placeholder={"김광현 17\n안진모 3\n21714044 42"}
+            rows={6}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+          />
+          <button
+            onClick={makePreview}
+            disabled={!text.trim() || !effDate}
+            style={{
+              width: "100%",
+              marginTop: 8,
+              border: 0,
+              borderRadius: 10,
+              padding: "12px 0",
+              fontSize: 13.5,
+              fontWeight: 800,
+              cursor: text.trim() && effDate ? "pointer" : "default",
+              background: text.trim() && effDate ? "#4F46E5" : "#E5E7EB",
+              color: text.trim() && effDate ? "#fff" : "#9CA3AF",
+              fontFamily: "inherit",
+            }}
+          >
+            변경 미리보기
+          </button>
+
+          {preview && preview.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 2, color: "#374151" }}>
+                {preview.map((r) => (
+                  <div key={r.member.id}>
+                    {r.member.name} ({r.member.work_group}) · 순번{" "}
+                    <b style={{ color: "#B45309" }}>
+                      {r.from} → {r.to}
+                    </b>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginTop: 8 }}>
+                🛡️ {effDate}부터 위 {preview.length}명의 순번이 바뀝니다. 과거 근무표는 변하지 않고, 시작점 이력에서 건 단위로 취소할 수 있습니다.
+              </div>
+              <button
+                disabled={saving}
+                onClick={save}
+                style={{ width: "100%", marginTop: 8, border: 0, borderRadius: 10, padding: "12px 0", fontSize: 13.5, fontWeight: 800, cursor: "pointer", background: saving ? "#9CA3AF" : "#059669", color: "#fff", fontFamily: "inherit" }}
+              >
+                {saving ? "저장 중..." : `${preview.length}명 일괄 배치 저장`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
-const 유형색: { [key: string]: { bg: string; fg: string; label: string } } = {
-  주간: { bg: "#EEF2FF", fg: "#3730A3", label: "주간" },
-  야간: { bg: "#312E81", fg: "#FFFFFF", label: "야간" },
-  비번: { bg: "#F3F4F6", fg: "#6B7280", label: "비번" },
-  휴무: { bg: "#FEF2F2", fg: "#DC2626", label: "휴무" },
-  대기: { bg: "#FEFCE8", fg: "#CA8A04", label: "대기" },
-  기타: { bg: "#FFFFFF", fg: "#111827", label: "기타" },
-};
-// ===== 관리자: 근무 관리 화면 (WorkManageScreen) =====
-// 이 전체를 App.tsx 안, function MemberManageScreen(...) { ... } 끝나는 곳 근처
-// (다른 화면 컴포넌트들 옆)에 붙여넣으세요.
-
-// ===== 관리자: 근무 관리 화면 (WorkManageScreen) - Supabase 저장 버전 =====
-// 기존 function WorkManageScreen() {...} 전체를 이걸로 교체하세요.
 
 function DiaTimetableUpload() {
   const [ttDayType, setTtDayType] = React.useState("평일");
@@ -20127,12 +21112,6 @@ function StartHistoryAdmin() {
         ]}
         tip="⚠️ 임시 교체는 여기가 아니라 조합원끼리 하는 '교번교체'를 쓰세요. 여기는 영구 변경 전용이에요. 잘못 저장했으면 아래 목록에서 취소하면 됩니다."
       />
-      <div style={{ background: "#EEF2FF", borderRadius: 12, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#3730A3", lineHeight: 1.6 }}>
-        <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 신규 전입 · 퇴직 처리는 여기가 아니에요</div>
-        <b>신규 전입:</b> 관리자 → 조합원 관리 → "결원" 검색 → 채울 자리 수정 → 이름·사번을 그 사람 것으로 변경 → 저장 후 본인에게 가입 안내 (순서 꼭 지키기!)
-        <br />
-        <b>퇴직:</b> 조합원 관리에서 그 사람 이름을 다시 "결원○○"로 되돌리면 됩니다.
-      </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", marginBottom: 4 }}>📅 적용일 — 이 날짜부터 자리가 맞바뀝니다 (아래 칸을 눌러 선택)</div>
       <input
         type="date"
@@ -20187,7 +21166,10 @@ function StartHistoryAdmin() {
   );
 }
 
+// ── 관리자: 근무표 관리 (배열 개정 · 순번 배치 · 휴무 지정 · 업데이트 기록 통합) ──
 function WorkManageScreen() {
+  const [mgrTab, setMgrTab] = React.useState("배열 개정");
+  const MGR_TABS = ["배열 개정", "순번 배치", "휴무 지정", "업데이트 기록"];
   const [휴무목록, set휴무목록] = React.useState<
     { id: number; dia: string; 소속: string }[]
   >([]);
@@ -20239,8 +21221,45 @@ function WorkManageScreen() {
 
   return (
     <div>
-      <ScheduleUpdateAdmin />
-      <StartHistoryAdmin />
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>근무표 관리</div>
+      <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
+        개정 순서대로: ① 배열 개정 → ② 순번 배치 → 필요하면 ③ 휴무 지정 → ④ 기록
+      </div>
+      <div style={{ display: "flex", gap: 5, background: "#fff", padding: 4, borderRadius: 12, marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+        {MGR_TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setMgrTab(t)}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "9px 2px",
+              borderRadius: 9,
+              border: 0,
+              fontSize: 11.5,
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              background: mgrTab === t ? "linear-gradient(135deg,#4F46E5,#6D28D9)" : "transparent",
+              color: mgrTab === t ? "#fff" : "#6B7280",
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {mgrTab === "배열 개정" && <RotationEditScreen />}
+      {mgrTab === "순번 배치" && (
+        <div>
+          <VacancyStatus />
+          <StartBatchAssign />
+          <StartHistoryAdmin />
+        </div>
+      )}
+      {mgrTab === "업데이트 기록" && <ScheduleUpdateAdmin />}
+      {mgrTab === "휴무 지정" && (
+      <>
       <div
         style={{
           background: "#FEF2F2",
@@ -20393,12 +21412,13 @@ function WorkManageScreen() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
 
 // ============================================================
-// [추가 위치] App.tsx에서 function SalaryScreen 바로 앞에 붙여넣기
 // ============================================================
 
 // ============================================================
@@ -20844,12 +21864,10 @@ if (data) {
     load();
   }, []);
   // ============================================================
-  // [추가 위치 1] ScheduleScreen 안에서
   // const [loadingMembers 바로 아래에 추가
   // ============================================================
 
   // ============================================================
-  // [추가 위치 2] 교번 순환표 useEffect 바로 아래에 추가
   // ============================================================
   // 공휴일 불러오기 (한국천문연구원 API)
   React.useEffect(() => {
@@ -20861,7 +21879,6 @@ if (data) {
         const json = await res.json();
         if (json.holidays) setHolidays(json.holidays);
       } catch (e) {
-        console.log("공휴일 불러오기 실패", e);
       }
     };
     fetchHolidays();
@@ -21154,8 +22171,15 @@ const getKyobunWork = (member: any, date: Date) => {
         ((((effStart - 1 + diff) % mem.schedule_total) +
           mem.schedule_total) %
           mem.schedule_total) + 1;
+      const _vy = target.getFullYear();
+      const _vm = String(target.getMonth() + 1).padStart(2, "0");
+      const _vd = String(target.getDate()).padStart(2, "0");
+      const _rotVer = pickRotationVersion(rotationData, groupName, `${_vy}-${_vm}-${_vd}`);
       const row = rotationData.find(
-        (r) => r.group_name === groupName && r.position === pos
+        (r) =>
+          r.group_name === groupName &&
+          String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10) === _rotVer &&
+          r.position === pos
       );
       return row ? { dia: row.dia_value, type: row.work_type } : null;
     };
@@ -23943,7 +24967,6 @@ function MySettingsScreen({
         .eq("employee_number", user.employee_number)
         .maybeSingle();
       if (error) {
-        console.log("user 정보 가져오기 실패:", error);
         return;
       }
       if (data) {
@@ -23988,7 +25011,6 @@ function MySettingsScreen({
                 pay_step_next_date: currentStep >= 40 ? null : newNextDate,
               })
               .eq("employee_number", user.employee_number);
-            console.log(`자동 승급: ${data.pay_step}호봉 → ${currentStep}호봉`);
           }
         }
       }
@@ -28242,7 +29264,6 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
         .eq("employee_number", user.employee_number)
         .maybeSingle();
       if (error) {
-        console.log("휴가 정보 가져오기 실패:", error);
         return;
       }
       if (data) {
@@ -35403,7 +36424,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
               localStorage.setItem(cacheKey, JSON.stringify(json.holidays));
             }
           })
-          .catch((e) => console.log("공휴일 불러오기 실패", e));
+          .catch(() => {});
       }
       const emp = user?.employee_number;
       const t2 = performance.now();
@@ -35587,7 +36608,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       );
       return true;
     } catch (e: any) {
-      console.log("푸시 구독 실패:", e);
       showToast("알림 설정 실패: " + (e?.message || e), "error");
       return false;
     }
@@ -35604,7 +36624,6 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       }
       return true;
     } catch (e) {
-      console.log("푸시 해제 실패:", e);
       return false;
     }
   };
