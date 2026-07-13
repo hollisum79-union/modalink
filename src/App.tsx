@@ -17447,13 +17447,33 @@ function OperatorMockPanel({ tab, opName }: { tab: string; opName: string }) {
   return <OperatorHist />;
 }
 
-function OperatorScreen() {
+function OperatorScreen({ onExit }: { onExit?: () => void }) {
   const [me, setMe] = useState<any>(null);
   const [tab, setTab] = useState("home");
 
   if (!me) {
     return (
-      <div>
+      <div style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 10px)", paddingLeft: 12, paddingRight: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <button
+            onClick={() => onExit && onExit()}
+            style={{
+              border: 0,
+              background: "#fff",
+              borderRadius: 11,
+              padding: "10px 14px",
+              fontSize: 12.5,
+              fontWeight: 800,
+              color: "#374151",
+              fontFamily: "inherit",
+              cursor: "pointer",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+            }}
+          >
+            ‹ 홈으로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>운용기관사</div>
+        </div>
         <div
           style={{
             background: "#CCFBF1",
@@ -17483,7 +17503,7 @@ function OperatorScreen() {
   ];
 
   return (
-    <div style={{ paddingBottom: 8 }}>
+    <div style={{ paddingBottom: 8, paddingTop: "calc(env(safe-area-inset-top, 0px) + 10px)", paddingLeft: 12, paddingRight: 12 }}>
       <div
         style={{
           background: "linear-gradient(135deg,#0F766E,#0D9488,#14B8A6)",
@@ -17492,9 +17512,31 @@ function OperatorScreen() {
           color: "#fff",
           display: "flex",
           alignItems: "center",
+          gap: 10,
           marginBottom: 14,
         }}
       >
+        <button
+          onClick={() => setMe(null)}
+          style={{
+            border: 0,
+            borderRadius: "50%",
+            width: 36,
+            height: 36,
+            background: "rgba(255,255,255,0.2)",
+            color: "#fff",
+            fontSize: 17,
+            fontWeight: 800,
+            fontFamily: "inherit",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          ‹
+        </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85 }}>운용기관사</div>
           <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.4, marginTop: 2 }}>
@@ -17502,7 +17544,7 @@ function OperatorScreen() {
           </div>
         </div>
         <button
-          onClick={() => setMe(null)}
+          onClick={() => (onExit ? onExit() : setMe(null))}
           style={{
             border: 0,
             borderRadius: 11,
@@ -17949,7 +17991,7 @@ useEffect(() => {
         {activeMenu === "salarytable" && <SalaryTableScreen />}
         {activeMenu === "routeinput" && <RouteInputScreen />}
         {activeMenu === "tempdia" && <TempDiaAdmin />}
-        {activeMenu === "operator" && <OperatorScreen />}
+        {activeMenu === "operator" && <OperatorScreen onExit={() => setActiveMenu("home")} />}
         {activeMenu === "workgroup" && (
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
