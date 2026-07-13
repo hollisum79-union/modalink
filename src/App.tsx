@@ -14255,6 +14255,10 @@ function OperatorHome() {
 
   // 이번 2개월분에 지원근무 완료한 사번 (work_adjust · adjust_type=support · 읽기 전용)
   const [opSupportDone, setOpSupportDone] = useState<string[]>([]);
+  // 이번 2개월분 지원근무 신청 (chungdang_apply · status=applied · 읽기만)
+  const [opSupportApplies, setOpSupportApplies] = useState<any[]>([]);
+  // 신청 유지 + 그날 휴가 = 완료로 치는 사번 (leave_history · 읽기만)
+  const [opSupportLeaveDone, setOpSupportLeaveDone] = useState<string[]>([]);
   useEffect(() => {
     (async () => {
       const y = target.getFullYear();
@@ -14263,15 +14267,54 @@ function OperatorHome() {
       const pStart = `${y}-${String(startM + 1).padStart(2, "0")}-01`;
       const lastDay = new Date(y, startM + 2, 0).getDate();
       const pEnd = `${y}-${String(startM + 2).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-      const { data } = await supabase
-        .from("work_adjust")
-        .select("employee_number")
-        .eq("adjust_type", "support")
-        .gte("work_date", pStart)
-        .lte("work_date", pEnd);
-      setOpSupportDone((data || []).map((r) => String(r.employee_number)));
+      const [wkRes, apRes] = await Promise.all([
+        supabase
+          .from("work_adjust")
+          .select("employee_number")
+          .eq("adjust_type", "support")
+          .gte("work_date", pStart)
+          .lte("work_date", pEnd),
+        supabase
+          .from("chungdang_apply")
+          .select("*")
+          .eq("kind", "support")
+          .eq("status", "applied")
+          .gte("work_date", pStart)
+          .lte("work_date", pEnd)
+          .order("created_at", { ascending: false }),
+      ]);
+      setOpSupportDone((wkRes.data || []).map((r) => String(r.employee_number)));
+      const applies = apRes.data || [];
+      setOpSupportApplies(applies);
+      // 신청 유지 + 그날 휴가 → 완료 (사번은 대상자 목록에서 member_id로 찾음)
+      if (applies.length > 0 && opSupport.length > 0) {
+        const empOf = new Map(opSupport.map((m) => [m.id, String(m.employee_number)]));
+        const emps = applies.map((a) => empOf.get(a.member_id)).filter(Boolean);
+        const dates = applies.map((a) => a.work_date);
+        if (emps.length > 0) {
+          const { data: lvs } = await supabase
+            .from("leave_history")
+            .select("employee_number, used_date")
+            .in("employee_number", emps as string[])
+            .in("used_date", dates)
+            .neq("status", "취소");
+          const lvSet = new Set((lvs || []).map((l) => String(l.employee_number) + "|" + l.used_date));
+          setOpSupportLeaveDone(
+            applies
+              .filter((a) => {
+                const emp = empOf.get(a.member_id);
+                return emp && lvSet.has(emp + "|" + a.work_date);
+              })
+              .map((a) => String(empOf.get(a.member_id)))
+          );
+        } else {
+          setOpSupportLeaveDone([]);
+        }
+      } else {
+        setOpSupportLeaveDone([]);
+      }
     })();
-  }, [targetStr]);
+  }, [targetStr, opSupport]);
 
   // 공휴일 (근무표와 같은 소스 · read-holidays)
   const [opHolidays, setOpHolidays] = useState<string[]>([]);
@@ -14808,10 +14851,29 @@ function OperatorHome() {
         return Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""));
       });
 
-    // ② 지원근무자: 이번 2개월분에 아직 안 한(미완료) 대상자만. 신청 후 취소는 근무 기록이 없어 자동으로 미완료 유지.
-    const supportTodo = opSupport.filter(
-      (c) => !opSupportDone.includes(String(c.employee_number)) && !usedNames.includes(c.name)
-    );
+    // ② 지원근무자: 이번 2개월분 미완료 대상자만 (완료 = 실제 근무 OR 신청 유지+휴가).
+    //    이 날짜로 신청한 사람이 맨 위 (본인이 자원한 날이라 배정이 가장 자연스러움).
+    const applyByEmp = new Map<string, any>();
+    opSupportApplies.forEach((a) => {
+      const m = opSupport.find((s) => s.id === a.member_id);
+      if (m && !applyByEmp.has(String(m.employee_number))) applyByEmp.set(String(m.employee_number), a);
+    });
+    const supportTodo = opSupport
+      .filter(
+        (c) =>
+          !opSupportDone.includes(String(c.employee_number)) &&
+          !opSupportLeaveDone.includes(String(c.employee_number)) &&
+          !usedNames.includes(c.name)
+      )
+      .map((c) => {
+        const ap = applyByEmp.get(String(c.employee_number));
+        return { ...c, ap, appliedToday: !!ap && ap.work_date === targetStr };
+      })
+      .sort((a, b) => {
+        if (a.appliedToday !== b.appliedToday) return a.appliedToday ? -1 : 1;
+        if (!!a.ap !== !!b.ap) return a.ap ? 1 : -1; // 다른 날 신청자는 무신청보다 뒤 (그날 빼오면 이중 배정)
+        return 0;
+      });
 
     const restCands = (
       s === "주간"
@@ -14942,7 +15004,7 @@ function OperatorHome() {
                       )}
                     </div>
                     <div style={meta}>
-                      지정근무 · {d.via === "app" ? "앱 신청" : `대리 입력 · ${d.via}`}
+                      지정근무 · {d.via === "app" || d.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${d.via}`}
                     </div>
                   </div>
                   <button
@@ -14996,20 +15058,37 @@ function OperatorHome() {
               이번 분 미완료 지원근무 대상자가 없습니다.
             </div>
           ) : (
-            supportTodo.map((c, i) => (
-              <div key={c.id} style={{ ...row, borderBottom: i === supportTodo.length - 1 ? 0 : row.borderBottom }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{c.name}</div>
-                  <div style={meta}>지원근무 대상 · {c.work_group}</div>
+            supportTodo.map((c, i) => {
+              const apMd = c.ap ? `${Number(c.ap.work_date.slice(5, 7))}/${Number(c.ap.work_date.slice(8, 10))}` : "";
+              const apVia = c.ap ? (c.ap.via === "본인" || c.ap.via === "app" ? "본인 신청" : "대리 입력") : "";
+              return (
+                <div key={c.id} style={{ ...row, borderBottom: i === supportTodo.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                      {c.name}
+                      {c.appliedToday && (
+                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#CCFBF1", color: OP_TEAL_DARK }}>
+                          이날 신청
+                        </span>
+                      )}
+                    </div>
+                    <div style={meta}>
+                      {c.appliedToday
+                        ? `이 날짜로 신청함 · ${apVia}`
+                        : c.ap
+                        ? `${apMd}로 신청해둠 (그날 배정 예정) · ${c.work_group}`
+                        : `무신청 · ${c.work_group}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => pick(c.name, "지원근무")}
+                    style={{ border: 0, borderRadius: 10, background: c.appliedToday ? "#0F766E" : OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                  >
+                    배정
+                  </button>
                 </div>
-                <button
-                  onClick={() => pick(c.name, "지원근무")}
-                  style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
-                >
-                  배정
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -15942,7 +16021,7 @@ function OperatorDesignated() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{it.member_name}</div>
                 <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                  {it.work_date} · {it.via === "app" ? "앱 신청" : `대리 입력 · ${it.via}`}
+                  {it.work_date} · {it.via === "app" || it.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${it.via}`}
                 </div>
               </div>
             </div>
@@ -16037,6 +16116,29 @@ function OperatorApply({ opName }: { opName: string }) {
       return;
     }
     setSaving(true);
+    // 지원근무: 같은 2개월분에 유지 중인 신청이 이미 있으면 중복 방지
+    if (kind === "support") {
+      const wd = new Date(workDate + "T00:00:00");
+      const wy = wd.getFullYear();
+      const wStartM = wd.getMonth() - (wd.getMonth() % 2);
+      const bs = `${wy}-${String(wStartM + 1).padStart(2, "0")}-01`;
+      const bLast = new Date(wy, wStartM + 2, 0).getDate();
+      const be = `${wy}-${String(wStartM + 2).padStart(2, "0")}-${String(bLast).padStart(2, "0")}`;
+      const { data: dup } = await supabase
+        .from("chungdang_apply")
+        .select("id, work_date")
+        .eq("kind", "support")
+        .eq("member_id", picked.id)
+        .eq("status", "applied")
+        .gte("work_date", bs)
+        .lte("work_date", be)
+        .limit(1);
+      if (dup && dup.length > 0) {
+        setSaving(false);
+        showToast(`${picked.name}님은 이미 ${dup[0].work_date}에 유지 중인 신청이 있어요. 날짜를 바꾸려면 기존 신청을 먼저 취소하세요.`, "error");
+        return;
+      }
+    }
     const { error } = await supabase.from("chungdang_apply").insert({
       member_id: picked.id,
       member_name: picked.name,
@@ -16441,7 +16543,7 @@ function OperatorApply({ opName }: { opName: string }) {
                       {it.member_name}
                     </div>
                     <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                      {it.via === "app" ? "앱 신청" : `대리 입력 · ${it.via}`}
+                      {it.via === "app" || it.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${it.via}`}
                     </div>
                   </div>
                   {statusBadge(it.status)}
@@ -16855,15 +16957,91 @@ function OperatorSupport() {
   const termEnd = new Date(year, term * 2 + 2, 0);
   const daysLeft = Math.ceil((termEnd.getTime() - now.getTime()) / 86400000);
 
-  // ── 완료/미완료는 아직 예시 ──
-  const done = targets.slice(0, Math.floor(targets.length / 2)).map((t) => ({
-    ...t,
-    note: "6/28 근무",
-  }));
-  const todo = targets.slice(Math.floor(targets.length / 2)).map((t, i) => ({
-    ...t,
-    note: i % 2 === 0 ? "아직 신청 안 함" : "7/12 신청 → 7/3 취소",
-  }));
+  // ── 실데이터 판정 재료 (work_adjust · chungdang_apply · leave_history 전부 읽기만) ──
+  const [termWork, setTermWork] = useState<any[]>([]);
+  const [termApplies, setTermApplies] = useState<any[]>([]);
+  const [termLeaveSet, setTermLeaveSet] = useState<Set<string>>(new Set());
+  const [sumLoading, setSumLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      if (targets.length === 0) {
+        setTermWork([]);
+        setTermApplies([]);
+        setTermLeaveSet(new Set());
+        setSumLoading(false);
+        return;
+      }
+      setSumLoading(true);
+      const tStart = `${year}-${String(term * 2 + 1).padStart(2, "0")}-01`;
+      const tLastDay = new Date(year, term * 2 + 2, 0).getDate();
+      const tEnd = `${year}-${String(term * 2 + 2).padStart(2, "0")}-${String(tLastDay).padStart(2, "0")}`;
+      const [wkRes, apRes] = await Promise.all([
+        supabase
+          .from("work_adjust")
+          .select("employee_number, work_date")
+          .eq("adjust_type", "support")
+          .gte("work_date", tStart)
+          .lte("work_date", tEnd),
+        supabase
+          .from("chungdang_apply")
+          .select("*")
+          .eq("kind", "support")
+          .gte("work_date", tStart)
+          .lte("work_date", tEnd)
+          .order("created_at", { ascending: false }),
+      ]);
+      setTermWork(wkRes.data || []);
+      const applies = apRes.data || [];
+      setTermApplies(applies);
+      // 유지 중 신청의 날짜에 휴가 썼는지 (완료 규칙 2)
+      const empOf = new Map(targets.map((m) => [m.id, String(m.employee_number)]));
+      const actives = applies.filter((a) => a.status === "applied" && empOf.has(a.member_id));
+      if (actives.length > 0) {
+        const { data: lvs } = await supabase
+          .from("leave_history")
+          .select("employee_number, used_date")
+          .in("employee_number", actives.map((a) => empOf.get(a.member_id)) as string[])
+          .in("used_date", actives.map((a) => a.work_date))
+          .neq("status", "취소");
+        setTermLeaveSet(new Set((lvs || []).map((l) => String(l.employee_number) + "|" + l.used_date)));
+      } else {
+        setTermLeaveSet(new Set());
+      }
+      setSumLoading(false);
+    })();
+  }, [year, term, targets]);
+
+  // ── 3단계 분류: 완료 / 신청해둠 / 무신청 ──
+  const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const md = (s: string) => (s ? `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}` : "");
+  const done: any[] = [];
+  const applied: any[] = [];
+  const noApply: any[] = [];
+  targets.forEach((m) => {
+    const emp = String(m.employee_number);
+    const wk = termWork.find((w) => String(w.employee_number) === emp);
+    if (wk) {
+      done.push({ ...m, note: `${md(wk.work_date)} 근무` });
+      return;
+    }
+    const act = termApplies.find((a) => a.member_id === m.id && a.status === "applied");
+    if (act) {
+      if (termLeaveSet.has(emp + "|" + act.work_date)) {
+        done.push({ ...m, note: `${md(act.work_date)} 신청 유지 + 휴가` });
+      } else if (act.work_date < todayYmd) {
+        applied.push({ ...m, note: `${md(act.work_date)} 신청 · 날짜 지남 — 기록 확인 필요`, stale: true });
+      } else {
+        applied.push({ ...m, note: `${md(act.work_date)} 신청 · ${act.via === "본인" || act.via === "app" ? "본인" : "대리"}` });
+      }
+      return;
+    }
+    const last = termApplies.find((a) => a.member_id === m.id);
+    noApply.push({
+      ...m,
+      note: last ? `${md(last.work_date)} 신청 → ${last.status === "changed" ? "변경" : "취소"}` : "아직 신청 안 함",
+    });
+  });
+  const todo = [...noApply, ...applied]; // 기 종료 경고용 (미완료 전체)
 
   const card: React.CSSProperties = {
     background: "#fff",
@@ -17024,8 +17202,8 @@ function OperatorSupport() {
 
       <div
         style={{
-          background: "#FEF3C7",
-          color: "#92400E",
+          background: "#CCFBF1",
+          color: OP_TEAL_DARK,
           borderRadius: 12,
           padding: "10px 12px",
           fontSize: 11.5,
@@ -17034,19 +17212,22 @@ function OperatorSupport() {
           lineHeight: 1.6,
         }}
       >
-        대상자 지정은 실제로 저장됩니다. 완료·미완료 목록은 아직 예시입니다.
+        실제 데이터입니다. 완료 = 실제 근무 또는 신청 유지+그날 휴가. 신청·기록은 읽기만 합니다.
       </div>
 
-      {/* 요약 */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+      {/* 요약 (3단계) */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {[
-          [String(targets.length), "대상자"],
-          [String(done.length), "완료"],
-          [String(todo.length), "미완료"],
-        ].map(([n, l]) => (
-          <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{loading ? "–" : n}</div>
-            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}</div>
+          [String(targets.length), "대상자", "#111827"],
+          [String(done.length), "완료", "#065F46"],
+          [String(applied.length), "신청해둠", "#92400E"],
+          [String(noApply.length), "무신청", "#991B1B"],
+        ].map(([n, l, cCol]) => (
+          <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "13px 4px" }}>
+            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: -1, color: cCol }}>
+              {loading || sumLoading ? "–" : n}
+            </div>
+            <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}</div>
           </div>
         ))}
       </div>
@@ -17064,7 +17245,7 @@ function OperatorSupport() {
             lineHeight: 1.6,
           }}
         >
-          기 종료까지 {daysLeft}일 · 미완료 {todo.length}명
+          기 종료까지 {daysLeft}일 · 무신청 {noApply.length}명 · 신청만 해둠 {applied.length}명
         </div>
       )}
 
@@ -17078,21 +17259,46 @@ function OperatorSupport() {
         <>
           <div style={card}>
             <div style={ttl}>
-              미완료
+              무신청 (챙겨야 할 사람)
               <span style={{ fontSize: 11, fontWeight: 700, background: "#FEE2E2", color: "#991B1B", padding: "3px 9px", borderRadius: 20 }}>
-                {todo.length}명
+                {noApply.length}명
               </span>
             </div>
-            {todo.length === 0 ? (
+            {noApply.length === 0 ? (
               <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
-                모두 완료했습니다.
+                모두 신청했거나 완료했습니다.
               </div>
             ) : (
-              todo.map((m, i) => (
-                <div key={m.id} style={{ ...row, borderBottom: i === todo.length - 1 ? 0 : row.borderBottom }}>
+              noApply.map((m, i) => (
+                <div key={m.id} style={{ ...row, borderBottom: i === noApply.length - 1 ? 0 : row.borderBottom }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
                     <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>{m.note}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={card}>
+            <div style={ttl}>
+              신청해둠 (날짜 오면 근무 예정)
+              <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "3px 9px", borderRadius: 20 }}>
+                {applied.length}명
+              </span>
+            </div>
+            {applied.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
+                유지 중인 신청이 없습니다.
+              </div>
+            ) : (
+              applied.map((m, i) => (
+                <div key={m.id} style={{ ...row, borderBottom: i === applied.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+                    <div style={{ fontSize: 11.5, color: m.stale ? "#DC2626" : "#9CA3AF", fontWeight: m.stale ? 700 : 500, marginTop: 2 }}>
+                      {m.note}
+                    </div>
                   </div>
                 </div>
               ))
@@ -29034,6 +29240,8 @@ function SupportApplySection({ user, notify }: { user: any; notify: (msg: string
           <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>내 상태 · {blockLabel}</span>
           {done ? (
             <span style={badgeStyle("#D1FAE5", "#065F46")}>완료</span>
+          ) : activeApply && activeApply.work_date < todayStr ? (
+            <span style={badgeStyle("#FEF3C7", "#92400E")}>신청일 지남</span>
           ) : activeApply ? (
             <span style={badgeStyle("#EEF2FF", "#4F46E5")}>신청 유지 중</span>
           ) : (
@@ -29081,6 +29289,26 @@ function SupportApplySection({ user, notify }: { user: any; notify: (msg: string
                 {kwhen(activeApply.created_at)} · {activeApply.via || "본인"}
               </span>
             </div>
+            {activeApply.work_date < todayStr && (
+              <div
+                style={{
+                  background: "#FEF3C7",
+                  border: "1px solid #FDE68A",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  fontSize: 12.5,
+                  color: "#92400E",
+                  lineHeight: 1.6,
+                  marginTop: 8,
+                }}
+              >
+                ⏰ 신청한 날({kdate(activeApply.work_date)})이 지났어요.
+                <br />
+                근무하셨다면 <b>기록 탭</b>에 입력해야 완료·수당 처리가 됩니다.
+                <br />
+                근무를 못 하셨다면 아래에서 날짜를 변경하세요.
+              </div>
+            )}
             {!changing && !confirmCancel && (
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button
