@@ -14406,20 +14406,12 @@ function OperatorHome() {
     const endD = isRange ? absEnd || startD : targetStr;
 
     const saveAbsence = async () => {
-      console.log("[유고저장] 클릭됨. 시도값:", {
-        emp: absSel?.employee_number,
-        name: absSel?.name,
-        reason: finalReason,
-        isRange,
-        work_date: startD,
-        end_date: endD,
-      });
       setAbsMsg("저장 중…");
       if (!absSel) return setAbsMsg("⚠️ 사람을 먼저 선택하세요");
       if (!finalReason) return setAbsMsg("⚠️ 사유를 선택/입력하세요");
       if (isRange && endD < startD) return setAbsMsg("⚠️ 종료일이 시작일보다 빠릅니다");
       try {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("operator_absence")
           .insert({
             work_date: startD,
@@ -14427,9 +14419,7 @@ function OperatorHome() {
             employee_number: String(absSel.employee_number),
             member_name: absSel.name,
             reason: finalReason,
-          })
-          .select();
-        console.log("[유고저장] 응답 data:", data, " error:", error);
+          });
         if (error) {
           const full = [error.message, error.code, error.details, error.hint]
             .filter(Boolean)
@@ -14445,7 +14435,6 @@ function OperatorHome() {
         setAbsEnd("");
         setAbsReload((k) => k + 1);
       } catch (e: any) {
-        console.log("[유고저장] 예외:", e);
         setAbsMsg("❌ 저장 오류: " + (e?.message || String(e)));
       }
     };
@@ -14514,7 +14503,7 @@ function OperatorHome() {
 
         <div style={{ ...card }}>
           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>
-            유고 입력 <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: OP_TEAL, borderRadius: 6, padding: "2px 7px", marginLeft: 6 }}>빌드 v10</span>
+            유고 입력
           </div>
           <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 14 }}>
             병가 · 휴가 · 휴직 · 기타 결근을 모두 유고로 관리합니다.
@@ -14594,14 +14583,14 @@ function OperatorHome() {
                   type="date"
                   value={absStart || targetStr}
                   onChange={(e) => setAbsStart(e.target.value)}
-                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+                  style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
                 />
                 <span style={{ color: "#9CA3AF", fontWeight: 800 }}>~</span>
                 <input
                   type="date"
                   value={absEnd || absStart || targetStr}
                   onChange={(e) => setAbsEnd(e.target.value)}
-                  style={{ flex: 1, border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
+                  style={{ flex: 1, minWidth: 0, boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 10px", fontSize: 13.5, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }}
                 />
               </div>
               <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>
@@ -15421,7 +15410,7 @@ function OperatorHist() {
     { date: "2026-07-11", kind: "지정근무", who: "김영상", dia: "11", by: "이운용", memo: "안진모 대체휴가" },
     { date: "2026-07-08", kind: "휴무충당", who: "김철수", dia: "71", by: "이운용", memo: "" },
     { date: "2026-07-06", kind: "대기충당", who: "구민재", dia: "15", by: "하경수", memo: "" },
-    { date: "2026-07-02", kind: "지원근무", who: "노하람", dia: "-", by: "박운용", memo: "7-8월 기" },
+    { date: "2026-07-02", kind: "지원근무", who: "노하람", dia: "-", by: "박운용", memo: "7-8월분" },
   ];
 
   const filtered = hist.filter(
@@ -16586,7 +16575,9 @@ function OperatorRank() {
           <br />
           최근 2년치만 셉니다. 해가 바뀌면 전전년도 것은 빠집니다.
           <br />
-          전입·신입은 발령일 3개월 후부터 후보에 오릅니다.
+          전입·신입은 단독 발령 후 3개월부터 후보에 오릅니다.
+          <br />
+          이때 0이 아니라 그 시점 직원 평균값으로 시작합니다. 주간은 주간 평균 점수, 야간은 야간 평균 개수를 부여합니다.
         </div>
       </div>
 
@@ -16840,7 +16831,7 @@ function OperatorSupport() {
         </button>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", letterSpacing: -0.3 }}>
-            {year}년 {termLabel(term)} 기
+            {year}년 {termLabel(term)}분
           </div>
           <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginTop: 1 }}>
             2개월에 1회 의무
