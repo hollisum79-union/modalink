@@ -17637,8 +17637,70 @@ function RotationEditScreen() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [effDate, setEffDate] = useState(todayLocalStr());
   const [saving, setSaving] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
   const edOf = (r: any) => String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
+
+  // 다이아 값으로 근무형태 추정 (붙여넣기에 형태가 없을 때)
+  const inferWt = (dia: string) => {
+    if (dia.includes("~")) return "비번";
+    if (dia.startsWith("휴")) return "휴무";
+    const n = Number(dia.replace(/[^0-9]/g, ""));
+    return n >= 60 ? "야간" : "주간";
+  };
+
+  // 붙여넣은 텍스트 → 변경 미리보기(edits)로 적용
+  const applyPaste = () => {
+    const WT = ["주간", "야간", "비번", "휴무"];
+    const lines = pasteText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    if (lines.length !== baseRows.length) {
+      showToast(`줄 수가 다릅니다 — 붙여넣은 ${lines.length}줄 · 배열 ${baseRows.length}칸. 순번 1번부터 끝까지 전체를 붙여넣으세요.`, "error");
+      return;
+    }
+    const newEdits: Record<number, { dia_value: string; work_type: string }> = {};
+    for (let i = 0; i < lines.length; i++) {
+      const cols = lines[i].split(/[\t, ]+/).filter(Boolean);
+      let dia = "";
+      let wt = "";
+      if (cols.length >= 3 && /^\d+$/.test(cols[0]) && Number(cols[0]) === i + 1) {
+        // "순번 다이아 형태" 3열
+        dia = cols[1];
+        wt = cols[2];
+      } else if (cols.length >= 2 && WT.includes(cols[cols.length - 1])) {
+        // "다이아 형태" 2열
+        dia = cols.slice(0, cols.length - 1).join("");
+        wt = cols[cols.length - 1];
+      } else {
+        // 다이아만
+        dia = cols.join("");
+      }
+      if (!dia) {
+        showToast(`${i + 1}번째 줄을 읽을 수 없어요: "${lines[i]}"`, "error");
+        return;
+      }
+      if (!wt) wt = inferWt(dia);
+      if (!WT.includes(wt)) {
+        showToast(`${i + 1}번째 줄: 근무형태 "${wt}"를 알 수 없어요 (주간/야간/비번/휴무)`, "error");
+        return;
+      }
+      const b = baseRows[i];
+      if (String(b.dia_value) !== dia || String(b.work_type) !== wt) {
+        newEdits[b.position] = { dia_value: dia, work_type: wt };
+      }
+    }
+    const n = Object.keys(newEdits).length;
+    setEdits(newEdits);
+    if (n === 0) {
+      showToast("붙여넣은 내용이 현재 판과 완전히 동일합니다");
+    } else {
+      showToast(`${n}칸 변경 미리보기 적용됨 — 표에서 노란 칸 확인 후 저장하세요`);
+      setPasteOpen(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -17775,6 +17837,58 @@ function RotationEditScreen() {
 
       <div style={{ background: "#EEF2FF", color: "#3730A3", borderRadius: 12, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginBottom: 12 }}>
         📅 개정은 <b>적용일부터만</b> 반영됩니다. 지나간 날짜의 근무표·급여·주행키로는 옛 판 그대로 유지되고, 저장한 판은 모두 이력에 남습니다.
+      </div>
+
+      {/* 붙여넣기 입력 */}
+      <div style={card}>
+        <div
+          onClick={() => setPasteOpen(!pasteOpen)}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#1F2937" }}>📋 엑셀 붙여넣기로 입력</span>
+          <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{pasteOpen ? "닫기 ▲" : "열기 ▼"}</span>
+        </div>
+        {pasteOpen && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 11.5, color: "#6B7280", lineHeight: 1.7, marginBottom: 8 }}>
+              엑셀에서 <b>다이아 열 전체({baseRows.length}칸)</b>를 복사해 아래에 붙여넣으세요.
+              <br />
+              한 줄 = 한 순번. 형태 열까지 같이 복사해도 되고(예: "71 야간"), 다이아만 있으면 형태는 자동 판정됩니다 (~=비번, 휴=휴무, 60번 이상=야간).
+            </div>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder={"4\n71\n71~\n휴1\n29\n..."}
+              rows={8}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+              <span style={{ fontSize: 11.5, color: pasteText.trim() ? "#4F46E5" : "#9CA3AF", fontWeight: 700 }}>
+                {pasteText.trim() ? `${pasteText.split(/\r?\n/).filter((l) => l.trim()).length}줄 / ${baseRows.length}칸` : ""}
+              </span>
+              <button
+                onClick={applyPaste}
+                disabled={!pasteText.trim()}
+                style={{
+                  border: 0,
+                  borderRadius: 10,
+                  padding: "10px 18px",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: pasteText.trim() ? "pointer" : "default",
+                  background: pasteText.trim() ? "#4F46E5" : "#E5E7EB",
+                  color: pasteText.trim() ? "#fff" : "#9CA3AF",
+                  fontFamily: "inherit",
+                }}
+              >
+                변경 미리보기
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 배열 표 */}
@@ -20375,6 +20489,217 @@ const 유형색: { [key: string]: { bg: string; fg: string; label: string } } = 
 // (다른 화면 컴포넌트들 옆)에 붙여넣으세요.
 
 // ===== 관리자: 근무 관리 화면 (WorkManageScreen) - Supabase 저장 버전 =====
+// ── 관리자: 기관사 순번 일괄 배치 (붙여넣기 → kyobun_start_history 일괄 insert · append-only) ──
+// members.start_position은 절대 직접 수정하지 않고 이력 레이어로만 변경 (기존 원칙 유지).
+function StartBatchAssign() {
+  const [open, setOpen] = React.useState(false);
+  const [members, setMembers] = React.useState<any[]>([]);
+  const [hist, setHist] = React.useState<any[]>([]);
+  const [text, setText] = React.useState("");
+  const [effDate, setEffDate] = React.useState("");
+  const [preview, setPreview] = React.useState<any[] | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const load = async () => {
+    const [mRes, hRes] = await Promise.all([
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+        .eq("work_type", "교번"),
+      supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
+    ]);
+    if (mRes.data) setMembers((mRes.data as any[]).filter((m) => m.start_position != null));
+    if (hRes.data) setHist(hRes.data as any[]);
+  };
+  React.useEffect(() => {
+    if (open && members.length === 0) load();
+  }, [open]);
+
+  const effStartOf = (mem: any, dateStr: string) => {
+    const hit = hist
+      .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= dateStr)
+      .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+    return hit ? Number(hit.start_position) : Number(mem.start_position);
+  };
+
+  const makePreview = () => {
+    if (!effDate) {
+      showToast("적용일을 먼저 선택하세요", "error");
+      return;
+    }
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    if (lines.length === 0) return;
+    const rows: any[] = [];
+    const usedMember = new Set<string>();
+    const usedPos = new Map<string, string>(); // work_group|pos -> name
+    for (let i = 0; i < lines.length; i++) {
+      const cols = lines[i].split(/[\t, ]+/).filter(Boolean);
+      if (cols.length < 2) {
+        showToast(`${i + 1}번째 줄: "이름 순번" 또는 "사번 순번" 형식이어야 해요`, "error");
+        return;
+      }
+      const posStr = cols[cols.length - 1];
+      const pos = Number(posStr);
+      if (!Number.isInteger(pos) || pos < 1) {
+        showToast(`${i + 1}번째 줄: 순번 "${posStr}"이 숫자가 아니에요`, "error");
+        return;
+      }
+      const who = cols.slice(0, cols.length - 1).join(" ");
+      // 사번 정확 일치 우선, 그다음 이름 정확 일치
+      let m = members.find((x) => String(x.employee_number) === who);
+      if (!m) {
+        const byName = members.filter((x) => String(x.name) === who);
+        if (byName.length > 1) {
+          showToast(`${i + 1}번째 줄: "${who}" 이름이 ${byName.length}명이에요. 사번으로 적어주세요.`, "error");
+          return;
+        }
+        m = byName[0];
+      }
+      if (!m) {
+        showToast(`${i + 1}번째 줄: "${who}"를 교번 근무자에서 찾을 수 없어요`, "error");
+        return;
+      }
+      if (usedMember.has(String(m.id))) {
+        showToast(`"${m.name}"이(가) 두 번 나왔어요. 한 사람당 한 줄만 적어주세요.`, "error");
+        return;
+      }
+      usedMember.add(String(m.id));
+      if (pos > Number(m.schedule_total)) {
+        showToast(`${i + 1}번째 줄: ${m.name} 순번 ${pos}가 배열 길이(${m.schedule_total})보다 커요`, "error");
+        return;
+      }
+      const posKey = `${m.work_group}|${pos}`;
+      if (usedPos.has(posKey)) {
+        showToast(`순번 ${pos}(${m.work_group})가 ${usedPos.get(posKey)}·${m.name} 두 명에게 배정됐어요`, "error");
+        return;
+      }
+      usedPos.set(posKey, m.name);
+      const from = effStartOf(m, effDate);
+      rows.push({ member: m, from, to: pos });
+    }
+    const changed = rows.filter((r) => r.from !== r.to);
+    if (changed.length === 0) {
+      showToast("붙여넣은 순번이 현재와 모두 동일합니다");
+      setPreview(null);
+      return;
+    }
+    setPreview(changed);
+  };
+
+  const save = async () => {
+    if (!preview || preview.length === 0) return;
+    setSaving(true);
+    const note = `일괄 배치 ${preview.length}명`;
+    const { error } = await supabase.from("kyobun_start_history").insert(
+      preview.map((r) => ({
+        member_id: r.member.id,
+        effective_date: effDate,
+        start_position: String(r.to),
+        note,
+      }))
+    );
+    setSaving(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`저장 완료! ${effDate}부터 ${preview.length}명 순번이 바뀝니다.`);
+    setText("");
+    setPreview(null);
+    load();
+  };
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>📋 순번 일괄 배치 (붙여넣기)</span>
+        <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{open ? "닫기 ▲" : "열기 ▼"}</span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11.5, color: "#6B7280", lineHeight: 1.7, marginBottom: 10 }}>
+            개정 등으로 여러 명의 순번이 한꺼번에 바뀔 때 씁니다. 엑셀에서 <b>"이름(또는 사번) + 새 순번"</b> 두 열을 복사해 붙여넣으세요.
+            <br />
+            예: "김광현 17" — 한 줄에 한 명. 순번이 그대로인 사람은 안 적어도 됩니다.
+            <br />
+            저장은 시작점 이력으로만 남습니다 (원본 순번은 건드리지 않음 · 적용일 이후에만 반영).
+          </div>
+          <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, marginBottom: 6 }}>적용일</div>
+          <input
+            type="date"
+            value={effDate}
+            onChange={(e) => {
+              setEffDate(e.target.value);
+              setPreview(null);
+            }}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none", background: "#fff" }}
+          />
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setPreview(null);
+            }}
+            placeholder={"김광현 17\n안진모 3\n21714044 42"}
+            rows={6}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }}
+          />
+          <button
+            onClick={makePreview}
+            disabled={!text.trim() || !effDate}
+            style={{
+              width: "100%",
+              marginTop: 8,
+              border: 0,
+              borderRadius: 10,
+              padding: "12px 0",
+              fontSize: 13.5,
+              fontWeight: 800,
+              cursor: text.trim() && effDate ? "pointer" : "default",
+              background: text.trim() && effDate ? "#4F46E5" : "#E5E7EB",
+              color: text.trim() && effDate ? "#fff" : "#9CA3AF",
+              fontFamily: "inherit",
+            }}
+          >
+            변경 미리보기
+          </button>
+
+          {preview && preview.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 2, color: "#374151" }}>
+                {preview.map((r) => (
+                  <div key={r.member.id}>
+                    {r.member.name} ({r.member.work_group}) · 순번{" "}
+                    <b style={{ color: "#B45309" }}>
+                      {r.from} → {r.to}
+                    </b>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginTop: 8 }}>
+                🛡️ {effDate}부터 위 {preview.length}명의 순번이 바뀝니다. 과거 근무표는 변하지 않고, 시작점 이력에서 건 단위로 취소할 수 있습니다.
+              </div>
+              <button
+                disabled={saving}
+                onClick={save}
+                style={{ width: "100%", marginTop: 8, border: 0, borderRadius: 10, padding: "12px 0", fontSize: 13.5, fontWeight: 800, cursor: "pointer", background: saving ? "#9CA3AF" : "#059669", color: "#fff", fontFamily: "inherit" }}
+              >
+                {saving ? "저장 중..." : `${preview.length}명 일괄 배치 저장`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 기존 function WorkManageScreen() {...} 전체를 이걸로 교체하세요.
 
 function DiaTimetableUpload() {
@@ -20659,6 +20984,7 @@ function WorkManageScreen() {
     <div>
       <ScheduleUpdateAdmin />
       <StartHistoryAdmin />
+      <StartBatchAssign />
       <div
         style={{
           background: "#FEF2F2",
