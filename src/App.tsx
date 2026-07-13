@@ -17755,15 +17755,20 @@ function RotationEditScreen() {
     }
   };
 
+  const [vacCnt, setVacCnt] = useState<number | null>(null);
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("schedule_rotation")
-      .select("*")
-      .in("group_name", GROUPS)
-      .order("position");
+    const [{ data, error }, vRes] = await Promise.all([
+      supabase.from("schedule_rotation").select("*").in("group_name", GROUPS).order("position"),
+      supabase
+        .from("members")
+        .select("id, start_position")
+        .eq("work_type", "교번")
+        .ilike("name", "%결원%"),
+    ]);
     if (error) showToast("불러오기 실패: " + error.message, "error");
     setAllRows(data || []);
+    setVacCnt(((vRes.data as any[]) || []).filter((m) => m.start_position != null).length);
     setLoading(false);
   };
   useEffect(() => {
@@ -17911,6 +17916,7 @@ function RotationEditScreen() {
                   </span>
                 );
               })}
+              {vacCnt != null && vacCnt > 0 && <span style={{ color: "#DC2626" }}>🕳 결원 {vacCnt}</span>}
             </div>
           )}
           {ratioOpen && <div style={{ marginTop: 12 }} />}
@@ -20437,6 +20443,260 @@ const [dbRows, setDbRows] = React.useState<any[]>([]);
 }
 
 
+// ── 관리자: 결원 현황 (자동 집계 + 사유 기록 vacancy_log · append-only) ──
+// 결원 = 이름에 "결원" 포함된 교번 근무자. 수·순번·오늘 근무는 기존 데이터로 자동 계산.
+// 사유·발생일·메모만 vacancy_log에 기록 (덮어쓰기 없음 · 수정 = 새 기록 추가).
+function VacancyStatus() {
+  const VC_REASONS = ["퇴사", "전출", "휴직(장기)", "기타"];
+  const [open, setOpen] = React.useState(false);
+  const [vcMembers, setVcMembers] = React.useState<any[]>([]);
+  const [vcRotation, setVcRotation] = React.useState<any[]>([]);
+  const [vcHist, setVcHist] = React.useState<any[]>([]);
+  const [vcLogs, setVcLogs] = React.useState<any[]>([]);
+  const [vcLoaded, setVcLoaded] = React.useState(false);
+  const [sheet, setSheet] = React.useState<any>(null); // 사유 입력 대상 결원
+  const [reason, setReason] = React.useState("퇴사");
+  const [occDate, setOccDate] = React.useState("");
+  const [memo, setMemo] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  const load = async () => {
+    const [mRes, rRes, hRes, lRes] = await Promise.all([
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+        .eq("work_type", "교번"),
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
+      supabase.from("vacancy_log").select("*").order("created_at", { ascending: false }),
+    ]);
+    setVcMembers(((mRes.data as any[]) || []).filter((m) => m.start_position != null));
+    setVcRotation(rRes.data || []);
+    setVcHist(hRes.data || []);
+    setVcLogs(lRes.data || []); // 테이블이 아직 없으면 빈 배열 (사유 저장 시 에러로 안내됨)
+    setVcLoaded(true);
+  };
+  React.useEffect(() => {
+    load();
+  }, []);
+
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const todayS = todayLocalStr();
+
+  const effStartOf = (mem: any) => {
+    const hit = vcHist
+      .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= todayS)
+      .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
+    return hit ? Number(hit.start_position) : Number(mem.start_position);
+  };
+
+  const vacants = vcMembers
+    .filter((m) => String(m.name || "").includes("결원"))
+    .map((m) => {
+      const w1 = vcRotation.length > 0 ? calcKyobunWork(m, today, vcRotation, [], [], vcHist) : null;
+      const w2 = vcRotation.length > 0 ? calcKyobunWork(m, tomorrow, vcRotation, [], [], vcHist) : null;
+      const log = vcLogs.find((l) => String(l.member_id) === String(m.id)) || null;
+      return { ...m, pos: effStartOf(m), w1, w2, log };
+    })
+    .sort((a, b) => (a.work_group === b.work_group ? a.pos - b.pos : String(a.work_group).localeCompare(String(b.work_group), "ko")));
+
+  const cntDae = vacants.filter((v) => v.work_group === "대공원").length;
+  const cntDo = vacants.filter((v) => v.work_group === "도봉").length;
+
+  const REASON_COLOR: Record<string, string> = { 퇴사: "#DC2626", 전출: "#D97706", "휴직(장기)": "#7C3AED", 기타: "#6B7280" };
+  const wLabel = (w: any) => (w ? `${w.dia}${w.type === "주간" || w.type === "야간" ? ` (${w.type})` : w.type ? ` (${w.type})` : ""}` : "-");
+  const mdOf = (s: string) => (s ? `${Number(String(s).slice(5, 7))}/${Number(String(s).slice(8, 10))}` : "");
+
+  const openSheet = (v: any) => {
+    setSheet(v);
+    setReason(v.log ? v.log.reason : "퇴사");
+    setOccDate(v.log && v.log.occurred_date ? String(v.log.occurred_date).slice(0, 10) : "");
+    setMemo(v.log && v.log.memo ? v.log.memo : "");
+  };
+  const saveLog = async () => {
+    if (!sheet) return;
+    setSaving(true);
+    const { error } = await supabase.from("vacancy_log").insert({
+      member_id: String(sheet.id),
+      member_name: sheet.name,
+      reason,
+      occurred_date: occDate || null,
+      memo: memo.trim() || null,
+    });
+    setSaving(false);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`${sheet.name} 사유 기록됨`);
+    setSheet(null);
+    load();
+  };
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: "#1F2937" }}>🕳 결원 현황</span>
+        <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 800 }}>{open ? "닫기 ▲" : "열기 ▼"}</span>
+      </div>
+      {!open && vcLoaded && (
+        <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: "#6B7280" }}>
+          대공원 <b style={{ color: "#DC2626" }}>{cntDae}</b> · 도봉 <b style={{ color: "#DC2626" }}>{cntDo}</b> · 전체{" "}
+          <b style={{ color: "#DC2626" }}>{vacants.length}</b>
+          {vacants.some((v) => !v.log) && <span style={{ color: "#9CA3AF", marginLeft: 8 }}>사유 미입력 {vacants.filter((v) => !v.log).length}</span>}
+        </div>
+      )}
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+            {[
+              [cntDae, "대공원", "#FEF2F2", "#DC2626"],
+              [cntDo, "도봉", "#FEF2F2", "#DC2626"],
+              [vacants.length, "전체", "#F3F4F6", "#1F2937"],
+            ].map(([n, l, bg, fg]: any) => (
+              <div key={l} style={{ flex: 1, background: bg, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: fg }}>{vcLoaded ? n : "–"}</div>
+                <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginTop: 2 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+          {vacants.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "16px 0", color: "#9CA3AF", fontSize: 13 }}>
+              {vcLoaded ? "결원이 없습니다." : "불러오는 중..."}
+            </div>
+          ) : (
+            vacants.map((v, i) => (
+              <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", borderTop: i === 0 ? 0 : "1px solid #F3F4F6" }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: "#FEF2F2", color: "#DC2626", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
+                  {v.pos}
+                  <span style={{ fontSize: 8.5, fontWeight: 700, color: "#F87171" }}>순번</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>
+                    {v.name}
+                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginLeft: 5 }}>{v.work_group}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6B7280", marginTop: 3 }}>
+                    오늘: {wLabel(v.w1)} · 내일: {wLabel(v.w2)}
+                  </div>
+                  {v.log ? (
+                    <div style={{ fontSize: 11, fontWeight: 800, marginTop: 3, color: REASON_COLOR[v.log.reason] || "#6B7280" }}>
+                      {v.log.reason}
+                      {v.log.occurred_date ? ` · ${mdOf(v.log.occurred_date)} 발생` : ""}
+                      {v.log.memo ? ` · ${v.log.memo}` : ""}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, fontWeight: 600, marginTop: 3, color: "#9CA3AF" }}>사유 미입력</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => openSheet(v)}
+                  style={{
+                    border: v.log ? "1.5px solid #E5E7EB" : "1.5px solid #FCA5A5",
+                    background: "#fff",
+                    color: v.log ? "#9CA3AF" : "#DC2626",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    borderRadius: 8,
+                    padding: "7px 10px",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    flexShrink: 0,
+                  }}
+                >
+                  {v.log ? "수정" : "사유 적기"}
+                </button>
+              </div>
+            ))
+          )}
+          <div style={{ background: "#EEF2FF", borderRadius: 12, padding: "12px 14px", marginTop: 12, fontSize: 12.5, color: "#3730A3", lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 결원 채우기 · 만들기</div>
+            <b>신규 전입:</b> 관리자 → 조합원 관리 → "결원" 검색 → 채울 자리 수정 → 이름·사번을 그 사람 것으로 변경 → 저장 후 본인에게 가입 안내 (순서 꼭 지키기!)
+            <br />
+            <b>퇴직:</b> 조합원 관리에서 그 사람 이름을 다시 "결원○○"로 되돌린 뒤, 여기서 사유를 적어두세요.
+          </div>
+          <div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
+            결원 수·순번·근무는 조합원 명단에서 자동 집계됩니다. 사유 수정도 새 기록으로 쌓입니다(덮어쓰기 없음).
+          </div>
+        </div>
+      )}
+
+      {/* 사유 입력 시트 */}
+      {sheet && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSheet(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }}
+        >
+          <div style={{ background: "#fff", width: "100%", maxWidth: 430, borderRadius: "20px 20px 0 0", padding: "18px 18px calc(24px + env(safe-area-inset-bottom, 0px))" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
+              {sheet.name} · 순번 {sheet.pos} ({sheet.work_group})
+            </div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", margin: "4px 0 6px" }}>
+              무엇 때문에 생긴 결원인가요? 기록해 두면 현황에서 항상 보입니다.
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>사유</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {VC_REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setReason(r)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 0",
+                    borderRadius: 10,
+                    border: reason === r ? "1.5px solid #DC2626" : "1.5px solid #E5E7EB",
+                    background: reason === r ? "#FEF2F2" : "#fff",
+                    color: reason === r ? "#DC2626" : "#6B7280",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>발생일 (그 자리가 빈 날 · 선택)</div>
+            <input
+              type="date"
+              value={occDate}
+              onChange={(e) => setOccDate(e.target.value)}
+              style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 14, fontWeight: 700, boxSizing: "border-box", fontFamily: "inherit", WebkitAppearance: "none", appearance: "none", background: "#fff" }}
+            />
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>메모 (선택 · 예: 누구 자리였는지)</div>
+            <input
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="김OO 퇴사 자리"
+              style={{ width: "100%", padding: "11px 13px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => setSheet(null)}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: "#F3F4F6", color: "#6B7280", fontFamily: "inherit" }}
+              >
+                취소
+              </button>
+              <button
+                disabled={saving}
+                onClick={saveLog}
+                style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: 0, fontSize: 14, fontWeight: 800, cursor: "pointer", background: saving ? "#9CA3AF" : "#DC2626", color: "#fff", fontFamily: "inherit" }}
+              >
+                {saving ? "저장 중..." : "기록 저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 관리자: 기관사 순번 일괄 배치 (붙여넣기 → kyobun_start_history 일괄 insert · append-only) ──
 // members.start_position은 절대 직접 수정하지 않고 이력 레이어로만 변경 (기존 원칙 유지).
 function StartBatchAssign() {
@@ -20817,12 +21077,6 @@ function StartHistoryAdmin() {
         ]}
         tip="⚠️ 임시 교체는 여기가 아니라 조합원끼리 하는 '교번교체'를 쓰세요. 여기는 영구 변경 전용이에요. 잘못 저장했으면 아래 목록에서 취소하면 됩니다."
       />
-      <div style={{ background: "#EEF2FF", borderRadius: 12, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#3730A3", lineHeight: 1.6 }}>
-        <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 신규 전입 · 퇴직 처리는 여기가 아니에요</div>
-        <b>신규 전입:</b> 관리자 → 조합원 관리 → "결원" 검색 → 채울 자리 수정 → 이름·사번을 그 사람 것으로 변경 → 저장 후 본인에게 가입 안내 (순서 꼭 지키기!)
-        <br />
-        <b>퇴직:</b> 조합원 관리에서 그 사람 이름을 다시 "결원○○"로 되돌리면 됩니다.
-      </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#6B7280", marginBottom: 4 }}>📅 적용일 — 이 날짜부터 자리가 맞바뀝니다 (아래 칸을 눌러 선택)</div>
       <input
         type="date"
@@ -20963,6 +21217,7 @@ function WorkManageScreen() {
       {mgrTab === "배열 개정" && <RotationEditScreen />}
       {mgrTab === "순번 배치" && (
         <div>
+          <VacancyStatus />
           <StartBatchAssign />
           <StartHistoryAdmin />
         </div>
