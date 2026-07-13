@@ -10273,7 +10273,7 @@ function MemberManageScreen({ user }: any) {
     }
   };
 
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [vacantNum, setVacantNum] = useState("");
 
   // 다음 빈 결원 번호 추천 (예: 결원03)
@@ -10877,7 +10877,16 @@ function MemberManageScreen({ user }: any) {
               어떻게 처리할까요?
             </div>
 
-            {/* 결원 처리 (퇴사·전출) */}
+            {/* 결원 처리 (퇴사·전출) — 자리 개념이 있는 교번·통상만 */}
+            {!(deleteTarget.work_type === "교번" || deleteTarget.work_type === "통상") && (
+              <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 12, padding: "12px 14px", marginBottom: 14, textAlign: "left", fontSize: 12, color: "#6B7280", lineHeight: 1.7 }}>
+                <b style={{ color: "#374151" }}>💡 {deleteTarget.work_type || "이"} 근무자는 결원 처리가 없어요</b>
+                <br />
+                결원(자리 보존)은 자리 개념이 있는 <b>교번·통상</b>에만 씁니다. 교대 등은 아래 <b>완전 삭제</b>로
+                정리하고, 새 인원은 <b>사업소 인원추가</b>로 넣으면 됩니다.
+              </div>
+            )}
+            {(deleteTarget.work_type === "교번" || deleteTarget.work_type === "통상") && (
             <div style={{ border: "1.5px solid #C7D2FE", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "left" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 10 }}>결원 처리 (퇴사·전출)</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -10903,6 +10912,7 @@ function MemberManageScreen({ user }: any) {
                 결원{(vacantNum || "").padStart(2, "0")}으로 처리
               </button>
             </div>
+            )}
 
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -17762,13 +17772,15 @@ function RotationEditScreen() {
       supabase.from("schedule_rotation").select("*").in("group_name", GROUPS).order("position"),
       supabase
         .from("members")
-        .select("id, start_position")
-        .eq("work_type", "교번")
+        .select("id, start_position, work_type")
+        .in("work_type", ["교번", "통상"])
         .ilike("name", "%결원%"),
     ]);
     if (error) showToast("불러오기 실패: " + error.message, "error");
     setAllRows(data || []);
-    setVacCnt(((vRes.data as any[]) || []).filter((m) => m.start_position != null).length);
+    setVacCnt(
+      (((vRes.data as any[]) || []).filter((m) => (m.work_type === "통상" ? true : m.start_position != null))).length
+    );
     setLoading(false);
   };
   useEffect(() => {
@@ -20464,13 +20476,15 @@ function VacancyStatus() {
     const [mRes, rRes, hRes, lRes] = await Promise.all([
       supabase
         .from("members")
-        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
-        .eq("work_type", "교번"),
+        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type, tongsang_base_date, tongsang_base_dia")
+        .in("work_type", ["교번", "통상"]),
       supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
       supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
       supabase.from("vacancy_log").select("*").order("created_at", { ascending: false }),
     ]);
-    setVcMembers(((mRes.data as any[]) || []).filter((m) => m.start_position != null));
+    setVcMembers(
+      ((mRes.data as any[]) || []).filter((m) => (m.work_type === "통상" ? true : m.start_position != null))
+    );
     setVcRotation(rRes.data || []);
     setVcHist(hRes.data || []);
     setVcLogs(lRes.data || []); // 테이블이 아직 없으면 빈 배열 (사유 저장 시 에러로 안내됨)
@@ -20492,18 +20506,33 @@ function VacancyStatus() {
     return hit ? Number(hit.start_position) : Number(mem.start_position);
   };
 
+  const vcHolidays = getCachedHolidays(today.getFullYear());
   const vacants = vcMembers
     .filter((m) => String(m.name || "").includes("결원"))
     .map((m) => {
-      const w1 = vcRotation.length > 0 ? calcKyobunWork(m, today, vcRotation, [], [], vcHist) : null;
-      const w2 = vcRotation.length > 0 ? calcKyobunWork(m, tomorrow, vcRotation, [], [], vcHist) : null;
+      const isTs = m.work_type === "통상";
+      const w1 = isTs
+        ? calcTongsangWork(m, today, vcHolidays)
+        : vcRotation.length > 0
+        ? calcKyobunWork(m, today, vcRotation, [], [], vcHist)
+        : null;
+      const w2 = isTs
+        ? calcTongsangWork(m, tomorrow, vcHolidays)
+        : vcRotation.length > 0
+        ? calcKyobunWork(m, tomorrow, vcRotation, [], [], vcHist)
+        : null;
       const log = vcLogs.find((l) => String(l.member_id) === String(m.id)) || null;
-      return { ...m, pos: effStartOf(m), w1, w2, log };
+      return { ...m, isTs, pos: isTs ? 0 : effStartOf(m), w1, w2, log };
     })
-    .sort((a, b) => (a.work_group === b.work_group ? a.pos - b.pos : String(a.work_group).localeCompare(String(b.work_group), "ko")));
+    .sort((a, b) => {
+      if (a.isTs !== b.isTs) return a.isTs ? 1 : -1; // 교번 먼저, 통상 뒤
+      return a.work_group === b.work_group ? a.pos - b.pos : String(a.work_group).localeCompare(String(b.work_group), "ko");
+    });
 
   const cntDae = vacants.filter((v) => v.work_group === "대공원").length;
   const cntDo = vacants.filter((v) => v.work_group === "도봉").length;
+  const cntKb = vacants.filter((v) => !v.isTs).length;
+  const cntTs = vacants.filter((v) => v.isTs).length;
 
   const REASON_COLOR: Record<string, string> = { 퇴사: "#DC2626", 전출: "#D97706", "휴직(장기)": "#7C3AED", 기타: "#6B7280" };
   const wLabel = (w: any) => (w ? `${w.dia}${w.type === "주간" || w.type === "야간" ? ` (${w.type})` : w.type ? ` (${w.type})` : ""}` : "-");
@@ -20545,6 +20574,7 @@ function VacancyStatus() {
         <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 700, color: "#6B7280" }}>
           대공원 <b style={{ color: "#DC2626" }}>{cntDae}</b> · 도봉 <b style={{ color: "#DC2626" }}>{cntDo}</b> · 전체{" "}
           <b style={{ color: "#DC2626" }}>{vacants.length}</b>
+          <span style={{ color: "#9CA3AF", marginLeft: 6 }}>(교번 {cntKb} · 통상 {cntTs})</span>
           {vacants.some((v) => !v.log) && <span style={{ color: "#9CA3AF", marginLeft: 8 }}>사유 미입력 {vacants.filter((v) => !v.log).length}</span>}
         </div>
       )}
@@ -20569,17 +20599,22 @@ function VacancyStatus() {
           ) : (
             vacants.map((v, i) => (
               <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", borderTop: i === 0 ? 0 : "1px solid #F3F4F6" }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: "#FEF2F2", color: "#DC2626", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
-                  {v.pos}
-                  <span style={{ fontSize: 8.5, fontWeight: 700, color: "#F87171" }}>순번</span>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: v.isTs ? "#FFF7ED" : "#FEF2F2", color: v.isTs ? "#C2410C" : "#DC2626", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: v.isTs ? 11 : 13, flexShrink: 0 }}>
+                  {v.isTs ? (v.w1 ? v.w1.dia : "51~54") : v.pos}
+                  <span style={{ fontSize: 8.5, fontWeight: 700, color: v.isTs ? "#FB923C" : "#F87171" }}>{v.isTs ? "통상" : "순번"}</span>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>
                     {v.name}
-                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginLeft: 5 }}>{v.work_group}</span>
+                    <span style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginLeft: 5 }}>
+                      {v.work_group}
+                      {v.isTs ? " · 통상" : ""}
+                    </span>
                   </div>
                   <div style={{ fontSize: 11, color: "#6B7280", marginTop: 3 }}>
-                    오늘: {wLabel(v.w1)} · 내일: {wLabel(v.w2)}
+                    {v.isTs && v.tongsang_base_dia == null
+                      ? "통상 51~54 · 기준다이아 미설정"
+                      : `오늘: ${v.isTs && !v.w1 ? "휴무" : wLabel(v.w1)} · 내일: ${v.isTs && !v.w2 ? "휴무" : wLabel(v.w2)}`}
                   </div>
                   {v.log ? (
                     <div style={{ fontSize: 11, fontWeight: 800, marginTop: 3, color: REASON_COLOR[v.log.reason] || "#6B7280" }}>
