@@ -14155,28 +14155,7 @@ function OperatorHome() {
   };
 
   // 빈 자리(결원)는 아래에서 휴가 데이터(leave_history)로 계산 → const empty
-  // ── 대기 근무자 (실데이터): 그날 교번 계산에서 dia가 "대기"로 시작하는 사람 ──
-  //    usable/note(휴가로 못 씀)는 3-3에서 휴가 연동 시 채움. 지금은 전원 가능으로 표시.
-  const standby = React.useMemo(() => {
-    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
-    const list = opMembers
-      .map((m) => {
-        // 결원은 사람이 아님 → 대기에서 제외
-        if (String(m.name).includes("결원")) return null;
-        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
-        if (!w || !String(w.dia).startsWith("대기")) return null;
-        // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
-        if (String(w.dia).includes("~") || w.type === "비번") return null;
-        return { slot: String(w.dia), name: m.name, usable: true, note: "", region: m.work_group };
-      })
-      .filter(Boolean) as any[];
-    // 대기 번호 오름차순 (주간 1~59 → 야간 60~)
-    list.sort(
-      (a, b) =>
-        Number(String(a.slot).replace(/[^0-9]/g, "")) - Number(String(b.slot).replace(/[^0-9]/g, ""))
-    );
-    return list;
-  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
+  // 대기 근무자(standby)는 휴가·유고 데이터 로드 뒤에서 계산 (usable 판정에 필요) → 아래 const standby
 
   // ── 결원 대기 (뱃지 총인원·펼침용): 이름에 "결원" 들어간 사람이 걸린 대기 자리 ──
   const standbyVacant = React.useMemo(() => {
@@ -14240,6 +14219,45 @@ function OperatorHome() {
       setOpAbsences(data || []);
     })();
   }, [targetStr, absReload]);
+
+  // ── 대기 근무자 (실데이터): 그날 교번 계산에서 dia가 "대기"로 시작하는 사람 ──
+  //    그날 휴가(leave_history)·유고(operator_absence)가 있으면 사용 불가 + 사유 표시.
+  const standby = React.useMemo(() => {
+    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
+    const SB_LV_LABEL: Record<string, string> = {
+      annual: "연차",
+      tempAnnual: "가연차",
+      promotedAnnual: "촉진연차",
+      substitute: "대체휴가",
+      study: "학습휴가",
+      longService: "장기재직휴가",
+      petition: "청원휴가",
+    };
+    // 사번별 못 쓰는 사유 (앱 휴가 먼저, 직접 입력 유고가 있으면 그게 우선)
+    const offByEmp = new Map<string, string>();
+    opLeaves.forEach((lv) =>
+      offByEmp.set(String(lv.employee_number), SB_LV_LABEL[lv.leave_type] || lv.leave_type || "휴가")
+    );
+    opAbsences.forEach((ab) => offByEmp.set(String(ab.employee_number), ab.reason || "유고"));
+    const list = opMembers
+      .map((m) => {
+        // 결원은 사람이 아님 → 대기에서 제외
+        if (String(m.name).includes("결원")) return null;
+        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+        if (!w || !String(w.dia).startsWith("대기")) return null;
+        // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
+        if (String(w.dia).includes("~") || w.type === "비번") return null;
+        const off = offByEmp.get(String(m.employee_number)) || "";
+        return { slot: String(w.dia), name: m.name, usable: !off, note: off, region: m.work_group };
+      })
+      .filter(Boolean) as any[];
+    // 대기 번호 오름차순 (주간 1~59 → 야간 60~)
+    list.sort(
+      (a, b) =>
+        Number(String(a.slot).replace(/[^0-9]/g, "")) - Number(String(b.slot).replace(/[^0-9]/g, ""))
+    );
+    return list;
+  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset, opLeaves, opAbsences]);
 
   // 지원근무 대상자 (is_support_target · 2개월 1회 의무 대상)
   const [opSupport, setOpSupport] = useState<any[]>([]);
