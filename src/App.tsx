@@ -14514,7 +14514,7 @@ function OperatorHome() {
 
         <div style={{ ...card }}>
           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 2 }}>
-            유고 입력 <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: OP_TEAL, borderRadius: 6, padding: "2px 7px", marginLeft: 6 }}>빌드 v9</span>
+            유고 입력 <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: OP_TEAL, borderRadius: 6, padding: "2px 7px", marginLeft: 6 }}>빌드 v10</span>
           </div>
           <div style={{ fontSize: 11.5, color: "#9CA3AF", marginBottom: 14 }}>
             병가 · 휴가 · 휴직 · 기타 결근을 모두 유고로 관리합니다.
@@ -14630,6 +14630,7 @@ function OperatorHome() {
           )}
 
           <button
+            onClick={saveAbsence}
             style={{ width: "100%", marginTop: 16, border: 0, borderRadius: 13, background: OP_TEAL, color: "#fff", fontSize: 14.5, fontWeight: 800, padding: "14px 0", fontFamily: "inherit", cursor: "pointer" }}
           >
             {absSel ? `+ ${absSel.name} · ${finalReason || "사유 선택"} 추가` : "+ 추가"}
