@@ -14245,6 +14245,26 @@ function OperatorHome() {
     })();
   }, []);
 
+  // 이번 2개월분에 지원근무 완료한 사번 (work_adjust · adjust_type=support · 읽기 전용)
+  const [opSupportDone, setOpSupportDone] = useState<string[]>([]);
+  useEffect(() => {
+    (async () => {
+      const y = target.getFullYear();
+      const m0 = target.getMonth(); // 0~11
+      const startM = m0 - (m0 % 2); // 2개월 블록 시작월 (0-based)
+      const pStart = `${y}-${String(startM + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(y, startM + 2, 0).getDate();
+      const pEnd = `${y}-${String(startM + 2).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      const { data } = await supabase
+        .from("work_adjust")
+        .select("employee_number")
+        .eq("adjust_type", "support")
+        .gte("work_date", pStart)
+        .lte("work_date", pEnd);
+      setOpSupportDone((data || []).map((r) => String(r.employee_number)));
+    })();
+  }, [targetStr]);
+
   // ── 빈 자리(결원) (실데이터): 앱 휴가 + 직접 입력 유고 → 그 사람 다이아가 실제 운전 다이아면 빈 자리 ──
   const empty = React.useMemo(() => {
     if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
@@ -14724,6 +14744,11 @@ function OperatorHome() {
         return Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""));
       });
 
+    // ② 지원근무자: 이번 2개월분에 아직 안 한(미완료) 대상자만. 신청 후 취소는 근무 기록이 없어 자동으로 미완료 유지.
+    const supportTodo = opSupport.filter(
+      (c) => !opSupportDone.includes(String(c.employee_number)) && !usedNames.includes(c.name)
+    );
+
     const restCands = (
       s === "주간"
         ? [
@@ -14848,15 +14873,15 @@ function OperatorHome() {
           )}
         </div>
 
-        <div style={secTtl}>② 지원근무자</div>
+        <div style={secTtl}>② 지원근무자 (이번 분 미완료)</div>
         <div style={{ ...card, marginBottom: 4 }}>
-          {opSupport.length === 0 ? (
+          {supportTodo.length === 0 ? (
             <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
-              지정된 지원근무 대상자가 없습니다.
+              이번 분 미완료 지원근무 대상자가 없습니다.
             </div>
           ) : (
-            opSupport.map((c, i) => (
-              <div key={c.id} style={{ ...row, borderBottom: i === opSupport.length - 1 ? 0 : row.borderBottom }}>
+            supportTodo.map((c, i) => (
+              <div key={c.id} style={{ ...row, borderBottom: i === supportTodo.length - 1 ? 0 : row.borderBottom }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{c.name}</div>
                   <div style={meta}>지원근무 대상 · {c.work_group}</div>
