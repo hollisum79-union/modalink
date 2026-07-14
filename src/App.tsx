@@ -19321,23 +19321,57 @@ useEffect(() => {
                 if (!bPos || !lPos) continue;
                 const out: any[] = [];
                 if (bPos.c === lPos.c) {
-                  // 세로 라벨 (열 = 날짜)
+                  // 세로 라벨 (열=날짜, 끼니=여러 행 블록) — 빈 행으로 블록 구분
                   let dateRow = -1;
-                  for (let r = bPos.r; r >= 0; r--) {
-                    const hits = (aoa[r] || []).filter((v) => toMD(v)).length;
-                    if (hits >= 2) { dateRow = r; break; }
+                  const dateCols: { c: number; md: string }[] = [];
+                  for (let r = 0; r < aoa.length; r++) {
+                    const cols: { c: number; md: string }[] = [];
+                    for (let c = 0; c < (aoa[r] || []).length; c++) {
+                      const cell = String(aoa[r][c] ?? "").trim();
+                      if (!cell || cell.length > 22) continue; // 긴 문장(메모)은 날짜로 안 봄
+                      let md = "";
+                      const iso = cell.match(/(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
+                      if (iso) md = `${Number(iso[2])}/${Number(iso[3])}`;
+                      else md = toMD(cell);
+                      if (md) cols.push({ c, md });
+                    }
+                    if (cols.length >= 2) { dateRow = r; dateCols.push(...cols); break; }
                   }
                   if (dateRow < 0) continue;
-                  for (let c = bPos.c + 1; c < (aoa[dateRow] || []).length; c++) {
-                    const md = toMD(aoa[dateRow][c]);
-                    if (!md) continue;
-                    out.push({
-                      day: "",
-                      date: md,
-                      breakfast: clean((aoa[bPos.r] || [])[c]),
-                      lunch: clean((aoa[lPos.r] || [])[c]),
-                      dinner: dPos ? clean((aoa[dPos.r] || [])[c]) : "",
-                    });
+                  // 날짜행 아래를 빈 행 기준으로 블록 분할
+                  const blocks: { rows: number[]; label: string }[] = [];
+                  let cur: number[] = [];
+                  const flush = () => {
+                    if (!cur.length) return;
+                    let label = "";
+                    for (const r of cur) {
+                      for (let c = 0; c < dateCols[0].c; c++) {
+                        const v = String((aoa[r] || [])[c] ?? "");
+                        if (/아침|조식/.test(v)) label = "breakfast";
+                        else if (/점심|중식/.test(v)) label = "lunch";
+                        else if (/저녁|석식/.test(v)) label = "dinner";
+                        if (label) break;
+                      }
+                      if (label) break;
+                    }
+                    blocks.push({ rows: cur, label });
+                    cur = [];
+                  };
+                  for (let r = dateRow + 1; r < aoa.length; r++) {
+                    const hasFood = dateCols.some(({ c }) => String((aoa[r] || [])[c] ?? "").trim());
+                    if (hasFood) cur.push(r);
+                    else flush();
+                  }
+                  flush();
+                  const labeled = blocks.filter((b) => b.label);
+                  const use = labeled.length >= 2 ? labeled : blocks.slice(0, 3).map((b, i) => ({ ...b, label: ["breakfast", "lunch", "dinner"][i] }));
+                  for (const { c, md } of dateCols) {
+                    const day: any = { day: "", date: md, breakfast: "", lunch: "", dinner: "" };
+                    for (const b of use) {
+                      const items = b.rows.map((r) => clean((aoa[r] || [])[c])).filter(Boolean);
+                      if (b.label) day[b.label] = items.join(", ");
+                    }
+                    out.push(day);
                   }
                 } else if (bPos.r === lPos.r) {
                   // 가로 라벨 (행 = 날짜)
