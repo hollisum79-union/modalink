@@ -20987,17 +20987,21 @@ function StartBatchAssign() {
   const [effDate, setEffDate] = React.useState("");
   const [preview, setPreview] = React.useState<any[] | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [rotation, setRotation] = React.useState<any[]>([]);
+  const [planCheck, setPlanCheck] = React.useState<{ type: string; msg: string }[]>([]);
 
   const load = async () => {
-    const [mRes, hRes] = await Promise.all([
+    const [mRes, hRes, rRes] = await Promise.all([
       supabase
         .from("members")
         .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
         .eq("work_type", "교번"),
       supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
     ]);
     if (mRes.data) setMembers((mRes.data as any[]).filter((m) => m.start_position != null));
     if (hRes.data) setHist(hRes.data as any[]);
+    if (rRes.data) setRotation(rRes.data as any[]);
   };
   React.useEffect(() => {
     if (open && members.length === 0) load();
@@ -21008,6 +21012,105 @@ function StartBatchAssign() {
       .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= dateStr)
       .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
     return hit ? Number(hit.start_position) : Number(mem.start_position);
+  };
+
+  // 근무계획 엑셀 업로드: 순번·성명 읽기 → 적용일 열로 배열 회전 위치(off) 역산 → 6/1 기준 시작점 환산
+  const parsePlanFile = (f: File, dateStr: string) => {
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = () => reject(new Error("엑셀 라이브러리 로드 실패"));
+      document.head.appendChild(s);
+    });
+    ensureXLSX().then((XLSX) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: "array" });
+          const dayNum = Number(dateStr.slice(8, 10));
+          const days = Math.round((new Date(dateStr + "T00:00:00").getTime() - new Date("2026-06-01T00:00:00").getTime()) / 86400000);
+          const norm = (v: any) => {
+            let x = String(v ?? "").replace(/\s+/g, "").replace(/^운휴/, "").replace(/^대기/, "대");
+            if (x.startsWith("휴")) return "휴";
+            return x;
+          };
+          const msgs: { type: string; msg: string }[] = [];
+          const outLines: string[] = [];
+          for (const sn of wb.SheetNames) {
+            const isD = sn.includes("대공원"), isB = sn.includes("도봉");
+            if (!isD && !isB) continue;
+            const groupName = isD ? "대공원 114" : "도봉 41";
+            const aoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: false });
+            // 헤더: "성명" 셀 + 날짜(1~31) 열
+            let headRow = -1, nameCol = -1;
+            for (let r = 0; r < Math.min(aoa.length, 8); r++) {
+              const c = (aoa[r] || []).findIndex((x) => String(x ?? "").trim() === "성명");
+              if (c >= 0) { headRow = r; nameCol = c; break; }
+            }
+            if (headRow < 0) { msgs.push({ type: "warn", msg: `${sn} 시트: "성명" 헤더를 못 찾아 건너뜀` }); continue; }
+            let dayCol = -1;
+            for (let c = nameCol + 1; c < (aoa[headRow] || []).length; c++) {
+              if (Number(String(aoa[headRow][c] ?? "").trim()) === dayNum) { dayCol = c; break; }
+            }
+            const noCol = nameCol - 1;
+            const people: { no: number; name: string; dia: string }[] = [];
+            const skipped: string[] = [];
+            for (let r = headRow + 1; r < aoa.length; r++) {
+              const row = aoa[r] || [];
+              const noRaw = String(row[noCol] ?? "").trim();
+              const nm = String(row[nameCol] ?? "").trim();
+              if (!noRaw && !nm) continue;
+              if (!/^\d+$/.test(noRaw)) { if (nm) skipped.push(`${noRaw || "?"} ${nm}`); continue; }
+              people.push({ no: Number(noRaw), name: nm, dia: dayCol >= 0 ? String(row[dayCol] ?? "").trim() : "" });
+            }
+            if (people.length === 0) { msgs.push({ type: "warn", msg: `${sn} 시트: 명단을 읽지 못함` }); continue; }
+            if (skipped.length) msgs.push({ type: "warn", msg: `${sn}: 순번 밖 행 제외 — ${skipped.join(", ")}` });
+            const L = people.length;
+            // 그 날짜에 적용되는 배열 판
+            const ver = pickRotationVersion(rotation, groupName, dateStr);
+            const diaSeq = rotation
+              .filter((x) => x.group_name === groupName && String(x.effective_date || ROTATION_BASE_DATE).slice(0, 10) === ver)
+              .sort((a, b) => Number(a.position) - Number(b.position))
+              .map((x) => String(x.dia_value ?? ""));
+            if (diaSeq.length !== L) { msgs.push({ type: "error", msg: `${sn}: 명단 ${L}명 ≠ 배열 ${diaSeq.length}칸 — 배열부터 확인하세요` }); continue; }
+            // off 역산: 적용일 열과 배열 대조 (빈 칸 제외, 표기 정규화)
+            let best = { off: -1, bad: Infinity };
+            for (let off = 0; off < L; off++) {
+              let bad = 0;
+              for (let i = 0; i < L; i++) {
+                if (!people[i].dia) continue;
+                if (norm(diaSeq[(i + off) % L]) !== norm(people[i].dia)) bad++;
+              }
+              if (bad < best.bad) best = { off, bad };
+            }
+            if (best.off < 0 || best.bad > L * 0.1) {
+              msgs.push({ type: "error", msg: `${sn}: ${dateStr} 열이 배열과 맞지 않아요 (최소 불일치 ${best.bad}/${L}). 교번배열이 이 근무계획과 같은 판인지 확인하세요.` });
+              continue;
+            }
+            msgs.push({ type: "ok", msg: `${sn}: ${dateStr} 열 ↔ 배열 대조 일치 ${L - best.bad}/${L}칸 (회전 위치 자동 인식)` });
+            // 시작점 환산 (6/1 원점)
+            for (const p of people) {
+              const start = ((((p.no - 1 + best.off - days) % L) + L) % L) + 1;
+              outLines.push(`${p.name}\t${start}`);
+            }
+          }
+          if (outLines.length === 0 && !msgs.some((m) => m.type === "error")) {
+            msgs.push({ type: "error", msg: "대공원/도봉 시트를 찾지 못했어요." });
+          }
+          setPlanCheck(msgs);
+          if (outLines.length) {
+            setText(outLines.join("\n"));
+            setPreview(null);
+            showToast(`근무계획에서 ${outLines.length}명 읽음 — 미리보기로 확인하세요.`);
+          }
+        } catch (err: any) {
+          setPlanCheck([{ type: "error", msg: "엑셀 읽기 실패: " + (err?.message || String(err)) }]);
+        }
+      };
+      reader.readAsArrayBuffer(f);
+    }).catch((err) => setPlanCheck([{ type: "error", msg: String(err?.message || err) }]));
   };
 
   const makePreview = () => {
@@ -21125,6 +21228,33 @@ function StartBatchAssign() {
             }}
             style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none", background: "#fff" }}
           />
+          <label style={{ display: "block", padding: "13px", border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 13, fontWeight: 800, marginBottom: 8 }}>
+            📂 근무계획 엑셀(.xlsx) 업로드 — 순번·성명 자동 읽기
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                (e.target as any).value = "";
+                if (!f) return;
+                let d = effDate;
+                const fm = String(f.name).match(/(\d{4})[._\-](\d{1,2})[._\-](\d{1,2})/);
+                if (fm) {
+                  d = `${fm[1]}-${String(Number(fm[2])).padStart(2, "0")}-${String(Number(fm[3])).padStart(2, "0")}`;
+                  setEffDate(d);
+                }
+                if (!d) { setPlanCheck([{ type: "error", msg: "적용일을 먼저 선택하세요 (파일명에서 못 읽었어요)." }]); return; }
+                setPlanCheck([]);
+                parsePlanFile(f, d);
+              }}
+            />
+          </label>
+          {planCheck.map((m, i) => (
+            <div key={i} style={{ borderRadius: 10, padding: "9px 12px", fontSize: 12, fontWeight: 700, lineHeight: 1.6, marginBottom: 6, background: m.type === "ok" ? "#ECFDF5" : m.type === "warn" ? "#FEF9C3" : "#FEE2E2", color: m.type === "ok" ? "#047857" : m.type === "warn" ? "#92400E" : "#DC2626", border: `1px solid ${m.type === "ok" ? "#A7F3D0" : m.type === "warn" ? "#FDE68A" : "#FECACA"}` }}>
+              {m.type === "ok" ? "✅ " : m.type === "warn" ? "⚠️ " : "❌ "}{m.msg}
+            </div>
+          ))}
           <textarea
             value={text}
             onChange={(e) => {
