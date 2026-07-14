@@ -19284,6 +19284,92 @@ useEffect(() => {
         ))}
       </div>
     </div>
+    <label style={{ display: "block", padding: "13px", border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#10B981", fontSize: 13, fontWeight: 800, marginBottom: 10 }}>
+      📂 엑셀 파일(.xlsx)로 식단 읽기
+      <input type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={(e) => {
+        const f = e.target.files && e.target.files[0];
+        (e.target as any).value = "";
+        if (!f) return;
+        const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+          if ((window as any).XLSX) return resolve((window as any).XLSX);
+          const s = document.createElement("script");
+          s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+          s.onload = () => resolve((window as any).XLSX);
+          s.onerror = () => reject(new Error("엑셀 라이브러리 로드 실패"));
+          document.head.appendChild(s);
+        });
+        ensureXLSX().then((XLSX) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: "array" });
+              const dateRe = /(\d{1,2})\s*[\/월.\-]\s*(\d{1,2})/;
+              const toMD = (s: any) => { const m = String(s ?? "").match(dateRe); return m ? `${Number(m[1])}/${Number(m[2])}` : ""; };
+              const clean = (s: any) => String(s ?? "").replace(/\r?\n/g, ", ").trim();
+              let days: any[] | null = null;
+              for (const sn of wb.SheetNames) {
+                const aoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: false });
+                let bPos: any = null, lPos: any = null, dPos: any = null;
+                for (let r = 0; r < aoa.length; r++) {
+                  for (let c = 0; c < (aoa[r] || []).length; c++) {
+                    const v = String(aoa[r][c] ?? "");
+                    if (!bPos && /아침|조식/.test(v)) bPos = { r, c };
+                    if (!lPos && /점심|중식/.test(v)) lPos = { r, c };
+                    if (!dPos && /저녁|석식/.test(v)) dPos = { r, c };
+                  }
+                }
+                if (!bPos || !lPos) continue;
+                const out: any[] = [];
+                if (bPos.c === lPos.c) {
+                  // 세로 라벨 (열 = 날짜)
+                  let dateRow = -1;
+                  for (let r = bPos.r; r >= 0; r--) {
+                    const hits = (aoa[r] || []).filter((v) => toMD(v)).length;
+                    if (hits >= 2) { dateRow = r; break; }
+                  }
+                  if (dateRow < 0) continue;
+                  for (let c = bPos.c + 1; c < (aoa[dateRow] || []).length; c++) {
+                    const md = toMD(aoa[dateRow][c]);
+                    if (!md) continue;
+                    out.push({
+                      day: "",
+                      date: md,
+                      breakfast: clean((aoa[bPos.r] || [])[c]),
+                      lunch: clean((aoa[lPos.r] || [])[c]),
+                      dinner: dPos ? clean((aoa[dPos.r] || [])[c]) : "",
+                    });
+                  }
+                } else if (bPos.r === lPos.r) {
+                  // 가로 라벨 (행 = 날짜)
+                  for (let r = bPos.r + 1; r < aoa.length; r++) {
+                    const row = aoa[r] || [];
+                    let md = "";
+                    for (let c = 0; c < bPos.c; c++) { md = toMD(row[c]); if (md) break; }
+                    if (!md) continue;
+                    out.push({
+                      day: "",
+                      date: md,
+                      breakfast: clean(row[bPos.c]),
+                      lunch: clean(row[lPos.c]),
+                      dinner: dPos ? clean(row[dPos.c]) : "",
+                    });
+                  }
+                }
+                const valid = out.filter((d) => d.breakfast || d.lunch || d.dinner);
+                if (valid.length > 0) { days = valid; break; }
+              }
+              if (!days) { setCanteenError("엑셀에서 식단표(아침/조식·점심/중식 라벨과 날짜)를 찾지 못했어요."); return; }
+              setCanteenError("");
+              setCanteenPhoto(null);
+              setCanteenResult(days);
+            } catch (err: any) {
+              setCanteenError("엑셀 읽기 실패: " + (err?.message || String(err)));
+            }
+          };
+          reader.readAsArrayBuffer(f);
+        }).catch((err) => setCanteenError(String(err?.message || err)));
+      }} />
+    </label>
     <label style={{ display: "block", padding: "60px 16px", border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
       {canteenPhoto ? "사진 다시 선택" : "📷 식단표 사진 선택"}
       <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
