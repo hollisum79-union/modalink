@@ -19312,7 +19312,7 @@ useEffect(() => {
                 let bPos: any = null, lPos: any = null, dPos: any = null;
                 for (let r = 0; r < aoa.length; r++) {
                   for (let c = 0; c < (aoa[r] || []).length; c++) {
-                    const v = String(aoa[r][c] ?? "");
+                    const v = String(aoa[r][c] ?? "").replace(/\s+/g, "");
                     if (!bPos && /아침|조식/.test(v)) bPos = { r, c };
                     if (!lPos && /점심|중식/.test(v)) lPos = { r, c };
                     if (!dPos && /저녁|석식/.test(v)) dPos = { r, c };
@@ -19346,7 +19346,7 @@ useEffect(() => {
                     let label = "";
                     for (const r of cur) {
                       for (let c = 0; c < dateCols[0].c; c++) {
-                        const v = String((aoa[r] || [])[c] ?? "");
+                        const v = String((aoa[r] || [])[c] ?? "").replace(/\s+/g, "");
                         if (/아침|조식/.test(v)) label = "breakfast";
                         else if (/점심|중식/.test(v)) label = "lunch";
                         else if (/저녁|석식/.test(v)) label = "dinner";
