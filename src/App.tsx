@@ -28922,6 +28922,11 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   // 휴무충당 모드: "기록" 또는 "신청"
   const [holidayMode, setHolidayMode] = useState("기록");
   const [requests, setRequests] = useState([]); // 신청 목록
+  // 지원근무 모드: "기록" 또는 "신청" (support_apply)
+  const [supportMode, setSupportMode] = useState("기록");
+  const [supportApps, setSupportApps] = useState<any[]>([]);
+  const [supportApplyDate, setSupportApplyDate] = useState(todayLocalStr());
+  const [supportSaving, setSupportSaving] = useState(false);
  const [confirmModal, setConfirmModal] = useState(null);
   const [toast, setToast] = useState(null);
   const [detailModal, setDetailModal] = useState<any>(null);
@@ -29093,6 +29098,66 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
 
     fetchRequests();
   }, [activeTab, user, holidayMode]);
+
+  // 지원근무 신청 목록 불러오기 (support_apply)
+  useEffect(() => {
+    if (activeTab !== "지원근무" || supportMode !== "신청") return;
+    if (!user?.employee_number) return;
+    (async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("support_apply")
+        .select("*")
+        .eq("employee_number", String(user.employee_number))
+        .order("apply_date", { ascending: false });
+      if (!error && data) setSupportApps(data);
+      setLoading(false);
+    })();
+  }, [activeTab, user, supportMode]);
+
+  // 지원근무 신청
+  const submitSupportApply = async () => {
+    if (supportSaving) return;
+    if (!supportApplyDate) { showToast("날짜를 선택해주세요.", "error"); return; }
+    const dup = supportApps.find((a) => a.apply_date === supportApplyDate && a.status === "신청");
+    if (dup) { showToast("이미 그 날짜에 신청이 있어요.", "error"); return; }
+    setSupportSaving(true);
+    try {
+      const { error } = await supabase.from("support_apply").insert({
+        employee_number: String(user.employee_number),
+        member_name: user.name,
+        apply_date: supportApplyDate,
+        status: "신청",
+      });
+      if (error) throw error;
+      showToast("지원근무 신청이 접수됐어요.");
+      const { data } = await supabase
+        .from("support_apply")
+        .select("*")
+        .eq("employee_number", String(user.employee_number))
+        .order("apply_date", { ascending: false });
+      setSupportApps(data || []);
+    } catch (e: any) {
+      showToast("신청 실패: " + (e?.message || String(e)), "error");
+    }
+    setSupportSaving(false);
+  };
+
+  // 지원근무 신청 취소 (행 보존 · status만 변경)
+  const cancelSupportApply = async (app: any) => {
+    if (!window.confirm(`${app.apply_date} 지원근무 신청을 취소할까요?\n취소하면 이번 분 미완료로 처리됩니다.`)) return;
+    try {
+      const { error } = await supabase
+        .from("support_apply")
+        .update({ status: "취소", canceled_at: new Date().toISOString() })
+        .eq("id", app.id);
+      if (error) throw error;
+      showToast("신청이 취소됐어요.");
+      setSupportApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, status: "취소" } : a)));
+    } catch (e: any) {
+      showToast("취소 실패: " + (e?.message || String(e)), "error");
+    }
+  };
 
   // 저장 (work_adjust - 가계부형 기록)
   const handleSave = async () => {
@@ -29420,6 +29485,45 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
             >
               📅 신청
             </button>
+          </div>
+        )}
+
+        {/* 지원근무 모드 전환 */}
+        {activeTab === "지원근무" && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 12,
+              padding: 4,
+              background: "#fff",
+              borderRadius: 12,
+              boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+            }}
+          >
+            {["기록", "신청"].map((m) => (
+              <button
+                key={m}
+                onClick={() => setSupportMode(m)}
+                style={{
+                  flex: 1,
+                  padding: "10px 0",
+                  borderRadius: 10,
+                  border: "none",
+                  background:
+                    supportMode === m
+                      ? "linear-gradient(135deg, #4F46E5 0%, #6D28D9 100%)"
+                      : "transparent",
+                  color: supportMode === m ? "#fff" : "#6B7280",
+                  fontSize: 13,
+                  fontWeight: supportMode === m ? 700 : 500,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {m === "기록" ? "📝 기록" : "📅 신청"}
+              </button>
+            ))}
           </div>
         )}
 
@@ -30073,6 +30177,74 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
               </div>
             )}         
           </div>
+        ) : activeTab === "지원근무" && supportMode === "신청" ? (
+          // ─────── 지원근무 신청 모드 (support_apply) ───────
+          <>
+            {(() => {
+              const now = new Date();
+              const m0 = now.getMonth();
+              const startM = m0 - (m0 % 2);
+              const termLabelStr = `${now.getFullYear()}년 ${startM + 1}-${startM + 2}월분`;
+              const pStart = `${now.getFullYear()}-${String(startM + 1).padStart(2, "0")}-01`;
+              const lastD = new Date(now.getFullYear(), startM + 2, 0).getDate();
+              const pEnd = `${now.getFullYear()}-${String(startM + 2).padStart(2, "0")}-${String(lastD).padStart(2, "0")}`;
+              const termAlive = supportApps.filter((a) => a.status === "신청" && a.apply_date >= pStart && a.apply_date <= pEnd);
+              return (
+                <div style={{ background: termAlive.length ? "#ECFDF5" : "#FEF9C3", border: `1px solid ${termAlive.length ? "#A7F3D0" : "#FDE68A"}`, borderRadius: 14, padding: "13px 15px", marginBottom: 12, fontSize: 13, fontWeight: 700, color: termAlive.length ? "#047857" : "#92400E", lineHeight: 1.6 }}>
+                  {termLabelStr} · {termAlive.length ? `신청 유지중 ${termAlive.length}건 (${termAlive.map((a) => a.apply_date.slice(5).replace("-", "/")).join(", ")})` : "아직 유지중인 신청이 없어요."}
+                </div>
+              );
+            })()}
+
+            <div style={{ background: "#fff", borderRadius: 20, padding: "20px", boxShadow: "0 2px 8px rgba(79,70,229,0.06)", marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 14 }}>📅 지원근무 신청</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>희망 날짜 (본인 휴무일)</div>
+              <input
+                type="date"
+                value={supportApplyDate}
+                onChange={(e) => setSupportApplyDate(e.target.value)}
+                style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit", color: "#1F2937", background: "#fff", maxWidth: "100%", WebkitAppearance: "none", appearance: "none" }}
+              />
+              <button
+                onClick={submitSupportApply}
+                disabled={supportSaving}
+                style={{ width: "100%", marginTop: 14, padding: "14px 0", borderRadius: 13, border: "none", background: "linear-gradient(135deg, #4F46E5 0%, #6D28D9 100%)", color: "#fff", fontSize: 14.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", opacity: supportSaving ? 0.6 : 1 }}
+              >
+                {supportSaving ? "접수 중…" : "신청하기"}
+              </button>
+              <div style={{ fontSize: 11.5, color: "#9CA3AF", lineHeight: 1.7, marginTop: 12 }}>
+                · 실제로 지원근무를 하거나, 신청을 유지한 채 그날 휴가를 쓰면 <b>완료</b>로 인정됩니다.
+                <br />· 신청 후 취소하거나 날짜를 바꾸면 <b>미완료</b>로 처리됩니다.
+              </div>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 20, padding: "20px", boxShadow: "0 2px 8px rgba(79,70,229,0.06)" }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#1F2937", marginBottom: 12 }}>내 신청 이력</div>
+              {loading ? (
+                <div style={{ textAlign: "center", padding: "16px 0", color: "#9CA3AF", fontSize: 13 }}>불러오는 중…</div>
+              ) : supportApps.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "16px 0", color: "#C4C7CC", fontSize: 13 }}>신청 이력이 없어요.</div>
+              ) : (
+                supportApps.map((a, i) => (
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: i === supportApps.length - 1 ? "none" : "1px solid #F3F4F6" }}>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>{a.apply_date}</div>
+                      <div style={{ fontSize: 11, color: "#9CA3AF" }}>
+                        {(a.created_at || "").slice(0, 10)} 신청{a.status === "취소" && a.canceled_at ? ` → ${a.canceled_at.slice(0, 10)} 취소` : ""}
+                      </div>
+                    </div>
+                    {a.status === "신청" ? (
+                      <button onClick={() => cancelSupportApply(a)} style={{ border: "none", borderRadius: 8, background: "#FEE2E2", color: "#DC2626", fontSize: 11.5, fontWeight: 800, padding: "7px 12px", cursor: "pointer", fontFamily: "inherit" }}>
+                        취소
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 10.5, fontWeight: 800, borderRadius: 6, padding: "4px 9px", background: "#F3F4F6", color: "#9CA3AF" }}>취소됨</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
         ) : activeTab === "휴무충당" && holidayMode === "신청" ? (
           // ─────── 휴무충당 신청 모드 (개발 중) ───────
           <div style={{ background: "#fff", borderRadius: 20, padding: "40px 20px", boxShadow: "0 2px 8px rgba(79,70,229,0.06)", textAlign: "center" }}>
