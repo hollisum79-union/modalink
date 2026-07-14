@@ -17333,10 +17333,13 @@ function OperatorScreen() {
 
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
+  const [fpTab, setFpTab] = useState<"field" | "ranking">("field");
   const [diaTimeTab, setDiaTimeTab] = useState("편승용");
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
-    if (["workmanage", "kyobundia", "scheduleupdate", "routeinput"].includes(activeMenu)) return "workgroup";
+    if (["workmanage", "scheduleupdate", "diagroup"].includes(activeMenu)) return "workgroup";
+    if (["kyobundia", "routeinput", "tempdia"].includes(activeMenu)) return "diagroup";
+    if (["hometips", "unionschedule"].includes(activeMenu)) return "homecontent";
     return "home";
   };
   // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 한 단계 위 ──
@@ -17404,54 +17407,6 @@ useEffect(() => {
 
   const adminMenus = [
     {
-      id: "memberlist",
-      label: "조합원 명단",
-      icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-      color: "#6D28D9",
-      bg: "#F3E8FF",
-      badge: 0,
-    },
-    {
-      id: "field",
-      label: "조합 활동",
-      icon: "M3 21V5a2 2 0 012-2h6l1 2h7a1 1 0 011 1v9a1 1 0 01-1 1h-7l-1-2H5",
-      color: "#EC4899",
-      bg: "#FCE7F3",
-      badge: 0,
-    },
-    {
-      id: "ranking",
-      label: "포인트 순위",
-      icon: "M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z",
-      color: "#F59E0B",
-      bg: "#FEF3C7",
-      badge: 0,
-    },
-    {
-      id: "events",
-      label: "경조사 관리",
-      icon: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
-      color: "#EC4899",
-      bg: "#FCE7F3",
-      badge: 0,
-    },
-    {
-      id: "hometips",
-      label: "홈 팁 관리",
-      icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0013 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
-      color: "#8B5CF6",
-      bg: "#F3E8FF",
-      badge: 0,
-    },
-    {
-      id: "unionschedule",
-      label: "지회·조합 일정",
-      icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-      color: "#0EA5E9",
-      bg: "#E0F2FE",
-      badge: 0,
-    },
-    {
       id: "notice",
       label: "공지사항 작성",
       icon: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z",
@@ -17476,6 +17431,30 @@ useEffect(() => {
       badge: 0,
     },
     {
+      id: "memberlist",
+      label: "조합원 명단",
+      icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+      color: "#6D28D9",
+      bg: "#F3E8FF",
+      badge: 0,
+    },
+    {
+      id: "fieldpoint",
+      label: "조합 활동·포인트",
+      icon: "M3 21V5a2 2 0 012-2h6l1 2h7a1 1 0 011 1v9a1 1 0 01-1 1h-7l-1-2H5",
+      color: "#EC4899",
+      bg: "#FCE7F3",
+      badge: 0,
+    },
+    {
+      id: "homecontent",
+      label: "홈 콘텐츠 관리",
+      icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+      color: "#F97316",
+      bg: "#FFEDD5",
+      badge: 0,
+    },
+    {
       id: "workgroup",
       label: "근무 관리",
       icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
@@ -17493,7 +17472,7 @@ useEffect(() => {
     },
     {
       id: "operator",
-      label: "운용기관사 (테스트)",
+      label: "운용기관사",
       icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
       color: "#0D9488",
       bg: "#CCFBF1",
@@ -17715,6 +17694,74 @@ useEffect(() => {
         )}
         {activeMenu === "ranking" && <PointRankingAdmin />}
         {activeMenu === "field" && <FieldActivityAdmin />}
+        {activeMenu === "fieldpoint" && (
+          <div style={{ padding: "16px 0 28px" }}>
+            <div style={{ display: "flex", gap: 8, padding: "0 16px", marginBottom: 4 }}>
+              {[
+                { id: "field", label: "활동 기록" },
+                { id: "ranking", label: "포인트 순위" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setFpTab(t.id as any)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 0",
+                    borderRadius: 12,
+                    border: "none",
+                    background: fpTab === t.id ? "#4338CA" : "#F3F4F6",
+                    color: fpTab === t.id ? "#fff" : "#6B7280",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {fpTab === "field" ? <FieldActivityAdmin /> : <PointRankingAdmin />}
+          </div>
+        )}
+        {activeMenu === "homecontent" && (
+          <div style={{ padding: "16px 16px 28px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 6 }}>홈 콘텐츠 관리</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>홈 화면에 표시되는 것들을 관리합니다.</div>
+            {[
+              { id: "eventsadmin", label: "경조사 관리", desc: "경조사 등록 · 홈 팝업" },
+              { id: "hometips", label: "홈 팁 관리", desc: "홈 팁 카드 문구" },
+              { id: "unionschedule", label: "지회·조합 일정", desc: "홈 D-Day 일정" },
+            ].map((m) => (
+              <div
+                key={m.id}
+                onClick={() => {
+                  if (m.id === "eventsadmin") onNavigate("events-admin");
+                  else setActiveMenu(m.id);
+                }}
+                style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{m.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {activeMenu === "diagroup" && (
+          <div style={{ padding: "16px 16px 28px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>다이아 관리</div>
+            {[
+              { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
+              { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
+              { id: "tempdia", label: "임시·변형 다이아 관리", desc: "임시·변형 다이아 추가·숨김" },
+            ].map((m) => (
+              <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
+                <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{m.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
         {activeMenu === "hometips" && <TipAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
@@ -17731,10 +17778,8 @@ useEffect(() => {
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
-              { id: "workmanage", label: "교번관리", desc: "근무표 업데이트·휴무 지정" },
-              { id: "kyobundia", label: "다이아 시간 입력", desc: "편승용·급여용 시각표" },
-              { id: "routeinput", label: "근무행로 입력", desc: "열번·구간·시각 입력" },
-              { id: "tempdia", label: "임시·변형 다이아 관리", desc: "임시·변형 다이아 추가·숨김" },
+              { id: "workmanage", label: "근무표 관리", desc: "근무표 업데이트 · 교번 자리 변경 · 휴무 지정" },
+              { id: "diagroup", label: "다이아 관리", desc: "시간 입력 · 근무행로 · 임시/변형 다이아" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#4338CA" }}>{m.label}</div>
