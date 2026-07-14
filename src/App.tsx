@@ -21067,6 +21067,24 @@ function StartBatchAssign() {
             }
             if (people.length === 0) { msgs.push({ type: "warn", msg: `${sn} 시트: 명단을 읽지 못함` }); continue; }
             if (skipped.length) msgs.push({ type: "warn", msg: `${sn}: 순번 밖 행 제외 — ${skipped.join(", ")}` });
+            // 이름 정확 매칭 검증: 결원도 고유 이름의 고정 멤버 → 앱에 없는 이름은 전부 모아서 안내
+            {
+              const wg = isD ? "대공원" : "도봉";
+              const pool = members.filter((m) => m.work_group === wg);
+              const notFound: string[] = [];
+              for (const p of people) {
+                const hit = pool.filter((m) => String(m.name) === p.name);
+                if (hit.length === 0) notFound.push(`${p.no}번 ${p.name}`);
+              }
+              if (notFound.length) {
+                msgs.push({
+                  type: "error",
+                  msg: `${sn}: 앱 명단에 없는 이름 ${notFound.length}건 — ${notFound.join(", ")}. 결원 이름이 다르면 조합원 명단에서 회사 문서와 같은 이름(예: 결원01)으로 바꾼 뒤 다시 업로드하세요.`,
+                });
+                continue;
+              }
+            }
+            const validPeople = people;
             const L = people.length;
             // 그 날짜에 적용되는 배열 판
             const ver = pickRotationVersion(rotation, groupName, dateStr);
@@ -21091,7 +21109,7 @@ function StartBatchAssign() {
             }
             msgs.push({ type: "ok", msg: `${sn}: ${dateStr} 열 ↔ 배열 대조 일치 ${L - best.bad}/${L}칸 (회전 위치 자동 인식)` });
             // 시작점 환산 (6/1 원점)
-            for (const p of people) {
+            for (const p of validPeople) {
               const start = ((((p.no - 1 + best.off - days) % L) + L) % L) + 1;
               outLines.push(`${p.name}\t${start}`);
             }
