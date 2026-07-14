@@ -18010,10 +18010,98 @@ function RotationEditScreen() {
         </div>
         {pasteOpen && (
           <div style={{ marginTop: 12 }}>
+            <label style={{ display: "block", padding: "13px", border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 13, fontWeight: 800, marginBottom: 10 }}>
+              📂 엑셀 파일(.xlsx) 업로드 — {group === "대공원 114" ? "대공원 114" : "도봉분소 41"} 교번 자동 읽기
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files && e.target.files[0];
+                  (e.target as any).value = "";
+                  if (!f) return;
+                  const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+                    if ((window as any).XLSX) return resolve((window as any).XLSX);
+                    const s = document.createElement("script");
+                    s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+                    s.onload = () => resolve((window as any).XLSX);
+                    s.onerror = () => reject(new Error("엑셀 라이브러리 로드 실패"));
+                    document.head.appendChild(s);
+                  });
+                  ensureXLSX()
+                    .then((XLSX) => {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        try {
+                          const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: "array" });
+                          const wantDobong = group !== "대공원 114";
+                          let vals: string[] | null = null;
+                          for (const sn of wb.SheetNames) {
+                            const aoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: false });
+                            // ① 제목 행 찾기: "교번" + (대공원/도봉)
+                            let titleRow = -1;
+                            for (let r = 0; r < aoa.length; r++) {
+                              const joined = (aoa[r] || []).map((c) => String(c ?? "")).join(" ");
+                              if (joined.includes("교번") && (wantDobong ? joined.includes("도봉") : joined.includes("대공원"))) { titleRow = r; break; }
+                            }
+                            if (titleRow < 0) continue;
+                            // ② 헤더 행("구분" + "1열") 찾기
+                            let headRow = -1, gubunCol = -1;
+                            for (let r = titleRow + 1; r < Math.min(titleRow + 6, aoa.length); r++) {
+                              const row = aoa[r] || [];
+                              const gi = row.findIndex((c) => String(c ?? "").trim() === "구분");
+                              if (gi >= 0 && row.some((c) => String(c ?? "").includes("1열"))) { headRow = r; gubunCol = gi; break; }
+                            }
+                            if (headRow < 0) continue;
+                            // ③ "N행" 행들을 순서대로, 구분 다음 9칸을 행 우선으로 수집
+                            const out: string[] = [];
+                            for (let r = headRow + 1; r < aoa.length; r++) {
+                              const row = aoa[r] || [];
+                              const tag = String(row[gubunCol] ?? "").trim();
+                              if (!/^\d+행$/.test(tag)) break;
+                              for (let c = gubunCol + 1; c <= gubunCol + 9; c++) {
+                                const v = String(row[c] ?? "").trim();
+                                if (v) out.push(v);
+                              }
+                            }
+                            if (out.length > 0) { vals = out; break; }
+                          }
+                          if (!vals) { showToast(`엑셀에서 "${wantDobong ? "도봉" : "대공원"} 교번" 표를 찾지 못했어요.`, "error"); return; }
+                          // ④ 변환: "비번"→직전 다이아~, "휴"→휴1·휴2… (등장 순서)
+                          let hyuNo = 0;
+                          let prevDia = "";
+                          const lines: string[] = [];
+                          for (const raw of vals) {
+                            let v = raw.replace(/\s+/g, "");
+                            if (v === "비번") {
+                              if (!prevDia) { showToast("첫 칸이 '비번'이라 직전 다이아를 알 수 없어요.", "error"); return; }
+                              v = prevDia.endsWith("~") ? prevDia : prevDia + "~";
+                            } else if (v === "휴") {
+                              hyuNo += 1;
+                              v = "휴" + hyuNo;
+                            } else {
+                              prevDia = v;
+                            }
+                            lines.push(v);
+                          }
+                          setPasteText(lines.join("\n"));
+                          showToast(`엑셀에서 ${lines.length}칸 읽었어요 (배열 ${baseRows.length}칸). 아래 '변경 미리보기'로 확인하세요.`);
+                        } catch (err: any) {
+                          showToast("엑셀 읽기 실패: " + (err?.message || String(err)), "error");
+                        }
+                      };
+                      reader.readAsArrayBuffer(f);
+                    })
+                    .catch((err) => showToast(String(err?.message || err), "error"));
+                }}
+              />
+            </label>
             <div style={{ fontSize: 11.5, color: "#6B7280", lineHeight: 1.7, marginBottom: 8 }}>
               엑셀에서 <b>다이아 열 전체({baseRows.length}칸)</b>를 복사해 아래에 붙여넣으세요.
               <br />
               한 줄 = 한 순번. 형태 열까지 같이 복사해도 되고(예: "71 야간"), 다이아만 있으면 형태는 자동 판정됩니다 (~=비번, 휴=휴무, 60번 이상=야간).
+              <br />
+              📂 파일 업로드 시: 1행 1열→9열 순서로 읽고, "비번"은 직전 다이아~로, "휴"는 휴1·휴2…로 자동 변환됩니다.
             </div>
             <textarea
               value={pasteText}
@@ -18746,7 +18834,7 @@ useEffect(() => {
           <div style={{ padding: "16px 16px 28px" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 14 }}>근무 관리</div>
             {[
-              { id: "workmanage", label: "🗓 근무표 관리", desc: "배열 개정·순번 배치·휴무 지정·업데이트 기록" },
+              { id: "workmanage", label: "🗓 근무표 관리", desc: "교번배열·순번 배치·휴무 지정·업데이트 기록" },
               { id: "diamgr", label: "🚈 다이아 관리", desc: "시간표·근무행로·임시·변형 다이아" },
             ].map((m) => (
               <div key={m.id} onClick={() => setActiveMenu(m.id)} style={{ background: "#fff", borderRadius: 16, padding: "18px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
@@ -21205,8 +21293,8 @@ function StartHistoryAdmin() {
 
 // ── 관리자: 근무표 관리 (배열 개정 · 순번 배치 · 휴무 지정 · 업데이트 기록 통합) ──
 function WorkManageScreen() {
-  const [mgrTab, setMgrTab] = React.useState("배열 개정");
-  const MGR_TABS = ["배열 개정", "순번 배치", "휴무 지정", "업데이트 기록"];
+  const [mgrTab, setMgrTab] = React.useState("교번배열");
+  const MGR_TABS = ["교번배열", "순번 배치", "휴무 지정", "업데이트 기록"];
   const [휴무목록, set휴무목록] = React.useState<
     { id: number; dia: string; 소속: string }[]
   >([]);
@@ -21260,7 +21348,7 @@ function WorkManageScreen() {
     <div>
       <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 6 }}>근무표 관리</div>
       <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 14 }}>
-        개정 순서대로: ① 배열 개정 → ② 순번 배치 → 필요하면 ③ 휴무 지정 → ④ 기록
+        개정 순서대로: ① 교번배열 → ② 순번 배치 → 필요하면 ③ 휴무 지정 → ④ 기록
       </div>
       <div style={{ display: "flex", gap: 5, background: "#fff", padding: 4, borderRadius: 12, marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
         {MGR_TABS.map((t) => (
@@ -21286,7 +21374,7 @@ function WorkManageScreen() {
         ))}
       </div>
 
-      {mgrTab === "배열 개정" && <RotationEditScreen />}
+      {mgrTab === "교번배열" && <RotationEditScreen />}
       {mgrTab === "순번 배치" && (
         <div>
           <VacancyStatus />
