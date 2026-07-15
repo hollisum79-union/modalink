@@ -10157,13 +10157,22 @@ function MemberManageScreen({ user }: any) {
       showToast("이름과 사번은 필수입니다.");
       return;
     }
+    const wtVal = form.work_type || "교번";
+    if ((wtVal === "교번" || wtVal === "통상") && !form.work_group) {
+      showToast("소속(대공원/도봉)을 선택해주세요.", "error");
+      return;
+    }
     const payload = {
       name: form.name.trim(),
       employee_number: form.employee_number.trim(),
       phone: form.phone,
       role: form.role || "조합원",
       is_union: form.is_union === true,
-      work_type: form.work_type || "교번",
+      work_type: wtVal,
+      ...(form.work_group ? { work_group: form.work_group } : {}),
+      ...(wtVal === "교번" && form.work_group
+        ? { schedule_total: form.work_group === "도봉" ? 41 : 114 }
+        : {}),
     };
     if (form.id) {
       const orig = members.find((mm: any) => mm.id === form.id);
@@ -10808,6 +10817,39 @@ function MemberManageScreen({ user }: any) {
             <div style={{ background: "#FFFBEB", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#92400E", lineHeight: 1.5, marginBottom: 14 }}>
               ⚠️ 근무형태를 바꾸면 급여 항목(승무보조 등)이 함께 바뀝니다. 교번으로 바꾸는 경우 순번 배치에서 자리를 지정해야 근무표가 나옵니다.
             </div>
+            {((form.work_type || "교번") === "교번" || form.work_type === "통상") && (
+              <>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+                  소속
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                  {["대공원", "도봉"].map((wg) => {
+                    const on = form.work_group === wg;
+                    return (
+                      <button
+                        key={wg}
+                        type="button"
+                        onClick={() => setForm({ ...form, work_group: wg })}
+                        style={{
+                          flex: 1,
+                          padding: "8px 13px",
+                          borderRadius: 10,
+                          border: on ? "2px solid #6D5FE0" : "1.5px solid #E5E7EB",
+                          background: on ? "#EEEDFE" : "#fff",
+                          color: on ? "#3C3489" : "#6B7280",
+                          fontSize: 13,
+                          fontWeight: on ? 800 : 600,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {wg}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, cursor: "pointer" }}>
   <input
     type="checkbox"
@@ -21033,7 +21075,7 @@ function StartBatchAssign() {
       supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
       supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
     ]);
-    if (mRes.data) setMembers((mRes.data as any[]).filter((m) => m.start_position != null));
+    if (mRes.data) setMembers(mRes.data as any[]);
     if (hRes.data) setHist(hRes.data as any[]);
     if (rRes.data) setRotation(rRes.data as any[]);
   };
@@ -21045,7 +21087,7 @@ function StartBatchAssign() {
     const hit = hist
       .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= dateStr)
       .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
-    return hit ? Number(hit.start_position) : Number(mem.start_position);
+    return hit ? Number(hit.start_position) : (mem.start_position != null ? Number(mem.start_position) : null);
   };
 
   // 근무계획 엑셀 업로드: 순번·성명 읽기 → 적용일 열로 배열 회전 위치(off) 역산 → 6/1 기준 시작점 환산
@@ -21063,6 +21105,12 @@ function StartBatchAssign() {
       reader.onload = async () => {
         try {
           const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: "array" });
+          // 매칭은 항상 DB 최신 명단으로 (다른 화면에서 방금 바꾼 근무형태·소속 즉시 반영)
+          const fmRes = await supabase
+            .from("members")
+            .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+            .eq("work_type", "교번");
+          const freshMembers: any[] = (fmRes.data as any[]) || members;
           const dayNum = Number(dateStr.slice(8, 10));
           const days = Math.round((new Date(dateStr + "T00:00:00").getTime() - new Date("2026-06-01T00:00:00").getTime()) / 86400000);
           const norm = (v: any) => {
@@ -21072,7 +21120,6 @@ function StartBatchAssign() {
           };
           const msgs: { type: string; msg: string }[] = [];
           const outLines: string[] = [];
-          let renamedAny = false;
           for (const sn of wb.SheetNames) {
             const isD = sn.includes("대공원"), isB = sn.includes("도봉");
             if (!isD && !isB) continue;
@@ -21106,7 +21153,7 @@ function StartBatchAssign() {
             // 결원은 급여·휴가·개인기록이 없는 자리표시라 개명해도 과거 기록(work_adjust·chungdang_apply 등, 채운 사람 사번 기준)은 1원도 안 움직임
             {
               const wg = isD ? "대공원" : "도봉";
-              const pool = members.filter((m) => m.work_group === wg);
+              const pool = freshMembers.filter((m) => m.work_group === wg);
               const isVac = (n: any) => String(n ?? "").replace(/\s+/g, "").startsWith("결원");
               // ① 사람: 정확 매칭
               const notFound: string[] = [];
@@ -21159,7 +21206,6 @@ function StartBatchAssign() {
                   }
                 }
                 if (failed) continue;
-                renamedAny = true;
                 msgs.push({
                   type: "ok",
                   msg: `${sn}: 결원 이름을 파일과 동일하게 자동 정리 ${renames.length}건 — ${renames.map((rn) => `${rn.from}→${rn.to}`).join(", ")}`,
@@ -21201,7 +21247,7 @@ function StartBatchAssign() {
           if (outLines.length === 0 && !msgs.some((m) => m.type === "error")) {
             msgs.push({ type: "error", msg: "대공원/도봉 시트를 찾지 못했어요." });
           }
-          if (renamedAny) await load();
+          await load();
           setPlanCheck(msgs);
           if (outLines.length) {
             setText(outLines.join("\n"));
@@ -21261,8 +21307,9 @@ function StartBatchAssign() {
         return;
       }
       usedMember.add(String(m.id));
-      if (pos > Number(m.schedule_total)) {
-        showToast(`${i + 1}번째 줄: ${m.name} 순번 ${pos}가 배열 길이(${m.schedule_total})보다 커요`, "error");
+      const totalLen = Number(m.schedule_total) || (m.work_group === "도봉" ? 41 : 114);
+      if (pos > totalLen) {
+        showToast(`${i + 1}번째 줄: ${m.name} 순번 ${pos}가 배열 길이(${totalLen})보다 커요`, "error");
         return;
       }
       const posKey = `${m.work_group}|${pos}`;
@@ -21299,6 +21346,22 @@ function StartBatchAssign() {
     if (error) {
       showToast("저장 실패: " + error.message, "error");
       return;
+    }
+    // 교대→교번 전환자 등 원본 시작점이 비어있는 사람만 최초 1회 기입
+    // (.is null 가드로 기존 값은 절대 안 덮음 — 원본 불변 원칙 유지)
+    for (const r of preview) {
+      if (r.member.start_position == null) {
+        await supabase
+          .from("members")
+          .update({
+            start_position: String(r.to),
+            ...(r.member.schedule_total == null
+              ? { schedule_total: r.member.work_group === "도봉" ? 41 : 114 }
+              : {}),
+          })
+          .eq("id", r.member.id)
+          .is("start_position", null);
+      }
     }
     showToast(`저장 완료! ${effDate}부터 ${preview.length}명 순번이 바뀝니다.`);
     setText("");
@@ -21398,7 +21461,7 @@ function StartBatchAssign() {
                   <div key={r.member.id}>
                     {r.member.name} ({r.member.work_group}) · 순번{" "}
                     <b style={{ color: "#B45309" }}>
-                      {r.from} → {r.to}
+                      {r.from != null ? r.from : "신규"} → {r.to}
                     </b>
                   </div>
                 ))}
