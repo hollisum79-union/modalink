@@ -10163,8 +10163,8 @@ function MemberManageScreen({ user }: any) {
     unionFilter === "전체"
       ? true
       : unionFilter === "조합원"
-      ? m.is_union === true
-      : m.is_union !== true
+      ? m.is_union === true && !(m.name || "").includes("결원")
+      : m.is_union !== true && !(m.name || "").includes("결원")
   );
 
   const handleSave = () => {
