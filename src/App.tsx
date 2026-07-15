@@ -71,6 +71,23 @@ function pickRotationVersion(rotationData: any[], groupName: string, dateStr: st
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
+// ── 공휴일 캐시 (글로벌) ──
+//   read-holidays는 Netlify 함수라 처음 부를 때 깨우는 시간(콜드스타트)이 걸림.
+//   같은 해는 앱이 켜 있는 동안 한 번만 부르고 재사용. (요청 자체를 저장해 동시 호출도 1번으로 합침)
+const _holCache = new Map<number, Promise<string[]>>();
+function fetchHolidays(year: number): Promise<string[]> {
+  if (!_holCache.has(year)) {
+    _holCache.set(
+      year,
+      fetch("/.netlify/functions/read-holidays?year=" + year)
+        .then((r) => r.json())
+        .then((j: any) => (j && j.holidays ? (j.holidays as string[]) : []))
+        .catch(() => [] as string[])
+    );
+  }
+  return _holCache.get(year)!;
+}
+
 // ── 교대 4조 근무 계산 (글로벌) ──
 //   패턴: 주간 → 야간 → 비번 → 휴무 (4일 반복, 휴무는 번호 없음)
 //   앵커: 2026-07-15 → A조 주간 · B조 휴무 · C조 비번 · D조 야간
@@ -14695,10 +14712,7 @@ function OperatorHome({ opName }: { opName: string }) {
   // 공휴일 (근무표와 같은 소스 · read-holidays)
   const [opHolidays, setOpHolidays] = useState<string[]>([]);
   useEffect(() => {
-    fetch("/.netlify/functions/read-holidays?year=" + target.getFullYear())
-      .then((r) => r.json())
-      .then((hj) => { if (hj.holidays) setOpHolidays(hj.holidays); })
-      .catch(() => {});
+    fetchHolidays(target.getFullYear()).then((h) => setOpHolidays(h));
   }, [targetStr]);
 
   // 채우는 다이아의 그 날짜 기준 정보 (kyobun_dia · dia_image · 읽기 전용)
@@ -16538,7 +16552,7 @@ function OperatorDesignated() {
           supabase.from("kyobun_start_history").select("*"),
           supabase.from("work_adjust").select("employee_number, work_date, adjust_type").gte("work_date", PERIOD_START).lte("work_date", tStr),
           supabase.from("kyobun_swap").select("*").eq("status", "수락"),
-          fetch("/.netlify/functions/read-holidays?year=" + year).then((r) => r.json()).catch(() => ({ holidays: [] })),
+          fetchHolidays(year),
         ]);
         const membersAll = (mRes.data || []).filter((m: any) => m.start_position != null && m.schedule_total);
         const people = membersAll.filter((m: any) => !(m.name || "").includes("결원"));
@@ -16546,7 +16560,7 @@ function OperatorDesignated() {
         const hist = hRes.data || [];
         const adj = aRes.data || [];
         const swaps = sRes.data || [];
-        const hols: string[] = holRes.holidays || [];
+        const hols: string[] = holRes || [];
         const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         const isHol = (d: Date) => {
           const dw = d.getDay();
@@ -16556,30 +16570,56 @@ function OperatorDesignated() {
         const adjSet = new Set(adj.map((r: any) => String(r.employee_number) + "|" + r.work_date));
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const rows: any[] = [];
-        for (const m of people) {
-          const owedList: { d: string; label: string }[] = [];
+        // [속도] 미영업 다이아는 "휴일"에만 생김 → 휴일 날짜만 미리 뽑아 그 날만 계산.
+        //        계산 결과는 전과 100% 동일하고, 훑는 날짜만 1/3로 줄어듦.
+        const holDays: { date: Date; str: string; md: string; nextHol: boolean }[] = [];
+        {
           const cur = new Date(PERIOD_START + "T00:00:00");
           while (cur <= today) {
             const date = new Date(cur);
             cur.setDate(cur.getDate() + 1);
-            const w: any = calcKyobunWork(m, date, rotation, swaps, membersAll, hist);
+            if (!isHol(date)) continue;
+            const tm = new Date(date);
+            tm.setDate(tm.getDate() + 1);
+            holDays.push({
+              date,
+              str: fmt(date),
+              md: `${date.getMonth() + 1}/${date.getDate()}`,
+              nextHol: isHol(tm),
+            });
+          }
+        }
+        // [속도] 이행 기록을 사번별로 미리 묶기 (사람마다 전체 기록을 훑지 않게)
+        const paidByEmp = new Map<string, string[]>();
+        adj.forEach((r: any) => {
+          if (r.adjust_type !== "designated") return;
+          const k = String(r.employee_number);
+          if (!paidByEmp.has(k)) paidByEmp.set(k, []);
+          paidByEmp.get(k)!.push(String(r.work_date));
+        });
+        const rows: any[] = [];
+        for (const m of people) {
+          // [속도] 이 사람이 낀 교체만 넘김 (calcKyobunWork가 어차피 사번으로 걸러 씀 → 결과 동일)
+          const emp = String(m.employee_number);
+          const mSwaps = swaps.filter(
+            (sw: any) =>
+              String(sw.a_employee_number) === emp || String(sw.b_employee_number) === emp
+          );
+          const owedList: { d: string; label: string }[] = [];
+          for (const hd of holDays) {
+            const w: any = calcKyobunWork(m, hd.date, rotation, mSwaps, membersAll, hist);
             if (!w || !w.dia) continue;
             const ds = String(w.dia).replace(/\s+/g, "");
             if (!/^\d+$/.test(ds)) continue;
             const n = Number(ds);
             let noOp = false;
-            if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(date)) noOp = true;
-            else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(date)) {
-              const tm = new Date(date);
-              tm.setDate(tm.getDate() + 1);
-              if (isHol(tm)) noOp = true;
-            }
+            if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n)) noOp = true;
+            else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && hd.nextHol) noOp = true;
             if (!noOp) continue;
-            if (adjSet.has(String(m.employee_number) + "|" + fmt(date))) continue; // 당일 충당됨
-            owedList.push({ d: fmt(date), label: `${date.getMonth() + 1}/${date.getDate()}${w.type === "야간" ? "야" : "주"}${ds}` });
+            if (adjSet.has(emp + "|" + hd.str)) continue; // 당일 충당됨
+            owedList.push({ d: hd.str, label: `${hd.md}${w.type === "야간" ? "야" : "주"}${ds}` });
           }
-          const paidList = adj.filter((r: any) => r.adjust_type === "designated" && String(r.employee_number) === String(m.employee_number)).map((r: any) => String(r.work_date));
+          const paidList = paidByEmp.get(emp) || [];
           if (owedList.length > 0 || paidList.length > 0) rows.push({ name: m.name, owedList, paidList });
         }
         setLedger(rows);
