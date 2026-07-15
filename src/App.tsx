@@ -16192,10 +16192,28 @@ function OperatorHist() {
   );
 }
 
-// ── 지정근무: 강제 휴무 빚 장부 (장부는 자동 계산 예정 · 신청은 실데이터) ──
+// ── 지정근무: 강제 휴무 → 지정근무 현황 (자동 집계 · 신청은 실데이터) ──
 function OperatorDesignated() {
   const [applies, setApplies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ledger, setLedger] = useState<any[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(true);
+  const [baseDate, setBaseDate] = useState("");
+  const [baseLoaded, setBaseLoaded] = useState(false);
+  const [monthSel, setMonthSel] = useState("전체");
+  const [searchName, setSearchName] = useState("");
+
+  // 기준일 로드 (op_settings) — 과거 충당 기록이 없는 기간을 장부에서 제외하기 위한 시작점
+  useEffect(() => {
+    supabase.from("op_settings").select("value").eq("key", "forced_rest_base_date").then(({ data }) => {
+      setBaseDate(data && data[0] && data[0].value ? data[0].value : "2026-06-01");
+      setBaseLoaded(true);
+    }, () => { setBaseDate("2026-06-01"); setBaseLoaded(true); });
+  }, []);
+  const saveBaseDate = async (v: string) => {
+    setBaseDate(v);
+    await supabase.from("op_settings").upsert({ key: "forced_rest_base_date", value: v });
+  };
 
   useEffect(() => {
     (async () => {
@@ -16211,13 +16229,74 @@ function OperatorDesignated() {
     })();
   }, []);
 
-  // 빚 장부 예시 (off_dias + 교번 계산으로 자동 산출 예정)
-  const ledger = [
-    { name: "김영상", owed: 3, paid: 2 },
-    { name: "손상현", owed: 2, paid: 2 },
-    { name: "박동현", owed: 2, paid: 1 },
-    { name: "김성안", owed: 1, paid: 0 },
-  ];
+  // 지정근무 현황 자동 계산 (읽기 전용 집계 — 아무것도 쓰지 않음)
+  // 지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 work_adjust 충당 기록이 없는 날
+  // 이행 = work_adjust의 지정(designated) 기록 수
+  useEffect(() => {
+    if (!baseLoaded || !baseDate) return;
+    setLedgerLoading(true);
+    (async () => {
+      try {
+        const PERIOD_START = baseDate;
+        const tStr = todayLocalStr();
+        const year = new Date().getFullYear();
+        const [mRes, rRes, hRes, aRes, sRes, holRes] = await Promise.all([
+          supabase.from("members").select("id, name, employee_number, work_group, start_position, schedule_total, work_type").eq("work_type", "교번"),
+          supabase.from("schedule_rotation").select("*"),
+          supabase.from("kyobun_start_history").select("*"),
+          supabase.from("work_adjust").select("employee_number, work_date, adjust_type").gte("work_date", PERIOD_START).lte("work_date", tStr),
+          supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+          fetch("/.netlify/functions/read-holidays?year=" + year).then((r) => r.json()).catch(() => ({ holidays: [] })),
+        ]);
+        const membersAll = (mRes.data || []).filter((m: any) => m.start_position != null && m.schedule_total);
+        const people = membersAll.filter((m: any) => !(m.name || "").includes("결원"));
+        const rotation = rRes.data || [];
+        const hist = hRes.data || [];
+        const adj = aRes.data || [];
+        const swaps = sRes.data || [];
+        const hols: string[] = holRes.holidays || [];
+        const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const isHol = (d: Date) => {
+          const dw = d.getDay();
+          if (dw === 0 || dw === 6) return true;
+          return hols.includes(fmt(d));
+        };
+        const adjSet = new Set(adj.map((r: any) => String(r.employee_number) + "|" + r.work_date));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const rows: any[] = [];
+        for (const m of people) {
+          const owedList: { d: string; label: string }[] = [];
+          const cur = new Date(PERIOD_START + "T00:00:00");
+          while (cur <= today) {
+            const date = new Date(cur);
+            cur.setDate(cur.getDate() + 1);
+            const w: any = calcKyobunWork(m, date, rotation, swaps, membersAll, hist);
+            if (!w || !w.dia) continue;
+            const ds = String(w.dia).replace(/\s+/g, "");
+            if (!/^\d+$/.test(ds)) continue;
+            const n = Number(ds);
+            let noOp = false;
+            if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(date)) noOp = true;
+            else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(date)) {
+              const tm = new Date(date);
+              tm.setDate(tm.getDate() + 1);
+              if (isHol(tm)) noOp = true;
+            }
+            if (!noOp) continue;
+            if (adjSet.has(String(m.employee_number) + "|" + fmt(date))) continue; // 당일 충당됨
+            owedList.push({ d: fmt(date), label: `${date.getMonth() + 1}/${date.getDate()}${w.type === "야간" ? "야" : "주"}${ds}` });
+          }
+          const paidList = adj.filter((r: any) => r.adjust_type === "designated" && String(r.employee_number) === String(m.employee_number)).map((r: any) => String(r.work_date));
+          if (owedList.length > 0 || paidList.length > 0) rows.push({ name: m.name, owedList, paidList });
+        }
+        setLedger(rows);
+      } catch (e) {
+        setLedger([]);
+      }
+      setLedgerLoading(false);
+    })();
+  }, [baseLoaded, baseDate]);
 
   const card: React.CSSProperties = {
     background: "#fff",
@@ -16243,7 +16322,29 @@ function OperatorDesignated() {
     borderBottom: "1px solid #F3F4F6",
   };
 
-  const remainTotal = ledger.reduce((s, l) => s + (l.owed - l.paid), 0);
+  // 월 선택·검색 적용 (당월 이행 원칙 — 월별로 발생/이행 따로 집계, 전체=기준일 이후 누적)
+  const monthsList = (() => {
+    const out: string[] = [];
+    if (!baseDate) return out;
+    const s = new Date(baseDate + "T00:00:00");
+    const now = new Date();
+    const cur = new Date(s.getFullYear(), s.getMonth(), 1);
+    while (cur <= now) {
+      out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`);
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return out;
+  })();
+  const viewLedger = ledger
+    .map((l: any) => {
+      const owedIn = monthSel === "전체" ? l.owedList : l.owedList.filter((o: any) => o.d.startsWith(monthSel));
+      const paidIn = monthSel === "전체" ? l.paidList : l.paidList.filter((d: string) => String(d).startsWith(monthSel));
+      return { ...l, owed: owedIn.length, paid: paidIn.length, dates: owedIn.map((o: any) => o.label), paidDates: paidIn.map((d: string) => `${Number(String(d).slice(5, 7))}/${Number(String(d).slice(8, 10))}`) };
+    })
+    .filter((l: any) => l.owed > 0 || l.paid > 0)
+    .filter((l: any) => !searchName.trim() || String(l.name).includes(searchName.trim()))
+    .sort((a: any, b: any) => (b.owed - b.paid) - (a.owed - a.paid) || b.owed - a.owed);
+  const remainTotal = viewLedger.reduce((s: number, l: any) => s + Math.max(0, l.owed - l.paid), 0);
 
   return (
     <div>
@@ -16259,13 +16360,13 @@ function OperatorDesignated() {
           lineHeight: 1.6,
         }}
       >
-        빚 장부는 예시입니다. 휴무 지정(off_dias)과 교번 계산으로 자동 산출될 예정입니다. 아래 신청 목록은 실제 데이터입니다.
+        지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 충당이 없던 날. 이행 = 지정근무 기록. 지정은 해당 월 안 이행이 원칙 — 월 버튼으로 월별 확인, 예외는 "전체"에서 누적으로 보세요. 자동 집계라 입력할 것 없음.
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
         {[
-          [String(ledger.length), "빚 있는 사람"],
-          [String(remainTotal), "남은 지정근무"],
+          [ledgerLoading ? "–" : String(viewLedger.filter((l: any) => l.owed - l.paid > 0).length), "지정 대상자"],
+          [ledgerLoading ? "–" : String(remainTotal), "지정 예정"],
           [String(applies.length), "신청됨"],
         ].map(([n, l]) => (
           <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
@@ -16277,16 +16378,57 @@ function OperatorDesignated() {
 
       <div style={card}>
         <div style={ttl}>
-          빚 장부 <span style={{ fontSize: 11, fontWeight: 700, background: "#FCE7F3", color: "#BE185D", padding: "3px 9px", borderRadius: 20 }}>강제 휴무 = 빚 1</span>
+          지정근무 현황 <span style={{ fontSize: 11, fontWeight: 700, background: "#FCE7F3", color: "#BE185D", padding: "3px 9px", borderRadius: 20 }}>강제 휴무 1회 = 지정 1회</span>
         </div>
-        {ledger.map((l, i) => {
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 11.5, color: "#6B7280", fontWeight: 700, flexShrink: 0 }}>기준일</span>
+          <input
+            type="date"
+            value={baseDate}
+            onChange={(e) => { if (e.target.value) saveBaseDate(e.target.value); }}
+            style={{ WebkitAppearance: "none", appearance: "none", flex: 1, boxSizing: "border-box", padding: "8px 10px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 12.5, fontFamily: "inherit", background: "#fff", outline: "none" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {["전체", ...monthsList].map((mo) => {
+            const on = monthSel === mo;
+            const lb = mo === "전체" ? "전체" : `${Number(mo.slice(5, 7))}월`;
+            return (
+              <button
+                key={mo}
+                type="button"
+                onClick={() => setMonthSel(mo)}
+                style={{ padding: "6px 12px", borderRadius: 999, border: on ? "2px solid #0D9488" : "1.5px solid #E5E7EB", background: on ? "#CCFBF1" : "#fff", color: on ? "#0F766E" : "#6B7280", fontSize: 12, fontWeight: on ? 800 : 600, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                {lb}
+              </button>
+            );
+          })}
+        </div>
+        <input
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+          placeholder="🔍 기관사 이름 검색"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", outline: "none", marginBottom: 6 }}
+        />
+        {ledgerLoading ? (
+          <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>계산 중…</div>
+        ) : viewLedger.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
+            {searchName.trim() ? "검색 결과가 없습니다." : `${monthSel === "전체" ? "기준일 이후" : monthSel.slice(5, 7) + "월"} 강제 휴무 발생이 없습니다. 🎉`}
+          </div>
+        ) : (
+        viewLedger.map((l, i) => {
           const remain = l.owed - l.paid;
           return (
-            <div key={l.name} style={{ ...row, borderBottom: i === ledger.length - 1 ? 0 : row.borderBottom }}>
-              <div style={{ flex: 1 }}>
+            <div key={l.name} style={{ ...row, borderBottom: i === viewLedger.length - 1 ? 0 : row.borderBottom }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: remain > 0 ? "#111827" : "#C4C7CC" }}>{l.name}</div>
                 <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                  강제 휴무 {l.owed}회 · 갚음 {l.paid}회
+                  강제 휴무 {l.owed}회{l.dates && l.dates.length > 0 ? ` (${l.dates.slice(0, 3).join(" · ")}${l.dates.length > 3 ? ` 외 ${l.dates.length - 3}` : ""})` : ""} · 이행 {l.paid}회{l.paidDates && l.paidDates.length > 0 ? ` (지정 ${l.paidDates.slice(0, 3).join(" · ")}${l.paidDates.length > 3 ? ` 외 ${l.paidDates.length - 3}` : ""})` : ""}
                 </div>
               </div>
               <span
@@ -16299,11 +16441,12 @@ function OperatorDesignated() {
                   color: remain > 0 ? "#991B1B" : "#065F46",
                 }}
               >
-                {remain > 0 ? `${remain}회 남음` : "완료"}
+                {remain > 0 ? `지정 ${remain}회 예정` : "✓ 완료"}
               </span>
             </div>
           );
-        })}
+        })
+        )}
       </div>
 
       <div style={card}>
@@ -16342,9 +16485,9 @@ function OperatorDesignated() {
           padding: "12px 14px",
         }}
       >
-        지정근무는 강제 휴무를 갚는 근무입니다. 빈 다이아가 생기면 대기보다 먼저 투입됩니다 (충당 순서 ⓪).
+        지정근무는 강제 휴무를 대신 이행하는 근무입니다. 빈 다이아가 생기면 대기보다 먼저 투입됩니다 (충당 순서 ⓪).
         <br />
-        취소하거나 날짜를 바꾸면 안 갚은 것이고, 확정 후 휴가를 내면 갚은 것으로 칩니다.
+        취소하거나 날짜를 바꾸면 미이행이고, 확정 후 휴가를 내면 이행한 것으로 칩니다.
       </div>
     </div>
   );
