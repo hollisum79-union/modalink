@@ -10177,6 +10177,21 @@ function MemberManageScreen({ user }: any) {
       showToast("소속(대공원/도봉)을 선택해주세요.", "error");
       return;
     }
+    // 이미 있는 사람 재추가 방지 (2줄 중복 사고)
+    {
+      const nm = form.name.trim();
+      const emp = form.employee_number.trim();
+      const dupEmp = members.find((m: any) => String(m.employee_number) === emp && m.id !== form.id);
+      if (dupEmp) {
+        showToast(`같은 사번이 이미 있어요 (${dupEmp.name}). 저장할 수 없습니다.`, "error");
+        return;
+      }
+      const dupName = members.filter((m: any) => String(m.name) === nm && m.id !== form.id);
+      if (dupName.length > 0 && !nm.includes("결원")) {
+        const ok = window.confirm(`"${nm}" 이름이 이미 명단에 ${dupName.length}명 있습니다.\n\n동명이인이 확실할 때만 저장하세요.\n(신규 전입이면 결원 현황의 [채우기] 사용)\n\n그래도 저장할까요?`);
+        if (!ok) return;
+      }
+    }
     const payload = {
       name: form.name.trim(),
       employee_number: form.employee_number.trim(),
@@ -10513,18 +10528,30 @@ function MemberManageScreen({ user }: any) {
       />
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-  <div onClick={() => setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원")} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : "2px solid transparent" }}>
+  {(() => {
+    const q = search.trim();
+    const sm = q ? members.filter((m) => m.name.includes(q) || (m.employee_number || "").includes(q)) : [];
+    const inU = sm.filter((m) => m.is_union === true).length;
+    const outU = sm.filter((m) => m.is_union !== true).length;
+    return (
+      <>
+  <div onClick={() => setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원")} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : q && inU > 0 ? "2px solid #A5B4FC" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#4F46E5" }}>
       {members.filter((m) => m.is_union === true).length}명
     </div>
+    {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: inU > 0 ? "#4F46E5" : "#C7CBD1", marginTop: 2 }}>{inU > 0 ? `🔍 여기 ${inU}명` : "일치 없음"}</div>}
   </div>
-  <div onClick={() => setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원")} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : "2px solid transparent" }}>
+  <div onClick={() => setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원")} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : q && outU > 0 ? "2px solid #C7CBD1" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>비조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#9CA3AF" }}>
             {members.filter((m) => m.is_union !== true && !(m.name || "").includes("결원")).length}명
     </div>
+    {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: outU > 0 ? "#6B7280" : "#C7CBD1", marginTop: 2 }}>{outU > 0 ? `🔍 여기 ${outU}명` : "일치 없음"}</div>}
   </div>
+      </>
+    );
+  })()}
 </div>
 
 {filtered.map((m) => (
@@ -10560,6 +10587,11 @@ function MemberManageScreen({ user }: any) {
                   {m.name}
                 </span>
                 <span style={{ fontSize: 12, color: "#9CA3AF" }}>{m.role}</span>
+                {!(m.name || "").includes("결원") && (
+                  <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, background: m.is_union === true ? "#EEF0FF" : "#F3F4F6", color: m.is_union === true ? "#4F46E5" : "#9CA3AF" }}>
+                    {m.is_union === true ? "조합원" : "비조합원"}
+                  </span>
+                )}
                 {m.is_owner && (
                   <span
                     style={{
@@ -10753,6 +10785,23 @@ function MemberManageScreen({ user }: any) {
                 marginBottom: 14,
               }}
             />
+            {(() => {
+              const nm = String(form.name || "").trim();
+              if (!nm || nm.includes("결원")) return null;
+              const dups = members.filter((m: any) => String(m.name) === nm && m.id !== form.id);
+              if (dups.length === 0) return null;
+              return (
+                <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#B91C1C", lineHeight: 1.6, marginTop: -8, marginBottom: 14 }}>
+                  ⚠️ <b>같은 이름이 이미 명단에 있어요</b>
+                  {dups.map((d: any) => (
+                    <div key={d.id}>
+                      · {d.name} — {d.work_type || "형태 미지정"}{d.work_group ? ` · ${d.work_group}` : ""} · 사번 {d.employee_number || "없음"}
+                    </div>
+                  ))}
+                  신규 전입이면 여기서 추가하지 말고 <b>결원 현황 → [채우기]</b>를 쓰세요 (여기서 추가하면 명단에 2줄 중복).
+                </div>
+              );
+            })()}
             <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
               사번
             </div>
