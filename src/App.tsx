@@ -108,18 +108,27 @@ function fetchHolidays(year: number): Promise<string[]> {
 }
 
 // ── 교대 4조 근무 계산 (글로벌) ──
-//   패턴: 주간 → 야간 → 비번 → 휴무 (4일 반복, 휴무는 번호 없음)
-//   앵커: 2026-07-15 → A조 주간 · B조 휴무 · C조 비번 · D조 야간
-const SHIFT_PATTERN = ["주간", "야간", "비번", "휴무"];
-const SHIFT_OFFSET: Record<string, number> = { A: 0, D: 1, C: 2, B: 3 };
-function calcShiftWork(team: any, date: Date): string {
-  const off = SHIFT_OFFSET[String(team || "").trim().toUpperCase()];
-  if (off === undefined) return "";
-  const anchor = new Date(2026, 6, 15);
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const days = Math.round((d.getTime() - anchor.getTime()) / 86400000);
-  const idx = (((days + off) % 4) + 4) % 4;
-  return SHIFT_PATTERN[idx];
+//   순환: 주간 → 야간 → 비번 → 휴무 (4일 반복, 휴무는 번호 없음)
+//   기준은 코드에 박지 않고 shift_base 표를 봄 (관리자가 바꾸면 근무표·운용 모드가 함께 따라감)
+//   ※ 근무표의 getShiftWork도 이 함수를 부름 — 두 곳이 절대 어긋나지 않게.
+function calcShiftWork(team: any, date: Date, shiftBase: any): string {
+  if (!shiftBase || !shiftBase.base_date) return "";
+  const cycle = ["주간", "야간", "비번", "휴무"];
+  const key = String(team || "").trim().toUpperCase();
+  const baseTypes: Record<string, any> = {
+    A: shiftBase.a_work_type,
+    B: shiftBase.b_work_type,
+    C: shiftBase.c_work_type,
+    D: shiftBase.d_work_type,
+  };
+  const start = cycle.indexOf(baseTypes[key]);
+  if (start < 0) return "";
+  const anchor = new Date(shiftBase.base_date);
+  anchor.setHours(0, 0, 0, 0);
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - anchor.getTime()) / 86400000);
+  return cycle[(((start + diff) % 4) + 4) % 4];
 }
 
 function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
@@ -14459,6 +14468,8 @@ function OperatorHome({ opName }: { opName: string }) {
   const [absReload, setAbsReload] = useState(0);
   // 유고 검색용 전체 인원 (교번뿐 아니라 교대·통상 등 전부)
   const [opAllMembers, setOpAllMembers] = useState<any[]>([]);
+  // 교대 4조 기준 (shift_base — 근무표와 같은 표를 봄)
+  const [opShiftBase, setOpShiftBase] = useState<any>(null);
   // 휴가·휴직 종류 (absence_types · 임단협 변경 대응)
   const [absTypes, setAbsTypes] = useState<any[]>([]);
   const [absTypeReload, setAbsTypeReload] = useState(0);
@@ -14476,7 +14487,7 @@ function OperatorHome({ opName }: { opName: string }) {
   }, [absTypeReload]);
   useEffect(() => {
     (async () => {
-      const [mRes, rRes, hRes, sRes, allRes] = await Promise.all([
+      const [mRes, rRes, hRes, sRes, allRes, sbRes] = await Promise.all([
         supabase
           .from("members")
           .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
@@ -14485,9 +14496,11 @@ function OperatorHome({ opName }: { opName: string }) {
         supabase.from("kyobun_start_history").select("*"),
         supabase.from("kyobun_swap").select("*").eq("status", "수락"),
         supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team"),
+        supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
       setOpAllMembers(allRes.data || []);
+      setOpShiftBase(sbRes.data || null);
       setOpRotation(rRes.data || []);
       setOpStartHist(hRes.data || []);
       setOpSwaps(sRes.data || []);
@@ -15464,10 +15477,10 @@ function OperatorHome({ opName }: { opName: string }) {
         if (m.work_type !== "교대" || !m.shift_team) return null;
         if (String(m.name).includes("결원")) return null;
         if (restOffEmps.has(String(m.employee_number))) return null;
-        if (calcShiftWork(m.shift_team, target) !== "휴무") return null;
+        if (calcShiftWork(m.shift_team, target, opShiftBase) !== "휴무") return null;
         let warn = "";
         if (s === "야간") {
-          const t2 = calcShiftWork(m.shift_team, restTomorrow);
+          const t2 = calcShiftWork(m.shift_team, restTomorrow, opShiftBase);
           if (t2 === "주간" || t2 === "야간")
             warn = `내일 교대 ${t2} — 뽑으면 내일 근무를 못 합니다 (충당비번)`;
         }
@@ -23628,20 +23641,8 @@ if (data) {
     }
   };
   const getShiftWork = (조: "A" | "B" | "C" | "D", date: Date): string => {
-    if (!shiftBase) return "";
-    const 순환 = ["주간", "야간", "비번", "휴무"];
-    const 기준일 = new Date(shiftBase.base_date);
-    기준일.setHours(0, 0, 0, 0);
-    const target = new Date(date);
-    target.setHours(0, 0, 0, 0);
-    const diff = Math.round((target.getTime() - 기준일.getTime()) / 86400000);
-    const bases: Record<string, number> = {
-      A: 순환.indexOf(shiftBase.a_work_type),
-      B: 순환.indexOf(shiftBase.b_work_type),
-      C: 순환.indexOf(shiftBase.c_work_type),
-      D: 순환.indexOf(shiftBase.d_work_type),
-    };
-    return 순환[(((bases[조] + diff) % 4) + 4) % 4];
+    // 계산은 글로벌 calcShiftWork 한 곳에서만 (운용 모드와 항상 동일)
+    return calcShiftWork(조, date, shiftBase);
   };
 
   // 날짜가 휴일(주말 or 공휴일)인지 판단
@@ -23970,7 +23971,7 @@ const getKyobunWork = (member: any, date: Date) => {
                     padding: "6px 4px",
                     minWidth: 0,
                     overflow: "hidden",
-                    background: isEditing ? "#EEF2FF" : "#fff",
+                    background: isEditing ? "#EEF2FF" : isT ? "#FEF9C3" : "#fff",
                     borderRight: "1px solid #F3F4F6",
                     cursor: "pointer",
                     borderTop: "2px solid transparent",
@@ -23979,33 +23980,16 @@ const getKyobunWork = (member: any, date: Date) => {
                 >
                   <div
                     style={{
-                      fontSize: 13,
-                      fontWeight: isT ? 800 : 500,
+                      fontSize: 15.5,
+                      fontWeight: 800,
                       textAlign: "center",
-                      marginBottom: 4,
-                      color: isSun ? "#EF4444" : isSat ? "#3B82F6" : "#1F2937",
+                      marginBottom: 2,
+                      letterSpacing: "-0.3px",
+                      fontVariantNumeric: "tabular-nums",
+                      color: isT ? "#92400E" : isSun ? "#EF4444" : isSat ? "#3B82F6" : "#111827",
                     }}
                   >
-                    {isT ? (
-                      <span
-                        style={{
-                                                  background: "#4F46E5",
-                        color: "#fff",
-                        borderRadius: "50%",
-                        width: 24,
-                        height: 24,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 14,
-                        fontWeight: 700,
-                        }}
-                      >
-                        {day}
-                      </span>
-                    ) : (
-                      day
-                    )}
+                    {day}
                   </div>
                   {work && (
                     <div
@@ -24014,8 +23998,9 @@ const getKyobunWork = (member: any, date: Date) => {
                         color: info.text,
                         borderRadius: 6,
                         padding: "3px 0",
-                        fontSize: 16,
-                        fontWeight: 700,
+                        fontSize: 18,
+                        fontWeight: 800,
+                        letterSpacing: "-0.5px",
                         margin: "0 2px",
                       }}
                     >
@@ -24684,15 +24669,15 @@ const getKyobunWork = (member: any, date: Date) => {
               const ADJC: any = { standby: { bg: "#EDE9FE", fg: "#6D28D9" }, holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" }, designated: { bg: "#E1F5EE", fg: "#0F6E56" }, support: { bg: "#E6F1FB", fg: "#185FA5" } };
               const LVL: any = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체", study: "학습", longService: "장기재직" };
               return (
-                <div key={di} onClick={() => { if (isSelf) setEditingDate(editingDate === dstr ? null : dstr); }} style={{ padding: "6px 4px", background: "#fff", borderRight: "1px solid #F3F4F6", cursor: isSelf ? "pointer" : "default" }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, textAlign: "center", marginBottom: 4, color: isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#9CA3AF" }}>
+                <div key={di} onClick={() => { if (isSelf) setEditingDate(editingDate === dstr ? null : dstr); }} style={{ padding: "6px 4px", background: isT ? "#FEF9C3" : "#fff", borderRight: "1px solid #F3F4F6", cursor: isSelf ? "pointer" : "default" }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 800, textAlign: "center", marginBottom: 2, letterSpacing: "-0.3px", fontVariantNumeric: "tabular-nums", color: isT ? "#92400E" : dayColor }}>
                     {isT ? (
-                      <span style={{ background: "#4F46E5", color: "#fff", borderRadius: "50%", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>{day}</span>
+                      <span>{day}</span>
                     ) : day}
                   </div>
                   {work ? (
                     <>
-                      <div style={{ textAlign: "center", fontSize: 15, fontWeight: 800, color: dayColor, lineHeight: 1, marginBottom: 4 }}>{work.dia}</div>
+                      <div style={{ textAlign: "center", fontSize: 19, fontWeight: 800, color: "#111827", lineHeight: 1.05, marginBottom: 4, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>{work.dia}</div>
                       {diaInfo && diaInfo.start_time && (
                         <div style={{ textAlign: "center" }}>
                           <span style={{ fontSize: 11, fontWeight: 700, color: "#111827", background: "#F3F4F6", borderRadius: 7, padding: "2px 6px", display: "inline-block", letterSpacing: "-0.5px" }}>{diaInfo.start_time}</span>
@@ -24700,7 +24685,7 @@ const getKyobunWork = (member: any, date: Date) => {
                       )}
                     </>
                   ) : (
-                    <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: subColor, marginTop: 7 }}>휴</div>
+                    <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#9CA3AF", marginTop: 6 }}>휴</div>
                   )}
                   {adjs.length > 0 && (
                     <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
