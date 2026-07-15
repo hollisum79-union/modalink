@@ -10321,6 +10321,8 @@ function MemberManageScreen({ user }: any) {
 
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [vacantNum, setVacantNum] = useState("");
+  const [vacantReason, setVacantReason] = useState("퇴사");
+  const [vacantDate, setVacantDate] = useState("");
 
   // 다음 빈 결원 번호 추천 (예: 결원03)
   const nextVacantNum = () => {
@@ -10359,6 +10361,14 @@ function MemberManageScreen({ user }: any) {
         .update({ name: vacantName, is_union: false, is_app_user: false })
         .eq("id", m.id);
       if (error) throw error;
+      // 사유·발생일 자동 기록 (append-only 족보)
+      await supabase.from("vacancy_log").insert({
+        member_id: String(m.id),
+        member_name: vacantName,
+        reason: vacantReason || "기타",
+        occurred_date: vacantDate || todayLocalStr(),
+        memo: `${m.name} ${vacantReason || "퇴사"}로 자리 비움`,
+      }).then(() => {}, () => {});
       // 로그인 계정 삭제 (돌아오지 않는 사람)
       fetch("/.netlify/functions/delete-credential", {
         method: "POST",
@@ -11107,6 +11117,30 @@ function MemberManageScreen({ user }: any) {
             {(deleteTarget.work_type === "교번" || deleteTarget.work_type === "통상") && !(deleteTarget.name || "").includes("결원") && (
             <div style={{ border: "1.5px solid #C7D2FE", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "left" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 10 }}>결원 처리 (퇴사·전출)</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {["퇴사", "전출", "휴직(장기)", "기타"].map((rs) => {
+                  const on = vacantReason === rs;
+                  return (
+                    <button
+                      key={rs}
+                      type="button"
+                      onClick={() => setVacantReason(rs)}
+                      style={{ flex: 1, padding: "7px 0", borderRadius: 9, border: on ? "2px solid #6D5FE0" : "1.5px solid #E5E7EB", background: on ? "#EEEDFE" : "#fff", color: on ? "#3C3489" : "#6B7280", fontSize: 11.5, fontWeight: on ? 800 : 600, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {rs}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: "#6B7280", flexShrink: 0 }}>발생일</span>
+                <input
+                  type="date"
+                  value={vacantDate || todayLocalStr()}
+                  onChange={(e) => setVacantDate(e.target.value)}
+                  style={{ WebkitAppearance: "none", appearance: "none", flex: 1, boxSizing: "border-box", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", background: "#fff", outline: "none" }}
+                />
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <span style={{ fontSize: 13, color: "#6B7280" }}>결원 번호</span>
                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, background: "#F3F4F6", borderRadius: 8, padding: "8px 12px" }}>
