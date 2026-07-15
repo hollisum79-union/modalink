@@ -17949,6 +17949,24 @@ function RotationEditScreen() {
   const changedList = curRows.filter((r, i) => r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type);
   const isLatest = versions.length > 0 && viewVer === versions[0];
 
+  // 다이아 검색: 목록은 전부 유지, 일치 칸만 형광 표시 + 첫 칸으로 자동 스크롤
+  const diaQ = diaSearch.trim();
+  const diaMatchPos = (() => {
+    if (!diaQ) return new Set<number>();
+    const exact = curRows.filter((r) => {
+      const v = String(r.dia_value).replace(/\s+/g, "");
+      return v === diaQ || v === diaQ + "~";
+    });
+    const hits = exact.length ? exact : curRows.filter((r) => String(r.dia_value).includes(diaQ));
+    return new Set(hits.map((r) => r.position));
+  })();
+  React.useEffect(() => {
+    if (!diaQ || diaMatchPos.size === 0) return;
+    const first = Math.min(...Array.from(diaMatchPos) as number[]);
+    const el = document.getElementById(`rotrow-${first}`);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [diaQ, group, viewVer]);
+
   const openSheet = (r: any) => {
     setSheetPos(r.position);
     setSheetDia(String(r.dia_value ?? ""));
@@ -18296,15 +18314,11 @@ function RotationEditScreen() {
           spellCheck={false}
           style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", marginBottom: 6, outline: "none" }}
         />
-        {diaSearch.trim() && (
+        {diaQ && (
           <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 700, padding: "0 2px 6px" }}>
-            {(() => {
-              const q = diaSearch.trim();
-              const hits = curRows.filter((r) => String(r.dia_value).replace(/\s+/g, "") === q || String(r.dia_value).replace(/\s+/g, "") === q + "~");
-              const loose = curRows.filter((r) => String(r.dia_value).includes(q));
-              const n = hits.length || loose.length;
-              return n === 0 ? `"${q}" — 이 판에 없음 (${group} 기준, 위에서 그룹 전환)` : `"${q}" 결과 ${n}칸 — ${group}`;
-            })()}
+            {diaMatchPos.size === 0
+              ? `"${diaQ}" — 이 판에 없음 (${group} 기준, 위에서 그룹 전환)`
+              : `"${diaQ}" 결과 ${diaMatchPos.size}칸 — 파란 테두리 위치로 이동했어요 (앞뒤 교번과 비교 가능)`}
           </div>
         )}
         {loading ? (
@@ -18312,24 +18326,14 @@ function RotationEditScreen() {
         ) : baseRows.length === 0 ? (
           <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>배열 데이터가 없습니다.</div>
         ) : (
-          curRows.filter((r) => {
-            const q = diaSearch.trim();
-            if (!q) return true;
-            const dv = String(r.dia_value).replace(/\s+/g, "");
-            if (curRows.some((x) => {
-              const xv = String(x.dia_value).replace(/\s+/g, "");
-              return xv === q || xv === q + "~";
-            })) {
-              return dv === q || dv === q + "~";
-            }
-            return String(r.dia_value).includes(q);
-          }).map((r) => {
-            const bi = curRows.findIndex((x) => x.position === r.position);
-            const ch = r.dia_value !== baseRows[bi].dia_value || r.work_type !== baseRows[bi].work_type;
+          curRows.map((r, i) => {
+            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type;
+            const hit = diaMatchPos.has(r.position);
             const ws = WT_STYLE[String(r.work_type)] || { bg: "#F3F4F6", fg: "#6B7280" };
             return (
               <div
                 key={r.position}
+                id={`rotrow-${r.position}`}
                 onClick={() => openSheet(r)}
                 style={{
                   display: "grid",
@@ -18340,7 +18344,8 @@ function RotationEditScreen() {
                   fontSize: 13.5,
                   cursor: "pointer",
                   borderRadius: 8,
-                  background: ch ? "#FEF3C7" : "transparent",
+                  background: hit ? "#DBEAFE" : ch ? "#FEF3C7" : "transparent",
+                  boxShadow: hit ? "inset 0 0 0 2px #4F46E5" : "none",
                 }}
               >
                 <span style={{ color: "#9CA3AF", fontWeight: 700, fontSize: 12 }}>{r.position}</span>
