@@ -10321,6 +10321,8 @@ function MemberManageScreen({ user }: any) {
 
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [vacantNum, setVacantNum] = useState("");
+  const [vacantReason, setVacantReason] = useState("퇴사");
+  const [vacantDate, setVacantDate] = useState("");
 
   // 다음 빈 결원 번호 추천 (예: 결원03)
   const nextVacantNum = () => {
@@ -10359,6 +10361,14 @@ function MemberManageScreen({ user }: any) {
         .update({ name: vacantName, is_union: false, is_app_user: false })
         .eq("id", m.id);
       if (error) throw error;
+      // 사유·발생일 자동 기록 (append-only 족보)
+      await supabase.from("vacancy_log").insert({
+        member_id: String(m.id),
+        member_name: vacantName,
+        reason: vacantReason || "기타",
+        occurred_date: vacantDate || todayLocalStr(),
+        memo: `${m.name} ${vacantReason || "퇴사"}로 자리 비움`,
+      }).then(() => {}, () => {});
       // 로그인 계정 삭제 (돌아오지 않는 사람)
       fetch("/.netlify/functions/delete-credential", {
         method: "POST",
@@ -11107,6 +11117,30 @@ function MemberManageScreen({ user }: any) {
             {(deleteTarget.work_type === "교번" || deleteTarget.work_type === "통상") && !(deleteTarget.name || "").includes("결원") && (
             <div style={{ border: "1.5px solid #C7D2FE", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "left" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "#4F46E5", marginBottom: 10 }}>결원 처리 (퇴사·전출)</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {["퇴사", "전출", "휴직(장기)", "기타"].map((rs) => {
+                  const on = vacantReason === rs;
+                  return (
+                    <button
+                      key={rs}
+                      type="button"
+                      onClick={() => setVacantReason(rs)}
+                      style={{ flex: 1, padding: "7px 0", borderRadius: 9, border: on ? "2px solid #6D5FE0" : "1.5px solid #E5E7EB", background: on ? "#EEEDFE" : "#fff", color: on ? "#3C3489" : "#6B7280", fontSize: 11.5, fontWeight: on ? 800 : 600, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {rs}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, color: "#6B7280", flexShrink: 0 }}>발생일</span>
+                <input
+                  type="date"
+                  value={vacantDate || todayLocalStr()}
+                  onChange={(e) => setVacantDate(e.target.value)}
+                  style={{ WebkitAppearance: "none", appearance: "none", flex: 1, boxSizing: "border-box", padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", background: "#fff", outline: "none" }}
+                />
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <span style={{ fontSize: 13, color: "#6B7280" }}>결원 번호</span>
                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, background: "#F3F4F6", borderRadius: 8, padding: "8px 12px" }}>
@@ -16158,10 +16192,28 @@ function OperatorHist() {
   );
 }
 
-// ── 지정근무: 강제 휴무 빚 장부 (장부는 자동 계산 예정 · 신청은 실데이터) ──
+// ── 지정근무: 강제 휴무 → 지정근무 현황 (자동 집계 · 신청은 실데이터) ──
 function OperatorDesignated() {
   const [applies, setApplies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ledger, setLedger] = useState<any[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(true);
+  const [baseDate, setBaseDate] = useState("");
+  const [baseLoaded, setBaseLoaded] = useState(false);
+  const [monthSel, setMonthSel] = useState("전체");
+  const [searchName, setSearchName] = useState("");
+
+  // 기준일 로드 (op_settings) — 과거 충당 기록이 없는 기간을 장부에서 제외하기 위한 시작점
+  useEffect(() => {
+    supabase.from("op_settings").select("value").eq("key", "forced_rest_base_date").then(({ data }) => {
+      setBaseDate(data && data[0] && data[0].value ? data[0].value : "2026-06-01");
+      setBaseLoaded(true);
+    }, () => { setBaseDate("2026-06-01"); setBaseLoaded(true); });
+  }, []);
+  const saveBaseDate = async (v: string) => {
+    setBaseDate(v);
+    await supabase.from("op_settings").upsert({ key: "forced_rest_base_date", value: v });
+  };
 
   useEffect(() => {
     (async () => {
@@ -16177,13 +16229,74 @@ function OperatorDesignated() {
     })();
   }, []);
 
-  // 빚 장부 예시 (off_dias + 교번 계산으로 자동 산출 예정)
-  const ledger = [
-    { name: "김영상", owed: 3, paid: 2 },
-    { name: "손상현", owed: 2, paid: 2 },
-    { name: "박동현", owed: 2, paid: 1 },
-    { name: "김성안", owed: 1, paid: 0 },
-  ];
+  // 지정근무 현황 자동 계산 (읽기 전용 집계 — 아무것도 쓰지 않음)
+  // 지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 work_adjust 충당 기록이 없는 날
+  // 이행 = work_adjust의 지정(designated) 기록 수
+  useEffect(() => {
+    if (!baseLoaded || !baseDate) return;
+    setLedgerLoading(true);
+    (async () => {
+      try {
+        const PERIOD_START = baseDate;
+        const tStr = todayLocalStr();
+        const year = new Date().getFullYear();
+        const [mRes, rRes, hRes, aRes, sRes, holRes] = await Promise.all([
+          supabase.from("members").select("id, name, employee_number, work_group, start_position, schedule_total, work_type").eq("work_type", "교번"),
+          supabase.from("schedule_rotation").select("*"),
+          supabase.from("kyobun_start_history").select("*"),
+          supabase.from("work_adjust").select("employee_number, work_date, adjust_type").gte("work_date", PERIOD_START).lte("work_date", tStr),
+          supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+          fetch("/.netlify/functions/read-holidays?year=" + year).then((r) => r.json()).catch(() => ({ holidays: [] })),
+        ]);
+        const membersAll = (mRes.data || []).filter((m: any) => m.start_position != null && m.schedule_total);
+        const people = membersAll.filter((m: any) => !(m.name || "").includes("결원"));
+        const rotation = rRes.data || [];
+        const hist = hRes.data || [];
+        const adj = aRes.data || [];
+        const swaps = sRes.data || [];
+        const hols: string[] = holRes.holidays || [];
+        const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const isHol = (d: Date) => {
+          const dw = d.getDay();
+          if (dw === 0 || dw === 6) return true;
+          return hols.includes(fmt(d));
+        };
+        const adjSet = new Set(adj.map((r: any) => String(r.employee_number) + "|" + r.work_date));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const rows: any[] = [];
+        for (const m of people) {
+          const owedList: { d: string; label: string }[] = [];
+          const cur = new Date(PERIOD_START + "T00:00:00");
+          while (cur <= today) {
+            const date = new Date(cur);
+            cur.setDate(cur.getDate() + 1);
+            const w: any = calcKyobunWork(m, date, rotation, swaps, membersAll, hist);
+            if (!w || !w.dia) continue;
+            const ds = String(w.dia).replace(/\s+/g, "");
+            if (!/^\d+$/.test(ds)) continue;
+            const n = Number(ds);
+            let noOp = false;
+            if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(date)) noOp = true;
+            else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(date)) {
+              const tm = new Date(date);
+              tm.setDate(tm.getDate() + 1);
+              if (isHol(tm)) noOp = true;
+            }
+            if (!noOp) continue;
+            if (adjSet.has(String(m.employee_number) + "|" + fmt(date))) continue; // 당일 충당됨
+            owedList.push({ d: fmt(date), label: `${date.getMonth() + 1}/${date.getDate()}${w.type === "야간" ? "야" : "주"}${ds}` });
+          }
+          const paidList = adj.filter((r: any) => r.adjust_type === "designated" && String(r.employee_number) === String(m.employee_number)).map((r: any) => String(r.work_date));
+          if (owedList.length > 0 || paidList.length > 0) rows.push({ name: m.name, owedList, paidList });
+        }
+        setLedger(rows);
+      } catch (e) {
+        setLedger([]);
+      }
+      setLedgerLoading(false);
+    })();
+  }, [baseLoaded, baseDate]);
 
   const card: React.CSSProperties = {
     background: "#fff",
@@ -16209,7 +16322,29 @@ function OperatorDesignated() {
     borderBottom: "1px solid #F3F4F6",
   };
 
-  const remainTotal = ledger.reduce((s, l) => s + (l.owed - l.paid), 0);
+  // 월 선택·검색 적용 (당월 이행 원칙 — 월별로 발생/이행 따로 집계, 전체=기준일 이후 누적)
+  const monthsList = (() => {
+    const out: string[] = [];
+    if (!baseDate) return out;
+    const s = new Date(baseDate + "T00:00:00");
+    const now = new Date();
+    const cur = new Date(s.getFullYear(), s.getMonth(), 1);
+    while (cur <= now) {
+      out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`);
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return out;
+  })();
+  const viewLedger = ledger
+    .map((l: any) => {
+      const owedIn = monthSel === "전체" ? l.owedList : l.owedList.filter((o: any) => o.d.startsWith(monthSel));
+      const paidIn = monthSel === "전체" ? l.paidList : l.paidList.filter((d: string) => String(d).startsWith(monthSel));
+      return { ...l, owed: owedIn.length, paid: paidIn.length, dates: owedIn.map((o: any) => o.label), paidDates: paidIn.map((d: string) => `${Number(String(d).slice(5, 7))}/${Number(String(d).slice(8, 10))}`) };
+    })
+    .filter((l: any) => l.owed > 0 || l.paid > 0)
+    .filter((l: any) => !searchName.trim() || String(l.name).includes(searchName.trim()))
+    .sort((a: any, b: any) => (b.owed - b.paid) - (a.owed - a.paid) || b.owed - a.owed);
+  const remainTotal = viewLedger.reduce((s: number, l: any) => s + Math.max(0, l.owed - l.paid), 0);
 
   return (
     <div>
@@ -16225,13 +16360,13 @@ function OperatorDesignated() {
           lineHeight: 1.6,
         }}
       >
-        빚 장부는 예시입니다. 휴무 지정(off_dias)과 교번 계산으로 자동 산출될 예정입니다. 아래 신청 목록은 실제 데이터입니다.
+        지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 충당이 없던 날. 이행 = 지정근무 기록. 지정은 해당 월 안 이행이 원칙 — 월 버튼으로 월별 확인, 예외는 "전체"에서 누적으로 보세요. 자동 집계라 입력할 것 없음.
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
         {[
-          [String(ledger.length), "빚 있는 사람"],
-          [String(remainTotal), "남은 지정근무"],
+          [ledgerLoading ? "–" : String(viewLedger.filter((l: any) => l.owed - l.paid > 0).length), "지정 대상자"],
+          [ledgerLoading ? "–" : String(remainTotal), "지정 예정"],
           [String(applies.length), "신청됨"],
         ].map(([n, l]) => (
           <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
@@ -16243,16 +16378,57 @@ function OperatorDesignated() {
 
       <div style={card}>
         <div style={ttl}>
-          빚 장부 <span style={{ fontSize: 11, fontWeight: 700, background: "#FCE7F3", color: "#BE185D", padding: "3px 9px", borderRadius: 20 }}>강제 휴무 = 빚 1</span>
+          지정근무 현황 <span style={{ fontSize: 11, fontWeight: 700, background: "#FCE7F3", color: "#BE185D", padding: "3px 9px", borderRadius: 20 }}>강제 휴무 1회 = 지정 1회</span>
         </div>
-        {ledger.map((l, i) => {
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 11.5, color: "#6B7280", fontWeight: 700, flexShrink: 0 }}>기준일</span>
+          <input
+            type="date"
+            value={baseDate}
+            onChange={(e) => { if (e.target.value) saveBaseDate(e.target.value); }}
+            style={{ WebkitAppearance: "none", appearance: "none", flex: 1, boxSizing: "border-box", padding: "8px 10px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 12.5, fontFamily: "inherit", background: "#fff", outline: "none" }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {["전체", ...monthsList].map((mo) => {
+            const on = monthSel === mo;
+            const lb = mo === "전체" ? "전체" : `${Number(mo.slice(5, 7))}월`;
+            return (
+              <button
+                key={mo}
+                type="button"
+                onClick={() => setMonthSel(mo)}
+                style={{ padding: "6px 12px", borderRadius: 999, border: on ? "2px solid #0D9488" : "1.5px solid #E5E7EB", background: on ? "#CCFBF1" : "#fff", color: on ? "#0F766E" : "#6B7280", fontSize: 12, fontWeight: on ? 800 : 600, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                {lb}
+              </button>
+            );
+          })}
+        </div>
+        <input
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+          placeholder="🔍 기관사 이름 검색"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", outline: "none", marginBottom: 6 }}
+        />
+        {ledgerLoading ? (
+          <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>계산 중…</div>
+        ) : viewLedger.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
+            {searchName.trim() ? "검색 결과가 없습니다." : `${monthSel === "전체" ? "기준일 이후" : monthSel.slice(5, 7) + "월"} 강제 휴무 발생이 없습니다. 🎉`}
+          </div>
+        ) : (
+        viewLedger.map((l, i) => {
           const remain = l.owed - l.paid;
           return (
-            <div key={l.name} style={{ ...row, borderBottom: i === ledger.length - 1 ? 0 : row.borderBottom }}>
-              <div style={{ flex: 1 }}>
+            <div key={l.name} style={{ ...row, borderBottom: i === viewLedger.length - 1 ? 0 : row.borderBottom }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: remain > 0 ? "#111827" : "#C4C7CC" }}>{l.name}</div>
                 <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                  강제 휴무 {l.owed}회 · 갚음 {l.paid}회
+                  강제 휴무 {l.owed}회{l.dates && l.dates.length > 0 ? ` (${l.dates.slice(0, 3).join(" · ")}${l.dates.length > 3 ? ` 외 ${l.dates.length - 3}` : ""})` : ""} · 이행 {l.paid}회{l.paidDates && l.paidDates.length > 0 ? ` (지정 ${l.paidDates.slice(0, 3).join(" · ")}${l.paidDates.length > 3 ? ` 외 ${l.paidDates.length - 3}` : ""})` : ""}
                 </div>
               </div>
               <span
@@ -16265,11 +16441,12 @@ function OperatorDesignated() {
                   color: remain > 0 ? "#991B1B" : "#065F46",
                 }}
               >
-                {remain > 0 ? `${remain}회 남음` : "완료"}
+                {remain > 0 ? `지정 ${remain}회 예정` : "✓ 완료"}
               </span>
             </div>
           );
-        })}
+        })
+        )}
       </div>
 
       <div style={card}>
@@ -16308,9 +16485,9 @@ function OperatorDesignated() {
           padding: "12px 14px",
         }}
       >
-        지정근무는 강제 휴무를 갚는 근무입니다. 빈 다이아가 생기면 대기보다 먼저 투입됩니다 (충당 순서 ⓪).
+        지정근무는 강제 휴무를 대신 이행하는 근무입니다. 빈 다이아가 생기면 대기보다 먼저 투입됩니다 (충당 순서 ⓪).
         <br />
-        취소하거나 날짜를 바꾸면 안 갚은 것이고, 확정 후 휴가를 내면 갚은 것으로 칩니다.
+        취소하거나 날짜를 바꾸면 미이행이고, 확정 후 휴가를 내면 이행한 것으로 칩니다.
       </div>
     </div>
   );
@@ -17856,10 +18033,11 @@ function RotationEditScreen() {
   const [allRows, setAllRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewVer, setViewVer] = useState("");
-  const [edits, setEdits] = useState<Record<number, { dia_value?: string; work_type?: string }>>({});
+  const [edits, setEdits] = useState<Record<number, { dia_value?: string; work_type?: string; note?: string | null }>>({});
   const [sheetPos, setSheetPos] = useState<number | null>(null);
   const [sheetDia, setSheetDia] = useState("");
   const [sheetWt, setSheetWt] = useState("");
+  const [sheetNote, setSheetNote] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [effDate, setEffDate] = useState(todayLocalStr());
   const [saving, setSaving] = useState(false);
@@ -18029,7 +18207,7 @@ function RotationEditScreen() {
     [allRows, group, viewVer]
   );
   const curRows = baseRows.map((r) => ({ ...r, ...(edits[r.position] || {}) }));
-  const changedList = curRows.filter((r, i) => r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type);
+  const changedList = curRows.filter((r, i) => r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type || (r.note ?? "") !== (baseRows[i].note ?? ""));
   const isLatest = versions.length > 0 && viewVer === versions[0];
 
   // 다이아 검색: 목록은 전부 유지, 일치 칸만 형광 표시 + 첫 칸으로 자동 스크롤
@@ -18054,6 +18232,7 @@ function RotationEditScreen() {
     setSheetPos(r.position);
     setSheetDia(String(r.dia_value ?? ""));
     setSheetWt(String(r.work_type ?? ""));
+    setSheetNote(String(r.note ?? ""));
   };
   const applySheet = () => {
     if (sheetPos == null) return;
@@ -18062,7 +18241,7 @@ function RotationEditScreen() {
       showToast("다이아 값을 입력하세요", "error");
       return;
     }
-    setEdits((prev) => ({ ...prev, [sheetPos]: { dia_value: v, work_type: sheetWt } }));
+    setEdits((prev) => ({ ...prev, [sheetPos]: { dia_value: v, work_type: sheetWt, note: sheetNote.trim() || null } }));
     setSheetPos(null);
   };
 
@@ -18082,6 +18261,7 @@ function RotationEditScreen() {
       position: r.position,
       dia_value: r.dia_value,
       work_type: r.work_type,
+      note: r.note ?? null,
       effective_date: effDate,
     }));
     const { error } = await supabase.from("schedule_rotation").insert(rows);
@@ -18410,7 +18590,7 @@ function RotationEditScreen() {
           <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>배열 데이터가 없습니다.</div>
         ) : (
           curRows.map((r, i) => {
-            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type;
+            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type || (r.note ?? "") !== (baseRows[i].note ?? "");
             const hit = diaMatchPos.has(r.position);
             const ws = WT_STYLE[String(r.work_type)] || { bg: "#F3F4F6", fg: "#6B7280" };
             return (
@@ -18435,6 +18615,9 @@ function RotationEditScreen() {
                 <span style={{ fontWeight: 800, color: "#111827" }}>
                   {String(r.dia_value)}
                   {ch && <span style={{ color: "#B45309", fontSize: 11 }}> ✎</span>}
+                  {r.note && (
+                    <span style={{ display: "block", fontSize: 10.5, fontWeight: 600, color: "#6B7280" }}>📝 {String(r.note)}</span>
+                  )}
                 </span>
                 <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, justifySelf: "start", background: ws.bg, color: ws.fg }}>
                   {String(r.work_type)}
@@ -18541,6 +18724,16 @@ function RotationEditScreen() {
                 </button>
               ))}
             </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>메모 (선택) — 왜 이 값인지 기록</div>
+            <input
+              value={sheetNote}
+              onChange={(e) => setSheetNote(e.target.value)}
+              placeholder="예: 공사 강제 휴무지정 · 원래 대기61"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
+            />
             <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
               <button
                 onClick={() => setSheetPos(null)}
@@ -23118,6 +23311,30 @@ if (data) {
     return holidays.includes(`${y}-${m}-${dd}`);
   };
 
+  // "확인" 표시 판정 (표시 전용 — 근무·급여 계산 무영향)
+  // 주간 26·27·28·29·40: 휴일 미영업 / 야간 61~64: 휴+휴 미영업 / 대기: 충당 배정 가능
+  const getAttention = (work: any, date: Date) => {
+    if (!work || !work.dia) return null;
+    const ds = String(work.dia).replace(/\s+/g, "");
+    if (ds.endsWith("~")) return null; // 비번 제외
+    if (ds.startsWith("대기") || /^대\d/.test(ds)) {
+      return { kind: "대기", msg: "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요." };
+    }
+    if (!/^\d+$/.test(ds)) return null;
+    const n = Number(ds);
+    if (work.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHolidayDate(date)) {
+      return { kind: "주간미영업", msg: "휴일 미영업 다이아예요 (26·27·28·29·40). 당일 다른 다이아 충당이 없으면 강제휴무 처리되고, 이후 주간 지정근무로 나와야 해요. 미영업 확정 시 주행키로는 없어요." };
+    }
+    if (work.type === "야간" && [61, 62, 63, 64].includes(n) && isHolidayDate(date)) {
+      const tm = new Date(date);
+      tm.setDate(tm.getDate() + 1);
+      if (isHolidayDate(tm)) {
+        return { kind: "야간미영업", msg: "휴일+휴일 미영업 야간 다이아예요 (61~64). 당일 충당이 없으면 강제휴무 처리되고, 이후 지정근무로 나와야 해요. 미영업 확정 시 주행키로는 없고 4시간 야간수당만 급여에 반영돼요." };
+      }
+    }
+    return null;
+  };
+
   // 근무타입 + 날짜로 다이아 구분(day_type) 결정
   const getDiaDayType = (type: string, date: Date) => {
     const todayHol = isHolidayDate(date);
@@ -23579,6 +23796,7 @@ const getKyobunWork = (member: any, date: Date) => {
     const kWork = isKyobun ? getKyobunWork(selectedMember, dateObj) : null;
     const kDayType = kWork ? getDiaDayType(kWork.type, dateObj) : null;
     const kDia = kWork ? getDiaInfo(kWork.dia, kDayType) : null;
+    const kAtt = kWork ? getAttention(kWork, dateObj) : (tWork ? getAttention(tWork, dateObj) : null);
     const kInfo = kWork ? workInfo(kWork.type) : null;
     const kLabel = kInfo ? (LABEL_MAP[kInfo.short] || kInfo.short) : "-";
     const kColor = kInfo ? (COLOR_MAP[kInfo.short] || "#7C3AED") : "#7C3AED";
@@ -23695,6 +23913,11 @@ const getKyobunWork = (member: any, date: Date) => {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 16px" }}>
+            {kAtt && (
+              <div style={{ background: "#FFF7ED", border: "1.5px solid #FDBA74", borderRadius: 12, padding: "10px 12px", marginBottom: 14, fontSize: 12.5, color: "#9A3412", lineHeight: 1.7, fontWeight: 600 }}>
+                ⚠️ {kAtt.msg}
+              </div>
+            )}
             {!isOtherKyobun && (
             <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
               <button onClick={() => onGoAdjust && onGoAdjust(dateStr)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8", background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
@@ -25129,6 +25352,7 @@ const getKyobunWork = (member: any, date: Date) => {
                             const info = work ? workInfo(work.type) : workInfo("");
               const diaDayType = work ? getDiaDayType(work.type, date) : null;
               const diaInfo = work ? getDiaInfo(work.dia, diaDayType) : null;
+              const att = work ? getAttention(work, date) : null;
               const isT = isToday(currentYear, currentMonth, day);
               const isSun = di === 0,
                 isSat = di === 6;
@@ -25229,6 +25453,11 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                                 }}
                               >
                                 {diaInfo.start_time}
+                              </div>
+                            )}
+                            {att && (
+                              <div style={{ textAlign: "center", marginTop: 3 }}>
+                                <span style={{ fontSize: 9, fontWeight: 800, color: "#EA580C", background: "#FFF7ED", borderRadius: 6, padding: "1px 6px", display: "inline-block" }}>확인</span>
                               </div>
                             )}
                           </>
