@@ -10157,12 +10157,22 @@ function MemberManageScreen({ user }: any) {
       showToast("이름과 사번은 필수입니다.");
       return;
     }
+    const wtVal = form.work_type || "교번";
+    if ((wtVal === "교번" || wtVal === "통상") && !form.work_group) {
+      showToast("소속(대공원/도봉)을 선택해주세요.", "error");
+      return;
+    }
     const payload = {
       name: form.name.trim(),
       employee_number: form.employee_number.trim(),
       phone: form.phone,
       role: form.role || "조합원",
       is_union: form.is_union === true,
+      work_type: wtVal,
+      ...(form.work_group ? { work_group: form.work_group } : {}),
+      ...(wtVal === "교번" && form.work_group
+        ? { schedule_total: form.work_group === "도봉" ? 41 : 114 }
+        : {}),
     };
     if (form.id) {
       const orig = members.find((mm: any) => mm.id === form.id);
@@ -10444,6 +10454,7 @@ function MemberManageScreen({ user }: any) {
               phone: "",
               role: "조합원",
               is_union: false,
+              work_type: "교번",
             })
           }
           style={{
@@ -10774,6 +10785,71 @@ function MemberManageScreen({ user }: any) {
                 marginBottom: 20,
               }}
             />
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+              근무형태
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+              {["교번", "교대", "통상", "변형통상", "일근"].map((wt) => {
+                const cur = form.work_type || "교번";
+                const on = cur === wt;
+                return (
+                  <button
+                    key={wt}
+                    type="button"
+                    onClick={() => setForm({ ...form, work_type: wt })}
+                    style={{
+                      padding: "8px 13px",
+                      borderRadius: 10,
+                      border: on ? "2px solid #6D5FE0" : "1.5px solid #E5E7EB",
+                      background: on ? "#EEEDFE" : "#fff",
+                      color: on ? "#3C3489" : "#6B7280",
+                      fontSize: 13,
+                      fontWeight: on ? 800 : 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {wt}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ background: "#FFFBEB", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#92400E", lineHeight: 1.5, marginBottom: 14 }}>
+              ⚠️ 근무형태를 바꾸면 급여 항목(승무보조 등)이 함께 바뀝니다. 교번으로 바꾸는 경우 순번 배치에서 자리를 지정해야 근무표가 나옵니다.
+            </div>
+            {((form.work_type || "교번") === "교번" || form.work_type === "통상") && (
+              <>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+                  소속
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                  {["대공원", "도봉"].map((wg) => {
+                    const on = form.work_group === wg;
+                    return (
+                      <button
+                        key={wg}
+                        type="button"
+                        onClick={() => setForm({ ...form, work_group: wg })}
+                        style={{
+                          flex: 1,
+                          padding: "8px 13px",
+                          borderRadius: 10,
+                          border: on ? "2px solid #6D5FE0" : "1.5px solid #E5E7EB",
+                          background: on ? "#EEEDFE" : "#fff",
+                          color: on ? "#3C3489" : "#6B7280",
+                          fontSize: 13,
+                          fontWeight: on ? 800 : 600,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {wg}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, cursor: "pointer" }}>
   <input
     type="checkbox"
@@ -19312,7 +19388,7 @@ useEffect(() => {
                 let bPos: any = null, lPos: any = null, dPos: any = null;
                 for (let r = 0; r < aoa.length; r++) {
                   for (let c = 0; c < (aoa[r] || []).length; c++) {
-                    const v = String(aoa[r][c] ?? "");
+                    const v = String(aoa[r][c] ?? "").replace(/\s+/g, "");
                     if (!bPos && /아침|조식/.test(v)) bPos = { r, c };
                     if (!lPos && /점심|중식/.test(v)) lPos = { r, c };
                     if (!dPos && /저녁|석식/.test(v)) dPos = { r, c };
@@ -19321,23 +19397,57 @@ useEffect(() => {
                 if (!bPos || !lPos) continue;
                 const out: any[] = [];
                 if (bPos.c === lPos.c) {
-                  // 세로 라벨 (열 = 날짜)
+                  // 세로 라벨 (열=날짜, 끼니=여러 행 블록) — 빈 행으로 블록 구분
                   let dateRow = -1;
-                  for (let r = bPos.r; r >= 0; r--) {
-                    const hits = (aoa[r] || []).filter((v) => toMD(v)).length;
-                    if (hits >= 2) { dateRow = r; break; }
+                  const dateCols: { c: number; md: string }[] = [];
+                  for (let r = 0; r < aoa.length; r++) {
+                    const cols: { c: number; md: string }[] = [];
+                    for (let c = 0; c < (aoa[r] || []).length; c++) {
+                      const cell = String(aoa[r][c] ?? "").trim();
+                      if (!cell || cell.length > 22) continue; // 긴 문장(메모)은 날짜로 안 봄
+                      let md = "";
+                      const iso = cell.match(/(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
+                      if (iso) md = `${Number(iso[2])}/${Number(iso[3])}`;
+                      else md = toMD(cell);
+                      if (md) cols.push({ c, md });
+                    }
+                    if (cols.length >= 2) { dateRow = r; dateCols.push(...cols); break; }
                   }
                   if (dateRow < 0) continue;
-                  for (let c = bPos.c + 1; c < (aoa[dateRow] || []).length; c++) {
-                    const md = toMD(aoa[dateRow][c]);
-                    if (!md) continue;
-                    out.push({
-                      day: "",
-                      date: md,
-                      breakfast: clean((aoa[bPos.r] || [])[c]),
-                      lunch: clean((aoa[lPos.r] || [])[c]),
-                      dinner: dPos ? clean((aoa[dPos.r] || [])[c]) : "",
-                    });
+                  // 날짜행 아래를 빈 행 기준으로 블록 분할
+                  const blocks: { rows: number[]; label: string }[] = [];
+                  let cur: number[] = [];
+                  const flush = () => {
+                    if (!cur.length) return;
+                    let label = "";
+                    for (const r of cur) {
+                      for (let c = 0; c < dateCols[0].c; c++) {
+                        const v = String((aoa[r] || [])[c] ?? "").replace(/\s+/g, "");
+                        if (/아침|조식/.test(v)) label = "breakfast";
+                        else if (/점심|중식/.test(v)) label = "lunch";
+                        else if (/저녁|석식/.test(v)) label = "dinner";
+                        if (label) break;
+                      }
+                      if (label) break;
+                    }
+                    blocks.push({ rows: cur, label });
+                    cur = [];
+                  };
+                  for (let r = dateRow + 1; r < aoa.length; r++) {
+                    const hasFood = dateCols.some(({ c }) => String((aoa[r] || [])[c] ?? "").trim());
+                    if (hasFood) cur.push(r);
+                    else flush();
+                  }
+                  flush();
+                  const labeled = blocks.filter((b) => b.label);
+                  const use = labeled.length >= 2 ? labeled : blocks.slice(0, 3).map((b, i) => ({ ...b, label: ["breakfast", "lunch", "dinner"][i] }));
+                  for (const { c, md } of dateCols) {
+                    const day: any = { day: "", date: md, breakfast: "", lunch: "", dinner: "" };
+                    for (const b of use) {
+                      const items = b.rows.map((r) => clean((aoa[r] || [])[c])).filter(Boolean);
+                      if (b.label) day[b.label] = items.join(", ");
+                    }
+                    out.push(day);
                   }
                 } else if (bPos.r === lPos.r) {
                   // 가로 라벨 (행 = 날짜)
@@ -20682,6 +20792,7 @@ function VacancyStatus() {
   const [occDate, setOccDate] = React.useState("");
   const [memo, setMemo] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [vcFilter, setVcFilter] = React.useState("전체");
 
   const load = async () => {
     const [mRes, rRes, hRes, lRes] = await Promise.all([
@@ -20736,8 +20847,14 @@ function VacancyStatus() {
       return { ...m, isTs, pos: isTs ? 0 : effStartOf(m), w1, w2, log };
     })
     .sort((a, b) => {
-      if (a.isTs !== b.isTs) return a.isTs ? 1 : -1; // 교번 먼저, 통상 뒤
-      return a.work_group === b.work_group ? a.pos - b.pos : String(a.work_group).localeCompare(String(b.work_group), "ko");
+      // 결원 번호(결원01, 결원02…) 순으로 항상 정렬, 번호 없으면 이름순
+      const numOf = (n: any) => {
+        const d = String(n ?? "").replace(/[^0-9]/g, "");
+        return d ? Number(d) : 9999;
+      };
+      const na = numOf(a.name), nb = numOf(b.name);
+      if (na !== nb) return na - nb;
+      return String(a.name).localeCompare(String(b.name), "ko");
     });
 
   const cntDae = vacants.filter((v) => v.work_group === "대공원").length;
@@ -20797,18 +20914,30 @@ function VacancyStatus() {
               [cntDo, "도봉", "#FEF2F2", "#DC2626"],
               [vacants.length, "전체", "#F3F4F6", "#1F2937"],
             ].map(([n, l, bg, fg]: any) => (
-              <div key={l} style={{ flex: 1, background: bg, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+              <div
+                key={l}
+                onClick={() => setVcFilter(l)}
+                style={{
+                  flex: 1,
+                  background: bg,
+                  borderRadius: 12,
+                  padding: "10px 8px",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  border: vcFilter === l ? `2px solid ${fg}` : "2px solid transparent",
+                }}
+              >
                 <div style={{ fontSize: 20, fontWeight: 900, color: fg }}>{vcLoaded ? n : "–"}</div>
-                <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginTop: 2 }}>{l}</div>
+                <div style={{ fontSize: 10.5, color: vcFilter === l ? fg : "#9CA3AF", fontWeight: 700, marginTop: 2 }}>{l}</div>
               </div>
             ))}
           </div>
-          {vacants.length === 0 ? (
+          {vacants.filter((v) => (vcFilter === "전체" ? true : v.work_group === vcFilter)).length === 0 ? (
             <div style={{ textAlign: "center", padding: "16px 0", color: "#9CA3AF", fontSize: 13 }}>
               {vcLoaded ? "결원이 없습니다." : "불러오는 중..."}
             </div>
           ) : (
-            vacants.map((v, i) => (
+            vacants.filter((v) => (vcFilter === "전체" ? true : v.work_group === vcFilter)).map((v, i) => (
               <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", borderTop: i === 0 ? 0 : "1px solid #F3F4F6" }}>
                 <div style={{ width: 40, height: 40, borderRadius: 12, background: v.isTs ? "#FFF7ED" : "#FEF2F2", color: v.isTs ? "#C2410C" : "#DC2626", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: v.isTs ? 11 : 13, flexShrink: 0 }}>
                   {v.isTs ? (v.w1 ? v.w1.dia : "51~54") : v.pos}
@@ -20953,17 +21082,22 @@ function StartBatchAssign() {
   const [effDate, setEffDate] = React.useState("");
   const [preview, setPreview] = React.useState<any[] | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [rotation, setRotation] = React.useState<any[]>([]);
+  const [planCheck, setPlanCheck] = React.useState<{ type: string; msg: string }[]>([]);
+  const [planDias, setPlanDias] = React.useState<Record<string, { no: number; dia: string }>>({});
 
   const load = async () => {
-    const [mRes, hRes] = await Promise.all([
+    const [mRes, hRes, rRes] = await Promise.all([
       supabase
         .from("members")
         .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
         .eq("work_type", "교번"),
       supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
     ]);
-    if (mRes.data) setMembers((mRes.data as any[]).filter((m) => m.start_position != null));
+    if (mRes.data) setMembers(mRes.data as any[]);
     if (hRes.data) setHist(hRes.data as any[]);
+    if (rRes.data) setRotation(rRes.data as any[]);
   };
   React.useEffect(() => {
     if (open && members.length === 0) load();
@@ -20973,7 +21107,221 @@ function StartBatchAssign() {
     const hit = hist
       .filter((h) => String(h.member_id) === String(mem.id) && h.effective_date <= dateStr)
       .sort((a, b) => (a.effective_date < b.effective_date ? 1 : -1))[0];
-    return hit ? Number(hit.start_position) : Number(mem.start_position);
+    return hit ? Number(hit.start_position) : (mem.start_position != null ? Number(mem.start_position) : null);
+  };
+
+  // 근무계획 엑셀 업로드: 순번·성명 읽기 → 적용일 열로 배열 회전 위치(off) 역산 → 6/1 기준 시작점 환산
+  const parsePlanFile = (f: File, dateStr: string) => {
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = () => reject(new Error("엑셀 라이브러리 로드 실패"));
+      document.head.appendChild(s);
+    });
+    ensureXLSX().then((XLSX) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: "array" });
+          // 매칭은 항상 DB 최신 명단으로 (다른 화면에서 방금 바꾼 근무형태·소속 즉시 반영)
+          const fmRes = await supabase
+            .from("members")
+            .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+            .eq("work_type", "교번");
+          const freshMembers: any[] = (fmRes.data as any[]) || members;
+          const dayNum = Number(dateStr.slice(8, 10));
+          const days = Math.round((new Date(dateStr + "T00:00:00").getTime() - new Date("2026-06-01T00:00:00").getTime()) / 86400000);
+          const norm = (v: any) => {
+            let x = String(v ?? "").replace(/\s+/g, "").replace(/^운휴/, "").replace(/^대기/, "대");
+            if (x.startsWith("휴")) return "휴";
+            return x;
+          };
+          const msgs: { type: string; msg: string }[] = [];
+          const outLines: string[] = [];
+          const fileDias: Record<string, { no: number; dia: string }> = {};
+          for (const sn of wb.SheetNames) {
+            const isD = sn.includes("대공원"), isB = sn.includes("도봉");
+            if (!isD && !isB) continue;
+            const groupName = isD ? "대공원 114" : "도봉 41";
+            const aoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: false });
+            // 헤더: "성명" 셀 + 날짜(1~31) 열
+            let headRow = -1, nameCol = -1;
+            for (let r = 0; r < Math.min(aoa.length, 8); r++) {
+              const c = (aoa[r] || []).findIndex((x) => String(x ?? "").trim() === "성명");
+              if (c >= 0) { headRow = r; nameCol = c; break; }
+            }
+            if (headRow < 0) { msgs.push({ type: "warn", msg: `${sn} 시트: "성명" 헤더를 못 찾아 건너뜀` }); continue; }
+            let dayCol = -1;
+            for (let c = nameCol + 1; c < (aoa[headRow] || []).length; c++) {
+              if (Number(String(aoa[headRow][c] ?? "").trim()) === dayNum) { dayCol = c; break; }
+            }
+            const noCol = nameCol - 1;
+            const people: { no: number; name: string; dia: string; row: number }[] = [];
+            const skipped: string[] = [];
+            for (let r = headRow + 1; r < aoa.length; r++) {
+              const row = aoa[r] || [];
+              const noRaw = String(row[noCol] ?? "").trim();
+              const nm = String(row[nameCol] ?? "").trim();
+              if (!noRaw && !nm) continue;
+              if (!/^\d+$/.test(noRaw)) { if (nm) skipped.push(`${noRaw || "?"} ${nm}`); continue; }
+              people.push({ no: Number(noRaw), name: nm, dia: dayCol >= 0 ? String(row[dayCol] ?? "").trim() : "", row: r });
+            }
+            if (people.length === 0) { msgs.push({ type: "warn", msg: `${sn} 시트: 명단을 읽지 못함` }); continue; }
+            if (skipped.length) msgs.push({ type: "warn", msg: `${sn}: 순번 밖 행 제외 — ${skipped.join(", ")}` });
+            // 이름 매칭: ① 사람 = 정확 매칭(안전장치 유지) ② 결원 = 번호 무시 자리끼리 자동 배정 + 앱 이름을 파일과 동일하게 자동 개명
+            // 결원은 급여·휴가·개인기록이 없는 자리표시라 개명해도 과거 기록(work_adjust·chungdang_apply 등, 채운 사람 사번 기준)은 1원도 안 움직임
+            {
+              const wg = isD ? "대공원" : "도봉";
+              const pool = freshMembers.filter((m) => m.work_group === wg);
+              const isVac = (n: any) => String(n ?? "").replace(/\s+/g, "").startsWith("결원");
+              // ① 사람: 정확 매칭
+              const notFound: string[] = [];
+              for (const p of people) {
+                if (isVac(p.name)) continue;
+                const hit = pool.filter((m) => String(m.name) === p.name);
+                if (hit.length === 0) notFound.push(`${p.no}번 ${p.name}`);
+              }
+              if (notFound.length) {
+                msgs.push({
+                  type: "error",
+                  msg: `${sn}: 앱 명단에 없는 이름 ${notFound.length}건 — ${notFound.join(", ")}. 신규 전입자는 결원 자리에 이름표 교체, 근무형태가 다르면 조합원 수정에서 교번으로 변경 후 다시 업로드하세요.`,
+                });
+                continue;
+              }
+              // ② 결원: 개수만 맞으면 자동 배정
+              const fileVacs = people.filter((p) => isVac(p.name));
+              const appVacs = pool
+                .filter((m) => isVac(m.name))
+                .sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"));
+              if (fileVacs.length !== appVacs.length) {
+                msgs.push({
+                  type: "error",
+                  msg: `${sn}: 결원 수 불일치 — 파일 ${fileVacs.length} vs 앱 ${appVacs.length}. 조합원 명단에서 결원 정원부터 맞춰주세요.`,
+                });
+                continue;
+              }
+              // 이름이 이미 같은 짝 먼저, 남은 것끼리 순서대로 → 개명 최소화
+              const usedApp = new Set<any>();
+              const matchedFile = new Set<any>();
+              for (const p of fileVacs) {
+                const m = appVacs.find((a) => !usedApp.has(a.id) && String(a.name) === p.name);
+                if (m) { usedApp.add(m.id); matchedFile.add(p); }
+              }
+              const restApp = appVacs.filter((a) => !usedApp.has(a.id));
+              let ri = 0;
+              const renames: { id: any; from: string; to: string }[] = [];
+              for (const p of fileVacs) {
+                if (matchedFile.has(p)) continue;
+                const m = restApp[ri++];
+                if (m) renames.push({ id: m.id, from: String(m.name), to: p.name });
+              }
+              if (renames.length) {
+                let failed = false;
+                for (const rn of renames) {
+                  const { error: rnErr } = await supabase.from("members").update({ name: rn.to }).eq("id", rn.id);
+                  if (rnErr) {
+                    msgs.push({ type: "error", msg: `결원 이름 변경 실패 (${rn.from}→${rn.to}): ${rnErr.message}` });
+                    failed = true;
+                  }
+                }
+                if (failed) continue;
+                msgs.push({
+                  type: "ok",
+                  msg: `${sn}: 결원 이름을 파일과 동일하게 자동 정리 ${renames.length}건 — ${renames.map((rn) => `${rn.from}→${rn.to}`).join(", ")}`,
+                });
+              } else if (fileVacs.length) {
+                msgs.push({ type: "ok", msg: `${sn}: 결원 ${fileVacs.length}자리 이름 일치` });
+              }
+            }
+            const validPeople = people;
+            const L = people.length;
+            // 그 날짜에 적용되는 배열 판
+            const ver = pickRotationVersion(rotation, groupName, dateStr);
+            const diaSeq = rotation
+              .filter((x) => x.group_name === groupName && String(x.effective_date || ROTATION_BASE_DATE).slice(0, 10) === ver)
+              .sort((a, b) => Number(a.position) - Number(b.position))
+              .map((x) => String(x.dia_value ?? ""));
+            if (diaSeq.length !== L) { msgs.push({ type: "error", msg: `${sn}: 명단 ${L}명 ≠ 배열 ${diaSeq.length}칸 — 배열부터 확인하세요` }); continue; }
+            // off 역산: 적용일 열과 배열 대조 (빈 칸 제외, 표기 정규화)
+            let best = { off: -1, bad: Infinity };
+            for (let off = 0; off < L; off++) {
+              let bad = 0;
+              for (let i = 0; i < L; i++) {
+                if (!people[i].dia) continue;
+                if (norm(diaSeq[(i + off) % L]) !== norm(people[i].dia)) bad++;
+              }
+              if (bad < best.bad) best = { off, bad };
+            }
+            if (best.off < 0 || best.bad > L * 0.1) {
+              msgs.push({ type: "error", msg: `${sn}: ${dateStr} 열이 배열과 맞지 않아요 (최소 불일치 ${best.bad}/${L}). 교번배열이 이 근무계획과 같은 판인지 확인하세요.` });
+              continue;
+            }
+            msgs.push({ type: "ok", msg: `${sn}: ${dateStr} 열 ↔ 배열 대조 일치 ${L - best.bad}/${L}칸 (회전 위치 자동 인식)` });
+            // ★ 한 달 전체 검산: 파일의 모든 날짜 열 × 전원 vs 배열 (파일 반출 없이 눈으로 확정)
+            {
+              const dayColsAll: { d: number; c: number }[] = [];
+              for (let c = nameCol + 1; c < (aoa[headRow] || []).length; c++) {
+                const dn = Number(String(aoa[headRow][c] ?? "").trim());
+                if (Number.isInteger(dn) && dn >= 1 && dn <= 31) dayColsAll.push({ d: dn, c });
+              }
+              let totalCells = 0, badCells = 0;
+              const badList: string[] = [];
+              for (const dc of dayColsAll) {
+                const delta = dc.d - dayNum;
+                for (const p of people) {
+                  const val = String((aoa[p.row] || [])[dc.c] ?? "").trim();
+                  if (!val) continue;
+                  const expect = diaSeq[((((p.no - 1 + best.off + delta) % L) + L) % L)];
+                  totalCells++;
+                  if (norm(expect) !== norm(val)) {
+                    badCells++;
+                    if (badList.length < 8) badList.push(`${dc.d}일 ${p.no}번 ${p.name}: 파일 "${val}" vs 배열 "${expect}"`);
+                  }
+                }
+              }
+              msgs.push(
+                badCells === 0
+                  ? { type: "ok", msg: `${sn}: 한 달 전체 검산 통과 ✅ — ${totalCells}칸 전부 배열과 일치` }
+                  : { type: "warn", msg: `${sn}: 한 달 전체 검산 — ${totalCells}칸 중 ${badCells}칸 불일치 (그날 근무조정이면 정상) — ${badList.join(" / ")}${badCells > 8 ? ` 외 ${badCells - 8}칸` : ""}` }
+              );
+            }
+            if (best.bad > 0) {
+              const diffs: string[] = [];
+              for (let i = 0; i < L; i++) {
+                if (!people[i].dia) continue;
+                const arrVal = diaSeq[(i + best.off) % L];
+                if (norm(arrVal) !== norm(people[i].dia)) {
+                  diffs.push(`${people[i].no}번 ${people[i].name} — 파일 "${people[i].dia}" vs 배열 "${arrVal}"`);
+                }
+              }
+              msgs.push({ type: "warn", msg: `${sn}: 불일치 ${diffs.length}칸 (그날 근무조정이 있었으면 정상) — ${diffs.slice(0, 5).join(" / ")}${diffs.length > 5 ? ` 외 ${diffs.length - 5}칸` : ""}` });
+            }
+            // 시작점 환산 (6/1 원점)
+            for (const p of validPeople) {
+              const start = ((((p.no - 1 + best.off - days) % L) + L) % L) + 1;
+              outLines.push(`${p.name}\t${start}`);
+              fileDias[p.name] = { no: p.no, dia: p.dia };
+            }
+          }
+          if (outLines.length === 0 && !msgs.some((m) => m.type === "error")) {
+            msgs.push({ type: "error", msg: "대공원/도봉 시트를 찾지 못했어요." });
+          }
+          await load();
+          setPlanCheck(msgs);
+          setPlanDias(fileDias);
+          if (outLines.length) {
+            setText(outLines.join("\n"));
+            setPreview(null);
+            showToast(`근무계획에서 ${outLines.length}명 읽음 — 미리보기로 확인하세요.`);
+          }
+        } catch (err: any) {
+          setPlanCheck([{ type: "error", msg: "엑셀 읽기 실패: " + (err?.message || String(err)) }]);
+        }
+      };
+      reader.readAsArrayBuffer(f);
+    }).catch((err) => setPlanCheck([{ type: "error", msg: String(err?.message || err) }]));
   };
 
   const makePreview = () => {
@@ -21021,8 +21369,9 @@ function StartBatchAssign() {
         return;
       }
       usedMember.add(String(m.id));
-      if (pos > Number(m.schedule_total)) {
-        showToast(`${i + 1}번째 줄: ${m.name} 순번 ${pos}가 배열 길이(${m.schedule_total})보다 커요`, "error");
+      const totalLen = Number(m.schedule_total) || (m.work_group === "도봉" ? 41 : 114);
+      if (pos > totalLen) {
+        showToast(`${i + 1}번째 줄: ${m.name} 순번 ${pos}가 배열 길이(${totalLen})보다 커요`, "error");
         return;
       }
       const posKey = `${m.work_group}|${pos}`;
@@ -21039,6 +21388,40 @@ function StartBatchAssign() {
       showToast("붙여넣은 순번이 현재와 모두 동일합니다");
       setPreview(null);
       return;
+    }
+    // 적용일에 각자 근무(다이아)가 뭐에서 뭐로 바뀌는지 계산 (표시용)
+    const days2 = Math.round((new Date(effDate + "T00:00:00").getTime() - new Date("2026-06-01T00:00:00").getTime()) / 86400000);
+    const seqCache: Record<string, string[]> = {};
+    const seqOf = (wg: string) => {
+      if (seqCache[wg]) return seqCache[wg];
+      const groupName = wg === "도봉" ? "도봉 41" : "대공원 114";
+      const ver = pickRotationVersion(rotation, groupName, effDate);
+      const seq = rotation
+        .filter((x) => x.group_name === groupName && String(x.effective_date || ROTATION_BASE_DATE).slice(0, 10) === ver)
+        .sort((a, b) => Number(a.position) - Number(b.position))
+        .map((x) => String(x.dia_value ?? ""));
+      seqCache[wg] = seq;
+      return seq;
+    };
+    for (const r of changed) {
+      const seq = seqOf(r.member.work_group);
+      const L2 = seq.length;
+      const diaAt = (st: any) =>
+        st == null || !L2 ? null : seq[((((Number(st) - 1 + days2) % L2) + L2) % L2)];
+      r.fromDia = diaAt(r.from);
+      r.toDia = diaAt(r.to);
+      // 사람이 눈으로 검증하는 핵심: 회사 파일의 적용일 근무 = 앱이 계산한 적용일 근무?
+      const fd = planDias[String(r.member.name)];
+      if (fd) {
+        const normD = (v: any) => {
+          let x = String(v ?? "").replace(/\s+/g, "").replace(/^운휴/, "").replace(/^대기/, "대");
+          if (x.startsWith("휴")) return "휴";
+          return x;
+        };
+        r.fileNo = fd.no;
+        r.fileDia = fd.dia;
+        r.diaMatch = fd.dia ? normD(fd.dia) === normD(r.toDia) : null;
+      }
     }
     setPreview(changed);
   };
@@ -21059,6 +21442,22 @@ function StartBatchAssign() {
     if (error) {
       showToast("저장 실패: " + error.message, "error");
       return;
+    }
+    // 교대→교번 전환자 등 원본 시작점이 비어있는 사람만 최초 1회 기입
+    // (.is null 가드로 기존 값은 절대 안 덮음 — 원본 불변 원칙 유지)
+    for (const r of preview) {
+      if (r.member.start_position == null) {
+        await supabase
+          .from("members")
+          .update({
+            start_position: String(r.to),
+            ...(r.member.schedule_total == null
+              ? { schedule_total: r.member.work_group === "도봉" ? 41 : 114 }
+              : {}),
+          })
+          .eq("id", r.member.id)
+          .is("start_position", null);
+      }
     }
     showToast(`저장 완료! ${effDate}부터 ${preview.length}명 순번이 바뀝니다.`);
     setText("");
@@ -21091,6 +21490,33 @@ function StartBatchAssign() {
             }}
             style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, boxSizing: "border-box", fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none", background: "#fff" }}
           />
+          <label style={{ display: "block", padding: "13px", border: "2px dashed #C7D2FE", borderRadius: 12, textAlign: "center", cursor: "pointer", color: "#4F46E5", fontSize: 13, fontWeight: 800, marginBottom: 8 }}>
+            📂 근무계획 엑셀(.xlsx) 업로드 — 순번·성명 자동 읽기
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                (e.target as any).value = "";
+                if (!f) return;
+                let d = effDate;
+                const fm = String(f.name).match(/(\d{4})[._\-](\d{1,2})[._\-](\d{1,2})/);
+                if (fm) {
+                  d = `${fm[1]}-${String(Number(fm[2])).padStart(2, "0")}-${String(Number(fm[3])).padStart(2, "0")}`;
+                  setEffDate(d);
+                }
+                if (!d) { setPlanCheck([{ type: "error", msg: "적용일을 먼저 선택하세요 (파일명에서 못 읽었어요)." }]); return; }
+                setPlanCheck([]);
+                parsePlanFile(f, d);
+              }}
+            />
+          </label>
+          {planCheck.map((m, i) => (
+            <div key={i} style={{ borderRadius: 10, padding: "9px 12px", fontSize: 12, fontWeight: 700, lineHeight: 1.6, marginBottom: 6, background: m.type === "ok" ? "#ECFDF5" : m.type === "warn" ? "#FEF9C3" : "#FEE2E2", color: m.type === "ok" ? "#047857" : m.type === "warn" ? "#92400E" : "#DC2626", border: `1px solid ${m.type === "ok" ? "#A7F3D0" : m.type === "warn" ? "#FDE68A" : "#FECACA"}` }}>
+              {m.type === "ok" ? "✅ " : m.type === "warn" ? "⚠️ " : "❌ "}{m.msg}
+            </div>
+          ))}
           <textarea
             value={text}
             onChange={(e) => {
@@ -21126,18 +21552,48 @@ function StartBatchAssign() {
 
           {preview && preview.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 2, color: "#374151" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: "#374151", marginBottom: 6 }}>
+                📋 {effDate}부터 근무가 바뀌는 사람 {preview.length}명
+              </div>
+              {(() => {
+                const withCheck = preview.filter((r: any) => r.diaMatch != null);
+                const bad = withCheck.filter((r: any) => r.diaMatch === false);
+                if (withCheck.length === 0) return null;
+                return bad.length === 0 ? (
+                  <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#047857", borderRadius: 10, padding: "9px 11px", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+                    ✅ 검산 통과: {withCheck.length}명 전원, 회사 파일의 {effDate} 근무 = 앱이 계산한 근무
+                  </div>
+                ) : (
+                  <div style={{ background: "#FEE2E2", border: "1px solid #FECACA", color: "#DC2626", borderRadius: 10, padding: "9px 11px", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+                    ❌ 검산 불일치 {bad.length}명 — 아래 빨간 줄 확인 (그날 근무조정이 있었으면 정상)
+                  </div>
+                );
+              })()}
+              <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "4px 12px", fontSize: 12.5, color: "#374151" }}>
                 {preview.map((r) => (
-                  <div key={r.member.id}>
-                    {r.member.name} ({r.member.work_group}) · 순번{" "}
-                    <b style={{ color: "#B45309" }}>
-                      {r.from} → {r.to}
-                    </b>
+                  <div key={r.member.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6", background: r.diaMatch === false ? "#FEF2F2" : "transparent" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontWeight: 700 }}>{r.member.name}</span>
+                      <span style={{ color: "#9CA3AF", fontSize: 11 }}> · {r.member.work_group}{r.fileNo != null ? ` · 파일 순번 ${r.fileNo}` : ""}</span>
+                      {r.from == null && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: "#4F46E5", background: "#EEF2FF", padding: "2px 6px", borderRadius: 5 }}>첫 배치</span>
+                      )}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontWeight: 800, color: "#B45309" }}>
+                        {r.fromDia != null ? `${r.fromDia}` : "—"} → {r.toDia != null ? `${r.toDia}` : "—"}
+                        {r.diaMatch === true && <span style={{ color: "#059669", marginLeft: 4 }}>✓</span>}
+                        {r.diaMatch === false && <span style={{ color: "#DC2626", marginLeft: 4 }}>✗ 파일 "{r.fileDia}"</span>}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "#9CA3AF" }}>
+                        시작점 {r.from != null ? r.from : "신규"} → {r.to}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
               <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginTop: 8 }}>
-                🛡️ {effDate}부터 위 {preview.length}명의 순번이 바뀝니다. 과거 근무표는 변하지 않고, 시작점 이력에서 건 단위로 취소할 수 있습니다.
+                🛡️ 굵은 글씨 = 적용일({effDate}) 당일 근무, ✓ = 회사 파일과 일치. {effDate} 이전 근무표·급여는 변하지 않고, 저장 후에도 시작점 이력에서 건 단위로 취소할 수 있습니다.
               </div>
               <button
                 disabled={saving}
