@@ -14812,7 +14812,7 @@ function OperatorHome() {
         {label}
       </div>
       <div style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: b.short > 0 ? "#991B1B" : "#065F46" }}>
-        빈 {b.empty} · 대기 {b.standby}
+        빈자리 {b.empty} · 대기 {b.standby}
       </div>
       <div style={{ fontSize: 12, fontWeight: 800, color: b.short > 0 ? "#991B1B" : "#065F46" }}>
         {b.short > 0 ? `${b.short}자리 부족` : "채울 수 있음"}
