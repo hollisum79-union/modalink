@@ -8344,9 +8344,9 @@ const [showAddCat, setShowAddCat] = useState(false);
             </div>
             <input
               type="file"
-              accept="application/pdf,audio/*,.mp3,.m4a,.wav"
-                                     multiple
-                                     onChange={(e) => {
+              accept=".pdf,.mp3,.m4a,.wav,.aac,.ogg"
+              multiple
+              onChange={(e) => {
                 const list = Array.from(e.target.files || []);
                 if (list.length > 1) {
                   // 여러 개 선택 → 파일명이 제목이 됨 (음원 일괄 등록)
