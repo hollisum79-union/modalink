@@ -23318,18 +23318,18 @@ if (data) {
     const ds = String(work.dia).replace(/\s+/g, "");
     if (ds.endsWith("~")) return null; // 비번 제외
     if (ds.startsWith("대기") || /^대\d/.test(ds)) {
-      return { kind: "대기", msg: "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요." };
+      return { kind: "대기", msg: work.type === "야간" ? "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요. 충당이 안 되면 야간수당 4시간만 인정돼요 (주행키로 없음)." : "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요." };
     }
     if (!/^\d+$/.test(ds)) return null;
     const n = Number(ds);
     if (work.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHolidayDate(date)) {
-      return { kind: "주간미영업", msg: "휴일 미영업 다이아예요 (26·27·28·29·40). 당일 다른 다이아 충당이 없으면 강제휴무 처리되고, 이후 주간 지정근무로 나와야 해요. 미영업 확정 시 주행키로는 없어요." };
+      return { kind: "주간미영업", msg: "휴일 미영업 다이아예요 (26·27·28·29·40). 당일 다른 다이아 충당이 없으면 강제휴무 처리되고, 이후 주간 지정근무로 나와야 해요. 강제휴무는 출근하지 않으며 급여·주행키로 모두 해당 없어요." };
     }
     if (work.type === "야간" && [61, 62, 63, 64].includes(n) && isHolidayDate(date)) {
       const tm = new Date(date);
       tm.setDate(tm.getDate() + 1);
       if (isHolidayDate(tm)) {
-        return { kind: "야간미영업", msg: "휴일+휴일 미영업 야간 다이아예요 (61~64). 당일 충당이 없으면 강제휴무 처리되고, 이후 지정근무로 나와야 해요. 미영업 확정 시 주행키로는 없고 4시간 야간수당만 급여에 반영돼요." };
+        return { kind: "야간미영업", msg: "휴일+휴일 미영업 야간 다이아예요 (61~64). 당일 충당이 없으면 강제휴무 처리되고, 이후 지정근무로 나와야 해요. 강제휴무는 출근하지 않으며 급여·주행키로 모두 해당 없어요." };
       }
     }
     return null;
