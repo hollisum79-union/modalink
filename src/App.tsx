@@ -21065,6 +21065,7 @@ function StartBatchAssign() {
   const [saving, setSaving] = React.useState(false);
   const [rotation, setRotation] = React.useState<any[]>([]);
   const [planCheck, setPlanCheck] = React.useState<{ type: string; msg: string }[]>([]);
+  const [planDias, setPlanDias] = React.useState<Record<string, { no: number; dia: string }>>({});
 
   const load = async () => {
     const [mRes, hRes, rRes] = await Promise.all([
@@ -21120,6 +21121,7 @@ function StartBatchAssign() {
           };
           const msgs: { type: string; msg: string }[] = [];
           const outLines: string[] = [];
+          const fileDias: Record<string, { no: number; dia: string }> = {};
           for (const sn of wb.SheetNames) {
             const isD = sn.includes("대공원"), isB = sn.includes("도봉");
             if (!isD && !isB) continue;
@@ -21253,6 +21255,7 @@ function StartBatchAssign() {
             for (const p of validPeople) {
               const start = ((((p.no - 1 + best.off - days) % L) + L) % L) + 1;
               outLines.push(`${p.name}\t${start}`);
+              fileDias[p.name] = { no: p.no, dia: p.dia };
             }
           }
           if (outLines.length === 0 && !msgs.some((m) => m.type === "error")) {
@@ -21260,6 +21263,7 @@ function StartBatchAssign() {
           }
           await load();
           setPlanCheck(msgs);
+          setPlanDias(fileDias);
           if (outLines.length) {
             setText(outLines.join("\n"));
             setPreview(null);
@@ -21359,6 +21363,18 @@ function StartBatchAssign() {
         st == null || !L2 ? null : seq[((((Number(st) - 1 + days2) % L2) + L2) % L2)];
       r.fromDia = diaAt(r.from);
       r.toDia = diaAt(r.to);
+      // 사람이 눈으로 검증하는 핵심: 회사 파일의 적용일 근무 = 앱이 계산한 적용일 근무?
+      const fd = planDias[String(r.member.name)];
+      if (fd) {
+        const normD = (v: any) => {
+          let x = String(v ?? "").replace(/\s+/g, "").replace(/^운휴/, "").replace(/^대기/, "대");
+          if (x.startsWith("휴")) return "휴";
+          return x;
+        };
+        r.fileNo = fd.no;
+        r.fileDia = fd.dia;
+        r.diaMatch = fd.dia ? normD(fd.dia) === normD(r.toDia) : null;
+      }
     }
     setPreview(changed);
   };
@@ -21492,19 +21508,35 @@ function StartBatchAssign() {
               <div style={{ fontSize: 12.5, fontWeight: 800, color: "#374151", marginBottom: 6 }}>
                 📋 {effDate}부터 근무가 바뀌는 사람 {preview.length}명
               </div>
+              {(() => {
+                const withCheck = preview.filter((r: any) => r.diaMatch != null);
+                const bad = withCheck.filter((r: any) => r.diaMatch === false);
+                if (withCheck.length === 0) return null;
+                return bad.length === 0 ? (
+                  <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#047857", borderRadius: 10, padding: "9px 11px", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+                    ✅ 검산 통과: {withCheck.length}명 전원, 회사 파일의 {effDate} 근무 = 앱이 계산한 근무
+                  </div>
+                ) : (
+                  <div style={{ background: "#FEE2E2", border: "1px solid #FECACA", color: "#DC2626", borderRadius: 10, padding: "9px 11px", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+                    ❌ 검산 불일치 {bad.length}명 — 아래 빨간 줄 확인 (그날 근무조정이 있었으면 정상)
+                  </div>
+                );
+              })()}
               <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "4px 12px", fontSize: 12.5, color: "#374151" }}>
                 {preview.map((r) => (
-                  <div key={r.member.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+                  <div key={r.member.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6", background: r.diaMatch === false ? "#FEF2F2" : "transparent" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: 700 }}>{r.member.name}</span>
-                      <span style={{ color: "#9CA3AF", fontSize: 11 }}> · {r.member.work_group}</span>
+                      <span style={{ color: "#9CA3AF", fontSize: 11 }}> · {r.member.work_group}{r.fileNo != null ? ` · 파일 순번 ${r.fileNo}` : ""}</span>
                       {r.from == null && (
                         <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: "#4F46E5", background: "#EEF2FF", padding: "2px 6px", borderRadius: 5 }}>첫 배치</span>
                       )}
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontWeight: 800, color: "#B45309" }}>
-                        {r.fromDia != null ? `${r.fromDia} 다이아` : "—"} → {r.toDia != null ? `${r.toDia} 다이아` : "—"}
+                        {r.fromDia != null ? `${r.fromDia}` : "—"} → {r.toDia != null ? `${r.toDia}` : "—"}
+                        {r.diaMatch === true && <span style={{ color: "#059669", marginLeft: 4 }}>✓</span>}
+                        {r.diaMatch === false && <span style={{ color: "#DC2626", marginLeft: 4 }}>✗ 파일 "{r.fileDia}"</span>}
                       </div>
                       <div style={{ fontSize: 10.5, color: "#9CA3AF" }}>
                         시작점 {r.from != null ? r.from : "신규"} → {r.to}
@@ -21514,7 +21546,7 @@ function StartBatchAssign() {
                 ))}
               </div>
               <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginTop: 8 }}>
-                🛡️ 굵은 글씨 = 적용일({effDate}) 당일 근무 변화. {effDate} 이전 근무표·급여는 변하지 않고, 저장 후에도 시작점 이력에서 건 단위로 취소할 수 있습니다.
+                🛡️ 굵은 글씨 = 적용일({effDate}) 당일 근무, ✓ = 회사 파일과 일치. {effDate} 이전 근무표·급여는 변하지 않고, 저장 후에도 시작점 이력에서 건 단위로 취소할 수 있습니다.
               </div>
               <button
                 disabled={saving}
