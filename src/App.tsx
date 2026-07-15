@@ -25717,7 +25717,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                   }}
                   style={{
                                         padding: "6px 4px",
-                    background: "#fff",
+                    background: isT ? "#FEF9C3" : "#fff",
                     borderRight: "1px solid #F3F4F6",
                     borderTop: "2px solid transparent",
                   }}
@@ -25732,33 +25732,16 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                       <>
                         <div
                           style={{
-                            fontSize: 10,
-                            fontWeight: 600,
+                            fontSize: 15.5,
+                            fontWeight: 800,
                             textAlign: "center",
-                            marginBottom: 4,
-                            color: isSun || isHoli ? "#F87171" : isSat ? "#93C5FD" : "#9CA3AF",
+                            marginBottom: 2,
+                            letterSpacing: "-0.3px",
+                            fontVariantNumeric: "tabular-nums",
+                            color: isT ? "#92400E" : dayColor,
                           }}
                         >
-                          {isT ? (
-                            <span
-                              style={{
-                                                                background: "#4F46E5",
-                                color: "#fff",
-                                borderRadius: "50%",
-                                width: 22,
-                                height: 22,
-                                display: "inline-flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontSize: 13,
-                                fontWeight: 700,
-                              }}
-                            >
-                              {day}
-                            </span>
-                          ) : (
-                            day
-                          )}
+                          {day}
                         </div>
                        {work && (work as any).swapped && (
                           <div style={{ textAlign: "center", fontSize: 10, color: "#4F46E5", fontWeight: 700, marginBottom: 2 }}>
@@ -25766,16 +25749,16 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                           </div>
                         )}
                         {work && (isRest ? (
-                          <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, color: subColor, marginTop: 7 }}>
+                          <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#9CA3AF", marginTop: 6 }}>
                             휴
                           </div>
                         ) : isOff ? (
-                          <div style={{ textAlign: "center", fontSize: 16, color: "#D1D5DB", marginTop: 7 }}>
+                          <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#D1D5DB", marginTop: 6 }}>
                             ~
                           </div>
                         ) : (
                           <>
-                            <div style={{ textAlign: "center", fontSize: 15, fontWeight: 800, color: dayColor, lineHeight: 1, marginBottom: 4 }}>
+                            <div style={{ textAlign: "center", fontSize: 19, fontWeight: 800, color: "#111827", lineHeight: 1.05, marginBottom: 4, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>
                               {work.dia}
                             </div>
                             {diaInfo && diaInfo.start_time && (
