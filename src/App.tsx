@@ -71,6 +71,21 @@ function pickRotationVersion(rotationData: any[], groupName: string, dateStr: st
 // ── 교번 근무 계산 (공용 함수) ──
 // member, date, rotationData만 있으면 계산되는 순수 함수.
 // 근무표·교번교체가 똑같이 이걸 써서 결과가 절대 어긋나지 않음.
+// ── 교대 4조 근무 계산 (글로벌) ──
+//   패턴: 주간 → 야간 → 비번 → 휴무 (4일 반복, 휴무는 번호 없음)
+//   앵커: 2026-07-15 → A조 주간 · B조 휴무 · C조 비번 · D조 야간
+const SHIFT_PATTERN = ["주간", "야간", "비번", "휴무"];
+const SHIFT_OFFSET: Record<string, number> = { A: 0, D: 1, C: 2, B: 3 };
+function calcShiftWork(team: any, date: Date): string {
+  const off = SHIFT_OFFSET[String(team || "").trim().toUpperCase()];
+  if (off === undefined) return "";
+  const anchor = new Date(2026, 6, 15);
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.round((d.getTime() - anchor.getTime()) / 86400000);
+  const idx = (((days + off) % 4) + 4) % 4;
+  return SHIFT_PATTERN[idx];
+}
+
 function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
   if (!member || rotationData.length === 0) return null;
 
@@ -14433,7 +14448,7 @@ function OperatorHome({ opName }: { opName: string }) {
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("kyobun_start_history").select("*"),
         supabase.from("kyobun_swap").select("*").eq("status", "수락"),
-        supabase.from("members").select("id, name, employee_number, work_group, work_type"),
+        supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team"),
       ]);
       setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
       setOpAllMembers(allRes.data || []);
@@ -14745,6 +14760,22 @@ function OperatorHome({ opName }: { opName: string }) {
     })();
   }, [fillDia, targetStr, opHolidays]);
   const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
+
+  // ── 휴무충당 횟수 (operator_assign 기록 기반 · 다들 0부터 시작 · 기준점수 입력은 나중에) ──
+  const [fillCounts, setFillCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("operator_assign")
+        .select("filled_name, action")
+        .eq("via", "휴무충당");
+      const c: Record<string, number> = {};
+      (data || []).forEach((r: any) => {
+        c[r.filled_name] = (c[r.filled_name] || 0) + (r.action === "cancel" ? -1 : 1);
+      });
+      setFillCounts(c);
+    })();
+  }, [targetStr, assigned]);
 
   // ── 배정 기록 복원 (operator_assign · append-only · 그 날짜의 마지막 상태) ──
   useEffect(() => {
@@ -15307,18 +15338,70 @@ function OperatorHome({ opName }: { opName: string }) {
         return 0;
       });
 
-    const restCands = (
-      s === "주간"
-        ? [
-            { name: "박민수", pts: "주간 2점", note: "휴45", warn: "" },
-            { name: "이영희", pts: "주간 2점", note: "휴12", warn: "" },
-            { name: "김철수", pts: "주간 5점", note: "휴3", warn: "" },
-          ]
-        : [
-            { name: "정우주", pts: "야간 1개", note: "휴30", warn: "내일 주간 15 — 뽑으면 15가 빕니다" },
-            { name: "한별", pts: "야간 2개", note: "휴22", warn: "" },
-          ]
-    ).filter((c) => !usedNames.includes(c.name) && c.name !== slot.name);
+    // ④ 휴무충당 후보 (실데이터): 그날 휴무인 교번(기관사) + 교대 근무자. 통상은 대상 아님.
+    //    정렬 = 충당 횟수 적은 순 → 같으면 기관사(교번) 먼저
+    const restTomorrow = new Date(target);
+    restTomorrow.setDate(restTomorrow.getDate() + 1);
+    const restOffEmps = new Set<string>([
+      ...opLeaves.map((lv: any) => String(lv.employee_number)),
+      ...opAbsences.map((ab: any) => String(ab.employee_number)),
+    ]);
+    // ④-1 교번 기관사 (근무표 계산 그대로)
+    const restKyobun = opMembers
+      .map((m) => {
+        if (String(m.name).includes("결원")) return null;
+        if (restOffEmps.has(String(m.employee_number))) return null; // 그날 휴가·유고
+        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+        if (!w || w.type !== "휴무") return null;
+        let warn = "";
+        if (s === "야간") {
+          const w2 = calcKyobunWork(m, restTomorrow, opRotation, opSwaps, opMembers, opStartHist);
+          if (
+            w2 &&
+            (w2.type === "주간" || w2.type === "야간") &&
+            !String(w2.dia).startsWith("대기")
+          )
+            warn = `내일 ${w2.type} ${w2.dia} — 뽑으면 ${w2.dia}가 빕니다 (충당비번)`;
+        }
+        return {
+          name: m.name,
+          pts: `충당 ${fillCounts[m.name] || 0}회`,
+          note: `기관사 · ${String(w.dia)}`,
+          warn,
+          cnt: fillCounts[m.name] || 0,
+          isKyobun: true,
+        };
+      })
+      .filter(Boolean) as any[];
+    // ④-2 교대 근무자 (4조 패턴 · 휴무는 번호 없음)
+    const restShift = opAllMembers
+      .map((m) => {
+        if (m.work_type !== "교대" || !m.shift_team) return null;
+        if (String(m.name).includes("결원")) return null;
+        if (restOffEmps.has(String(m.employee_number))) return null;
+        if (calcShiftWork(m.shift_team, target) !== "휴무") return null;
+        let warn = "";
+        if (s === "야간") {
+          const t2 = calcShiftWork(m.shift_team, restTomorrow);
+          if (t2 === "주간" || t2 === "야간")
+            warn = `내일 교대 ${t2} — 뽑으면 내일 근무를 못 합니다 (충당비번)`;
+        }
+        return {
+          name: m.name,
+          pts: `충당 ${fillCounts[m.name] || 0}회`,
+          note: `교대 ${m.shift_team}조`,
+          warn,
+          cnt: fillCounts[m.name] || 0,
+          isKyobun: false,
+        };
+      })
+      .filter(Boolean) as any[];
+    const restCands = [...restKyobun, ...restShift]
+      .sort((a: any, b: any) => {
+        if (a.cnt !== b.cnt) return a.cnt - b.cnt;
+        return a.isKyobun === b.isKyobun ? 0 : a.isKyobun ? -1 : 1; // 같으면 기관사 먼저
+      })
+      .filter((c: any) => !usedNames.includes(c.name) && c.name !== slot.name);
 
     const pick = async (name: string, via: string) => {
       const { error } = await supabase.from("operator_assign").insert({
@@ -15543,7 +15626,7 @@ function OperatorHome({ opName }: { opName: string }) {
           </div>
         </div>
 
-        <div style={secTtl}>④ 휴무충당 후보 ({s === "주간" ? "점수 낮은 순" : "개수 적은 순"})</div>
+        <div style={secTtl}>④ 휴무충당 후보 (충당 횟수 적은 순 · 같으면 기관사 먼저)</div>
         <div style={card}>
           {restCands.map((c, i) => (
             <div key={c.name} style={{ ...row, borderBottom: i === restCands.length - 1 ? 0 : row.borderBottom }}>
