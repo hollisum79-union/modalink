@@ -14476,6 +14476,7 @@ function OperatorHome({ opName }: { opName: string }) {
   // 빈 자리(결원)는 아래에서 휴가 데이터(leave_history)로 계산 → const empty
   // 대기 근무자(standby)는 휴가·유고 데이터 로드 뒤에서 계산 (usable 판정에 필요) → 아래 const standby
 
+
   // ── 결원 대기 (뱃지 총인원·펼침용): 이름에 "결원" 들어간 사람이 걸린 대기 자리 ──
   const standbyVacant = React.useMemo(() => {
     if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
@@ -14497,6 +14498,44 @@ function OperatorHome({ opName }: { opName: string }) {
 
   // 대상 날짜 문자열 (로컬)
   const targetStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+
+  // ── 전날 야간 충당 기록 → 오늘은 충당비번 (야간 뛰면 다음날 근무 불가) ──
+  //    대기충당은 원래 야간 대기 근무자라 비번이 근무표에 이미 있음 → 제외
+  const [prevNightFills, setPrevNightFills] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const p = new Date(target);
+      p.setDate(p.getDate() - 1);
+      const prevStr = `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, "0")}-${String(p.getDate()).padStart(2, "0")}`;
+      const { data } = await supabase
+        .from("operator_assign")
+        .select("dia_no, filled_name, employee_number, via, action, created_at")
+        .eq("work_date", prevStr)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
+      const last = new Map<string, any>();
+      (data || []).forEach((r: any) => {
+        if (r.action === "cancel") last.delete(String(r.dia_no));
+        else last.set(String(r.dia_no), r);
+      });
+      setPrevNightFills(
+        Array.from(last.values()).filter(
+          (r: any) => shiftOf(String(r.dia_no)) === "야간" && r.via !== "대기충당"
+        )
+      );
+    })();
+  }, [targetStr]);
+  // 충당비번인 사람 (사번 · 이름 둘 다로 조회 — 옛 기록엔 사번이 없을 수 있음)
+  const bibeonEmps = React.useMemo(
+    () => new Set(prevNightFills.map((r: any) => String(r.employee_number || "")).filter(Boolean)),
+    [prevNightFills]
+  );
+  const bibeonNames = React.useMemo(
+    () => new Set(prevNightFills.map((r: any) => String(r.filled_name || "")).filter(Boolean)),
+    [prevNightFills]
+  );
+  const isBibeon = (m: any) =>
+    bibeonEmps.has(String(m.employee_number)) || bibeonNames.has(String(m.name));
 
   // 그 날짜의 지정근무 신청자 (실데이터 · chungdang_apply)
   const [desigApplies, setDesigApplies] = useState<any[]>([]);
@@ -14566,8 +14605,8 @@ function OperatorHome({ opName }: { opName: string }) {
         if (!w || !String(w.dia).startsWith("대기")) return null;
         // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
         if (String(w.dia).includes("~") || w.type === "비번") return null;
-        const off = offByEmp.get(String(m.employee_number)) || "";
-        return { slot: String(w.dia), name: m.name, usable: !off, note: off, region: m.work_group };
+        const off = offByEmp.get(String(m.employee_number)) || (isBibeon(m) ? "충당비번" : "");
+        return { slot: String(w.dia), name: m.name, emp: String(m.employee_number), usable: !off, note: off, region: m.work_group };
       })
       .filter(Boolean) as any[];
     // 대기 번호 오름차순 (주간 1~59 → 야간 60~)
@@ -14576,7 +14615,7 @@ function OperatorHome({ opName }: { opName: string }) {
         Number(String(a.slot).replace(/[^0-9]/g, "")) - Number(String(b.slot).replace(/[^0-9]/g, ""))
     );
     return list;
-  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset, opLeaves, opAbsences]);
+  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset, opLeaves, opAbsences, prevNightFills]);
 
   // 지원근무 대상자 (is_support_target · 2개월 1회 의무 대상)
   const [opSupport, setOpSupport] = useState<any[]>([]);
@@ -14709,12 +14748,24 @@ function OperatorHome({ opName }: { opName: string }) {
       if (w.type !== "주간" && w.type !== "야간") return;
       list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
     });
+    // ③ 충당비번 — 전날 야간을 충당한 사람은 오늘 근무 불가. 그 사람 오늘 다이아가 운전이면 빈 자리.
+    opMembers.forEach((m) => {
+      if (String(m.name).includes("결원")) return;
+      if (!isBibeon(m)) return;
+      if (reasonByEmp.has(String(m.employee_number))) return; // 이미 휴가·유고로 잡힘
+      const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+      if (!w) return;
+      if (String(w.dia).startsWith("대기")) return; // 대기는 대기 카드에서 회색 처리
+      if (w.type !== "주간" && w.type !== "야간") return;
+      if (list.some((x) => x.dia === String(w.dia))) return;
+      list.push({ dia: String(w.dia), name: m.name, reason: "충당비번", region: m.work_group });
+    });
     list.sort(
       (a, b) =>
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
     );
     return list;
-  }, [opMembers, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr]);
+  }, [opMembers, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -15365,6 +15416,7 @@ function OperatorHome({ opName }: { opName: string }) {
         }
         return {
           name: m.name,
+          emp: String(m.employee_number),
           pts: `충당 ${fillCounts[m.name] || 0}회`,
           note: `기관사 · ${String(w.dia)}`,
           warn,
@@ -15388,6 +15440,7 @@ function OperatorHome({ opName }: { opName: string }) {
         }
         return {
           name: m.name,
+          emp: String(m.employee_number),
           pts: `충당 ${fillCounts[m.name] || 0}회`,
           note: `교대 ${m.shift_team}조`,
           warn,
@@ -15403,11 +15456,12 @@ function OperatorHome({ opName }: { opName: string }) {
       })
       .filter((c: any) => !usedNames.includes(c.name) && c.name !== slot.name);
 
-    const pick = async (name: string, via: string) => {
+    const pick = async (name: string, via: string, emp?: string) => {
       const { error } = await supabase.from("operator_assign").insert({
         work_date: targetStr,
         dia_no: String(fillDia),
         filled_name: name,
+        employee_number: emp ? String(emp) : null,
         via,
         created_by: opName,
         memo: slot ? `${slot.name} ${slot.reason}` : null,
@@ -15568,7 +15622,7 @@ function OperatorHome({ opName }: { opName: string }) {
                   </div>
                 </div>
                 <button
-                  onClick={() => pick(c.name, "대기충당")}
+                  onClick={() => pick(c.name, "대기충당", c.emp)}
                   style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
                 >
                   배정
@@ -15608,7 +15662,7 @@ function OperatorHome({ opName }: { opName: string }) {
                     </div>
                   </div>
                   <button
-                    onClick={() => pick(c.name, "지원근무")}
+                    onClick={() => pick(c.name, "지원근무", String(c.employee_number))}
                     style={{ border: 0, borderRadius: 10, background: c.appliedToday ? "#0F766E" : OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
                   >
                     배정
@@ -15642,7 +15696,7 @@ function OperatorHome({ opName }: { opName: string }) {
                 )}
               </div>
               <button
-                onClick={() => pick(c.name, "휴무충당")}
+                onClick={() => pick(c.name, "휴무충당", c.emp)}
                 style={{ border: 0, borderRadius: 10, background: "#fff", color: OP_TEAL_DARK, fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer", boxShadow: "inset 0 0 0 1.5px #99F6E4" }}
               >
                 배정
