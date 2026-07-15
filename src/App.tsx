@@ -10163,6 +10163,7 @@ function MemberManageScreen({ user }: any) {
       phone: form.phone,
       role: form.role || "조합원",
       is_union: form.is_union === true,
+      work_type: form.work_type || "교번",
     };
     if (form.id) {
       const orig = members.find((mm: any) => mm.id === form.id);
@@ -10444,6 +10445,7 @@ function MemberManageScreen({ user }: any) {
               phone: "",
               role: "조합원",
               is_union: false,
+              work_type: "교번",
             })
           }
           style={{
@@ -10774,6 +10776,38 @@ function MemberManageScreen({ user }: any) {
                 marginBottom: 20,
               }}
             />
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+              근무형태
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+              {["교번", "교대", "통상", "변형통상", "일근"].map((wt) => {
+                const cur = form.work_type || "교번";
+                const on = cur === wt;
+                return (
+                  <button
+                    key={wt}
+                    type="button"
+                    onClick={() => setForm({ ...form, work_type: wt })}
+                    style={{
+                      padding: "8px 13px",
+                      borderRadius: 10,
+                      border: on ? "2px solid #6D5FE0" : "1.5px solid #E5E7EB",
+                      background: on ? "#EEEDFE" : "#fff",
+                      color: on ? "#3C3489" : "#6B7280",
+                      fontSize: 13,
+                      fontWeight: on ? 800 : 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {wt}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ background: "#FFFBEB", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#92400E", lineHeight: 1.5, marginBottom: 14 }}>
+              ⚠️ 근무형태를 바꾸면 급여 항목(승무보조 등)이 함께 바뀝니다. 교번으로 바꾸는 경우 순번 배치에서 자리를 지정해야 근무표가 나옵니다.
+            </div>
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, cursor: "pointer" }}>
   <input
     type="checkbox"
@@ -21026,7 +21060,7 @@ function StartBatchAssign() {
     });
     ensureXLSX().then((XLSX) => {
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: "array" });
           const dayNum = Number(dateStr.slice(8, 10));
@@ -21038,6 +21072,7 @@ function StartBatchAssign() {
           };
           const msgs: { type: string; msg: string }[] = [];
           const outLines: string[] = [];
+          let renamedAny = false;
           for (const sn of wb.SheetNames) {
             const isD = sn.includes("대공원"), isB = sn.includes("도봉");
             if (!isD && !isB) continue;
@@ -21067,21 +21102,70 @@ function StartBatchAssign() {
             }
             if (people.length === 0) { msgs.push({ type: "warn", msg: `${sn} 시트: 명단을 읽지 못함` }); continue; }
             if (skipped.length) msgs.push({ type: "warn", msg: `${sn}: 순번 밖 행 제외 — ${skipped.join(", ")}` });
-            // 이름 정확 매칭 검증: 결원도 고유 이름의 고정 멤버 → 앱에 없는 이름은 전부 모아서 안내
+            // 이름 매칭: ① 사람 = 정확 매칭(안전장치 유지) ② 결원 = 번호 무시 자리끼리 자동 배정 + 앱 이름을 파일과 동일하게 자동 개명
+            // 결원은 급여·휴가·개인기록이 없는 자리표시라 개명해도 과거 기록(work_adjust·chungdang_apply 등, 채운 사람 사번 기준)은 1원도 안 움직임
             {
               const wg = isD ? "대공원" : "도봉";
               const pool = members.filter((m) => m.work_group === wg);
+              const isVac = (n: any) => String(n ?? "").replace(/\s+/g, "").startsWith("결원");
+              // ① 사람: 정확 매칭
               const notFound: string[] = [];
               for (const p of people) {
+                if (isVac(p.name)) continue;
                 const hit = pool.filter((m) => String(m.name) === p.name);
                 if (hit.length === 0) notFound.push(`${p.no}번 ${p.name}`);
               }
               if (notFound.length) {
                 msgs.push({
                   type: "error",
-                  msg: `${sn}: 앱 명단에 없는 이름 ${notFound.length}건 — ${notFound.join(", ")}. 결원 이름이 다르면 조합원 명단에서 회사 문서와 같은 이름(예: 결원01)으로 바꾼 뒤 다시 업로드하세요.`,
+                  msg: `${sn}: 앱 명단에 없는 이름 ${notFound.length}건 — ${notFound.join(", ")}. 신규 전입자는 결원 자리에 이름표 교체, 근무형태가 다르면 조합원 수정에서 교번으로 변경 후 다시 업로드하세요.`,
                 });
                 continue;
+              }
+              // ② 결원: 개수만 맞으면 자동 배정
+              const fileVacs = people.filter((p) => isVac(p.name));
+              const appVacs = pool
+                .filter((m) => isVac(m.name))
+                .sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"));
+              if (fileVacs.length !== appVacs.length) {
+                msgs.push({
+                  type: "error",
+                  msg: `${sn}: 결원 수 불일치 — 파일 ${fileVacs.length} vs 앱 ${appVacs.length}. 조합원 명단에서 결원 정원부터 맞춰주세요.`,
+                });
+                continue;
+              }
+              // 이름이 이미 같은 짝 먼저, 남은 것끼리 순서대로 → 개명 최소화
+              const usedApp = new Set<any>();
+              const matchedFile = new Set<any>();
+              for (const p of fileVacs) {
+                const m = appVacs.find((a) => !usedApp.has(a.id) && String(a.name) === p.name);
+                if (m) { usedApp.add(m.id); matchedFile.add(p); }
+              }
+              const restApp = appVacs.filter((a) => !usedApp.has(a.id));
+              let ri = 0;
+              const renames: { id: any; from: string; to: string }[] = [];
+              for (const p of fileVacs) {
+                if (matchedFile.has(p)) continue;
+                const m = restApp[ri++];
+                if (m) renames.push({ id: m.id, from: String(m.name), to: p.name });
+              }
+              if (renames.length) {
+                let failed = false;
+                for (const rn of renames) {
+                  const { error: rnErr } = await supabase.from("members").update({ name: rn.to }).eq("id", rn.id);
+                  if (rnErr) {
+                    msgs.push({ type: "error", msg: `결원 이름 변경 실패 (${rn.from}→${rn.to}): ${rnErr.message}` });
+                    failed = true;
+                  }
+                }
+                if (failed) continue;
+                renamedAny = true;
+                msgs.push({
+                  type: "ok",
+                  msg: `${sn}: 결원 이름을 파일과 동일하게 자동 정리 ${renames.length}건 — ${renames.map((rn) => `${rn.from}→${rn.to}`).join(", ")}`,
+                });
+              } else if (fileVacs.length) {
+                msgs.push({ type: "ok", msg: `${sn}: 결원 ${fileVacs.length}자리 이름 일치` });
               }
             }
             const validPeople = people;
@@ -21117,6 +21201,7 @@ function StartBatchAssign() {
           if (outLines.length === 0 && !msgs.some((m) => m.type === "error")) {
             msgs.push({ type: "error", msg: "대공원/도봉 시트를 찾지 못했어요." });
           }
+          if (renamedAny) await load();
           setPlanCheck(msgs);
           if (outLines.length) {
             setText(outLines.join("\n"));
