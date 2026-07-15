@@ -10208,6 +10208,7 @@ function MemberManageScreen({ user }: any) {
           ? { tongsang_base_dia: Number(form.tongsang_base_dia), tongsang_base_date: form.tongsang_base_date || todayLocalStr() }
           : { tongsang_base_dia: null, tongsang_base_date: null }
         : {}),
+      shift_team: wtVal === "교대" ? form.shift_team || null : null,
     };
     if (form.id) {
       const orig = members.find((mm: any) => mm.id === form.id);
@@ -10893,6 +10894,39 @@ function MemberManageScreen({ user }: any) {
             <div style={{ background: "#FFFBEB", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#92400E", lineHeight: 1.5, marginBottom: 14 }}>
               ⚠️ 근무형태를 바꾸면 급여 항목(승무보조 등)이 함께 바뀝니다. 교번으로 바꾸는 경우 순번 배치에서 자리를 지정해야 근무표가 나옵니다.
             </div>
+            {form.work_type === "교대" && (
+              <>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+                  교대 조
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                  {["A", "B", "C", "D"].map((tm) => {
+                    const on = form.shift_team === tm;
+                    return (
+                      <button
+                        key={tm}
+                        type="button"
+                        onClick={() => setForm({ ...form, shift_team: on ? null : tm })}
+                        style={{
+                          flex: 1,
+                          padding: "8px 0",
+                          borderRadius: 10,
+                          border: on ? "2px solid #6D5FE0" : "1.5px solid #E5E7EB",
+                          background: on ? "#EEEDFE" : "#fff",
+                          color: on ? "#3C3489" : "#6B7280",
+                          fontSize: 13,
+                          fontWeight: on ? 800 : 600,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {tm}조
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             {((form.work_type || "교번") === "교번" || form.work_type === "통상") && (
               <>
                 <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
