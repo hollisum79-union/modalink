@@ -14377,7 +14377,7 @@ function OperatorStaffPicker({ onPick }: { onPick: (s: any) => void }) {
 }
 
 // ── 운용 홈: 그날 빈 자리 + 대기 근무자 (아직 예시 데이터) ──
-function OperatorHome() {
+function OperatorHome({ opName }: { opName: string }) {
   // 화면 폭 (900px 이상이면 와이드 3열 배치)
   const [winW, setWinW] = useState(typeof window !== "undefined" ? window.innerWidth : 400);
   useEffect(() => {
@@ -14726,6 +14726,28 @@ function OperatorHome() {
     })();
   }, [fillDia, targetStr, opHolidays]);
   const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
+
+  // ── 배정 기록 복원 (operator_assign · append-only · 그 날짜의 마지막 상태) ──
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("operator_assign")
+        .select("dia_no, filled_name, via, action, created_at")
+        .eq("work_date", targetStr)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
+      if (error) {
+        showToast("배정 기록 불러오기 실패: " + error.message, "error");
+        return;
+      }
+      const next: Record<string, { name: string; via: string }> = {};
+      (data || []).forEach((r: any) => {
+        if (r.action === "cancel") delete next[String(r.dia_no)];
+        else next[String(r.dia_no)] = { name: r.filled_name, via: r.via };
+      });
+      setAssigned(next);
+    })();
+  }, [targetStr]);
 
   const stampsByDay: Record<number, any[]> = {
     1: [
@@ -15191,10 +15213,22 @@ function OperatorHome() {
           ]
     ).filter((c) => !usedNames.includes(c.name) && c.name !== slot.name);
 
-    const pick = (name: string, via: string) => {
+    const pick = async (name: string, via: string) => {
+      const { error } = await supabase.from("operator_assign").insert({
+        work_date: targetStr,
+        dia_no: String(fillDia),
+        filled_name: name,
+        via,
+        created_by: opName,
+        memo: slot ? `${slot.name} ${slot.reason}` : null,
+      });
+      if (error) {
+        showToast("저장 실패: " + error.message, "error");
+        return;
+      }
       setAssigned({ ...assigned, [fillDia]: { name, via } });
       setFillDia("");
-      showToast(`${fillDia}다이아 → ${name} (${via})`);
+      showToast(`${fillDia}다이아 → ${name} (${via}) · 저장됨`);
     };
 
     const secTtl: React.CSSProperties = {
@@ -15623,10 +15657,24 @@ function OperatorHome() {
             </div>
             {a ? (
               <button
-                onClick={() => {
+                onClick={async () => {
+                  const cur = assigned[e.dia];
+                  const { error } = await supabase.from("operator_assign").insert({
+                    work_date: targetStr,
+                    dia_no: String(e.dia),
+                    filled_name: cur ? cur.name : "-",
+                    via: cur ? cur.via : "-",
+                    action: "cancel",
+                    created_by: opName,
+                  });
+                  if (error) {
+                    showToast("취소 저장 실패: " + error.message, "error");
+                    return;
+                  }
                   const next = { ...assigned };
                   delete next[e.dia];
                   setAssigned(next);
+                  showToast("배정을 취소했습니다 (기록에 남음)");
                 }}
                 style={{ border: 0, borderRadius: 11, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
               >
@@ -17864,7 +17912,7 @@ function OperatorMockPanel({ tab, opName }: { tab: string; opName: string }) {
     </div>
   );
 
-  if (tab === "home") return <OperatorHome />;
+  if (tab === "home") return <OperatorHome opName={opName} />;
   if (tab === "designated") return <OperatorDesignated />;
   if (tab === "support") return <OperatorSupport />;
 
