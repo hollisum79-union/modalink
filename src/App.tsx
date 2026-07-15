@@ -14406,9 +14406,26 @@ function OperatorHome({ opName }: { opName: string }) {
   const [absEnd, setAbsEnd] = useState(""); // 휴직·병가 기간 종료
   const [absMsg, setAbsMsg] = useState(""); // 저장 결과 메시지 (화면에 남김)
   const [absReload, setAbsReload] = useState(0);
+  // 유고 검색용 전체 인원 (교번뿐 아니라 교대·통상 등 전부)
+  const [opAllMembers, setOpAllMembers] = useState<any[]>([]);
+  // 휴가·휴직 종류 (absence_types · 임단협 변경 대응)
+  const [absTypes, setAbsTypes] = useState<any[]>([]);
+  const [absTypeReload, setAbsTypeReload] = useState(0);
+  const [absTypeManage, setAbsTypeManage] = useState(false);
+  const [absTypeNew, setAbsTypeNew] = useState("");
   useEffect(() => {
     (async () => {
-      const [mRes, rRes, hRes, sRes] = await Promise.all([
+      const { data } = await supabase
+        .from("absence_types")
+        .select("*")
+        .order("kind", { ascending: true })
+        .order("sort", { ascending: true });
+      setAbsTypes(data || []);
+    })();
+  }, [absTypeReload]);
+  useEffect(() => {
+    (async () => {
+      const [mRes, rRes, hRes, sRes, allRes] = await Promise.all([
         supabase
           .from("members")
           .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
@@ -14416,8 +14433,10 @@ function OperatorHome({ opName }: { opName: string }) {
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("kyobun_start_history").select("*"),
         supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+        supabase.from("members").select("id, name, employee_number, work_group, work_type"),
       ]);
       setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
+      setOpAllMembers(allRes.data || []);
       setOpRotation(rRes.data || []);
       setOpStartHist(hRes.data || []);
       setOpSwaps(sRes.data || []);
@@ -14856,9 +14875,14 @@ function OperatorHome({ opName }: { opName: string }) {
 
   // ── 유고 입력 화면 ──
   if (showAbsence) {
-    const HYUGA = ["연차", "가연차", "촉진연차", "대체휴가", "학습휴가", "장기재직", "청원휴가"];
-    const HYUJIK = ["휴직", "육아휴직"];
-    const cands = opMembers
+    const HYUGA = absTypes.filter((t) => t.kind === "휴가").length
+      ? absTypes.filter((t) => t.kind === "휴가").map((t) => t.name)
+      : ["연차", "가연차", "촉진연차", "대체휴가", "학습휴가", "장기재직", "청원휴가"];
+    const HYUJIK = absTypes.filter((t) => t.kind === "휴직").length
+      ? absTypes.filter((t) => t.kind === "휴직").map((t) => t.name)
+      : ["휴직", "육아휴직"];
+    const searchPool = opAllMembers.length ? opAllMembers : opMembers;
+    const cands = searchPool
       .filter((m) => !String(m.name).includes("결원"))
       .filter((m) => absSearch.trim() === "" || String(m.name).includes(absSearch.trim()))
       .slice(0, 8);
@@ -14875,6 +14899,20 @@ function OperatorHome({ opName }: { opName: string }) {
       if (!finalReason) return setAbsMsg("⚠️ 사유를 선택/입력하세요");
       if (isRange && endD < startD) return setAbsMsg("⚠️ 종료일이 시작일보다 빠릅니다");
       try {
+        // 같은 사람 · 겹치는 날짜 중복 방지
+        const { data: dup } = await supabase
+          .from("operator_absence")
+          .select("id, reason, work_date, end_date")
+          .eq("employee_number", String(absSel.employee_number))
+          .lte("work_date", endD)
+          .gte("end_date", startD);
+        if (dup && dup.length > 0) {
+          const d0 = dup[0];
+          setAbsMsg(
+            `⚠️ ${absSel.name}님은 이 날짜에 이미 「${d0.reason}」이 있습니다. 바꾸려면 아래 목록에서 기존 것을 먼저 삭제하세요.`
+          );
+          return;
+        }
         const { error } = await supabase
           .from("operator_absence")
           .insert({
@@ -14907,6 +14945,73 @@ function OperatorHome({ opName }: { opName: string }) {
       if (error) return showToast("삭제 실패: " + error.message, "error");
       setAbsReload((k) => k + 1);
     };
+
+    // ── 휴가·휴직 종류 관리 (임단협 변경 대응) ──
+    const addAbsType = async (kind: string) => {
+      const n = absTypeNew.trim();
+      if (!n) return;
+      if (absTypes.some((t) => t.kind === kind && t.name === n))
+        return showToast("이미 있는 종류입니다", "error");
+      const { error } = await supabase.from("absence_types").insert({
+        kind,
+        name: n,
+        sort: absTypes.filter((t) => t.kind === kind).length + 1,
+      });
+      if (error) return showToast("추가 실패: " + error.message, "error");
+      setAbsTypeNew("");
+      setAbsTypeReload((k) => k + 1);
+    };
+    const delAbsType = async (kind: string, name: string) => {
+      const row = absTypes.find((t) => t.kind === kind && t.name === name);
+      if (!row) return showToast("기본 종류는 SQL 실행 후 삭제할 수 있습니다", "error");
+      const { error } = await supabase.from("absence_types").delete().eq("id", row.id);
+      if (error) return showToast("삭제 실패: " + error.message, "error");
+      setAbsTypeReload((k) => k + 1);
+    };
+    const typeManageUI = (kind: string) => (
+      <div style={{ marginTop: 10, display: "flex", gap: 7 }}>
+        <input
+          value={absTypeNew}
+          onChange={(e) => setAbsTypeNew(e.target.value)}
+          placeholder="새 종류 이름"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          style={{ flex: 1, border: "1.5px solid #E5E7EB", borderRadius: 9, padding: "8px 11px", fontSize: 13, fontFamily: "inherit", outline: "none", WebkitAppearance: "none", appearance: "none" }}
+        />
+        <button
+          onClick={() => addAbsType(kind)}
+          style={{ border: 0, borderRadius: 9, background: OP_TEAL, color: "#fff", fontSize: 12.5, fontWeight: 800, padding: "8px 14px", fontFamily: "inherit", cursor: "pointer" }}
+        >
+          추가
+        </button>
+      </div>
+    );
+    const chipRow = (labels: string[], kind: string) => (
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+        {labels.map((label) =>
+          absTypeManage ? (
+            <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, padding: "7px 11px", borderRadius: 9, border: "1.5px solid #E5E7EB", background: "#fff", color: "#6B7280" }}>
+              {label}
+              <span onClick={() => delAbsType(kind, label)} style={{ color: "#DC2626", fontWeight: 900, cursor: "pointer", padding: "0 2px" }}>✕</span>
+            </span>
+          ) : (
+            chip(label)
+          )
+        )}
+      </div>
+    );
+    const typeHeader = (title: string) => (
+      <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        {title}
+        <button
+          onClick={() => { setAbsTypeManage(!absTypeManage); setAbsTypeNew(""); }}
+          style={{ border: 0, background: "transparent", color: absTypeManage ? OP_TEAL_DARK : "#9CA3AF", fontSize: 11, fontWeight: 800, fontFamily: "inherit", cursor: "pointer", padding: 0 }}
+        >
+          {absTypeManage ? "✓ 완료" : "종류 관리"}
+        </button>
+      </div>
+    );
 
     const rzBtn = (label: string) => (
       <button
@@ -15017,14 +15122,16 @@ function OperatorHome({ opName }: { opName: string }) {
 
           {absReason === "휴가" && (
             <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>휴가 종류</div>
-              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{HYUGA.map(chip)}</div>
+              {typeHeader("휴가 종류")}
+              {chipRow(HYUGA, "휴가")}
+              {absTypeManage && typeManageUI("휴가")}
             </div>
           )}
           {absReason === "휴직" && (
             <div style={{ marginTop: 10, padding: 12, background: "#F9FAFB", borderRadius: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", marginBottom: 8 }}>휴직 구분</div>
-              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{HYUJIK.map(chip)}</div>
+              {typeHeader("휴직 구분")}
+              {chipRow(HYUJIK, "휴직")}
+              {absTypeManage && typeManageUI("휴직")}
             </div>
           )}
           {absReason === "기타" && (
