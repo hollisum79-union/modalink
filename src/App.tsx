@@ -21238,6 +21238,17 @@ function StartBatchAssign() {
               continue;
             }
             msgs.push({ type: "ok", msg: `${sn}: ${dateStr} 열 ↔ 배열 대조 일치 ${L - best.bad}/${L}칸 (회전 위치 자동 인식)` });
+            if (best.bad > 0) {
+              const diffs: string[] = [];
+              for (let i = 0; i < L; i++) {
+                if (!people[i].dia) continue;
+                const arrVal = diaSeq[(i + best.off) % L];
+                if (norm(arrVal) !== norm(people[i].dia)) {
+                  diffs.push(`${people[i].no}번 ${people[i].name} — 파일 "${people[i].dia}" vs 배열 "${arrVal}"`);
+                }
+              }
+              msgs.push({ type: "warn", msg: `${sn}: 불일치 ${diffs.length}칸 (그날 근무조정이 있었으면 정상) — ${diffs.slice(0, 5).join(" / ")}${diffs.length > 5 ? ` 외 ${diffs.length - 5}칸` : ""}` });
+            }
             // 시작점 환산 (6/1 원점)
             for (const p of validPeople) {
               const start = ((((p.no - 1 + best.off - days) % L) + L) % L) + 1;
@@ -21326,6 +21337,28 @@ function StartBatchAssign() {
       showToast("붙여넣은 순번이 현재와 모두 동일합니다");
       setPreview(null);
       return;
+    }
+    // 적용일에 각자 근무(다이아)가 뭐에서 뭐로 바뀌는지 계산 (표시용)
+    const days2 = Math.round((new Date(effDate + "T00:00:00").getTime() - new Date("2026-06-01T00:00:00").getTime()) / 86400000);
+    const seqCache: Record<string, string[]> = {};
+    const seqOf = (wg: string) => {
+      if (seqCache[wg]) return seqCache[wg];
+      const groupName = wg === "도봉" ? "도봉 41" : "대공원 114";
+      const ver = pickRotationVersion(rotation, groupName, effDate);
+      const seq = rotation
+        .filter((x) => x.group_name === groupName && String(x.effective_date || ROTATION_BASE_DATE).slice(0, 10) === ver)
+        .sort((a, b) => Number(a.position) - Number(b.position))
+        .map((x) => String(x.dia_value ?? ""));
+      seqCache[wg] = seq;
+      return seq;
+    };
+    for (const r of changed) {
+      const seq = seqOf(r.member.work_group);
+      const L2 = seq.length;
+      const diaAt = (st: any) =>
+        st == null || !L2 ? null : seq[((((Number(st) - 1 + days2) % L2) + L2) % L2)];
+      r.fromDia = diaAt(r.from);
+      r.toDia = diaAt(r.to);
     }
     setPreview(changed);
   };
@@ -21456,18 +21489,32 @@ function StartBatchAssign() {
 
           {preview && preview.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", fontSize: 12.5, lineHeight: 2, color: "#374151" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: "#374151", marginBottom: 6 }}>
+                📋 {effDate}부터 근무가 바뀌는 사람 {preview.length}명
+              </div>
+              <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "4px 12px", fontSize: 12.5, color: "#374151" }}>
                 {preview.map((r) => (
-                  <div key={r.member.id}>
-                    {r.member.name} ({r.member.work_group}) · 순번{" "}
-                    <b style={{ color: "#B45309" }}>
-                      {r.from != null ? r.from : "신규"} → {r.to}
-                    </b>
+                  <div key={r.member.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontWeight: 700 }}>{r.member.name}</span>
+                      <span style={{ color: "#9CA3AF", fontSize: 11 }}> · {r.member.work_group}</span>
+                      {r.from == null && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: "#4F46E5", background: "#EEF2FF", padding: "2px 6px", borderRadius: 5 }}>첫 배치</span>
+                      )}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontWeight: 800, color: "#B45309" }}>
+                        {r.fromDia != null ? `${r.fromDia} 다이아` : "—"} → {r.toDia != null ? `${r.toDia} 다이아` : "—"}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "#9CA3AF" }}>
+                        시작점 {r.from != null ? r.from : "신규"} → {r.to}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
               <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", borderRadius: 10, padding: "9px 11px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.6, marginTop: 8 }}>
-                🛡️ {effDate}부터 위 {preview.length}명의 순번이 바뀝니다. 과거 근무표는 변하지 않고, 시작점 이력에서 건 단위로 취소할 수 있습니다.
+                🛡️ 굵은 글씨 = 적용일({effDate}) 당일 근무 변화. {effDate} 이전 근무표·급여는 변하지 않고, 저장 후에도 시작점 이력에서 건 단위로 취소할 수 있습니다.
               </div>
               <button
                 disabled={saving}
