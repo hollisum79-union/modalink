@@ -10480,7 +10480,7 @@ function MemberManageScreen({ user }: any) {
         }}
       >
         <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
-          사업소인원 (현원 {members.filter((m) => !(m.name || "").includes("결원")).length}명 / 결원 {members.filter((m) => (m.name || "").includes("결원")).length}명)
+          사업소인원 — 총 {members.length}명 · 현원 {members.filter((m) => !(m.name || "").includes("결원")).length}명 · 결원 {members.filter((m) => (m.name || "").includes("결원")).length}명
         </div>
                <button
           onClick={() =>
@@ -10539,7 +10539,7 @@ function MemberManageScreen({ user }: any) {
   <div onClick={() => setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원")} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : q && inU > 0 ? "2px solid #A5B4FC" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#4F46E5" }}>
-      {members.filter((m) => m.is_union === true).length}명
+      {members.filter((m) => m.is_union === true && !(m.name || "").includes("결원")).length}명
     </div>
     {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: inU > 0 ? "#4F46E5" : "#C7CBD1", marginTop: 2 }}>{inU > 0 ? `🔍 여기 ${inU}명` : "일치 없음"}</div>}
   </div>
