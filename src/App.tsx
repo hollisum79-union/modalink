@@ -23168,6 +23168,30 @@ if (data) {
     return holidays.includes(`${y}-${m}-${dd}`);
   };
 
+  // "확인" 표시 판정 (표시 전용 — 근무·급여 계산 무영향)
+  // 주간 26·27·28·29·40: 휴일 미영업 / 야간 61~64: 휴+휴 미영업 / 대기: 충당 배정 가능
+  const getAttention = (work: any, date: Date) => {
+    if (!work || !work.dia) return null;
+    const ds = String(work.dia).replace(/\s+/g, "");
+    if (ds.endsWith("~")) return null; // 비번 제외
+    if (ds.startsWith("대기") || /^대\d/.test(ds)) {
+      return { kind: "대기", msg: "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요." };
+    }
+    if (!/^\d+$/.test(ds)) return null;
+    const n = Number(ds);
+    if (work.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHolidayDate(date)) {
+      return { kind: "주간미영업", msg: "휴일 미영업 다이아예요 (26·27·28·29·40). 당일 다른 다이아 충당이 없으면 강제휴무 처리되고, 이후 주간 지정근무로 나와야 해요. 미영업 확정 시 주행키로는 없어요." };
+    }
+    if (work.type === "야간" && [61, 62, 63, 64].includes(n) && isHolidayDate(date)) {
+      const tm = new Date(date);
+      tm.setDate(tm.getDate() + 1);
+      if (isHolidayDate(tm)) {
+        return { kind: "야간미영업", msg: "휴일+휴일 미영업 야간 다이아예요 (61~64). 당일 충당이 없으면 강제휴무 처리되고, 이후 지정근무로 나와야 해요. 미영업 확정 시 주행키로는 없고 4시간 야간수당만 급여에 반영돼요." };
+      }
+    }
+    return null;
+  };
+
   // 근무타입 + 날짜로 다이아 구분(day_type) 결정
   const getDiaDayType = (type: string, date: Date) => {
     const todayHol = isHolidayDate(date);
@@ -23629,6 +23653,7 @@ const getKyobunWork = (member: any, date: Date) => {
     const kWork = isKyobun ? getKyobunWork(selectedMember, dateObj) : null;
     const kDayType = kWork ? getDiaDayType(kWork.type, dateObj) : null;
     const kDia = kWork ? getDiaInfo(kWork.dia, kDayType) : null;
+    const kAtt = kWork ? getAttention(kWork, dateObj) : (tWork ? getAttention(tWork, dateObj) : null);
     const kInfo = kWork ? workInfo(kWork.type) : null;
     const kLabel = kInfo ? (LABEL_MAP[kInfo.short] || kInfo.short) : "-";
     const kColor = kInfo ? (COLOR_MAP[kInfo.short] || "#7C3AED") : "#7C3AED";
@@ -23745,6 +23770,11 @@ const getKyobunWork = (member: any, date: Date) => {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 16px" }}>
+            {kAtt && (
+              <div style={{ background: "#FFF7ED", border: "1.5px solid #FDBA74", borderRadius: 12, padding: "10px 12px", marginBottom: 14, fontSize: 12.5, color: "#9A3412", lineHeight: 1.7, fontWeight: 600 }}>
+                ⚠️ {kAtt.msg}
+              </div>
+            )}
             {!isOtherKyobun && (
             <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
               <button onClick={() => onGoAdjust && onGoAdjust(dateStr)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8", background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
@@ -25179,6 +25209,7 @@ const getKyobunWork = (member: any, date: Date) => {
                             const info = work ? workInfo(work.type) : workInfo("");
               const diaDayType = work ? getDiaDayType(work.type, date) : null;
               const diaInfo = work ? getDiaInfo(work.dia, diaDayType) : null;
+              const att = work ? getAttention(work, date) : null;
               const isT = isToday(currentYear, currentMonth, day);
               const isSun = di === 0,
                 isSat = di === 6;
@@ -25279,6 +25310,11 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                                 }}
                               >
                                 {diaInfo.start_time}
+                              </div>
+                            )}
+                            {att && (
+                              <div style={{ textAlign: "center", marginTop: 3 }}>
+                                <span style={{ fontSize: 9, fontWeight: 800, color: "#EA580C", background: "#FFF7ED", borderRadius: 6, padding: "1px 6px", display: "inline-block" }}>확인</span>
                               </div>
                             )}
                           </>
