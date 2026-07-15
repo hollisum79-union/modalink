@@ -10124,6 +10124,21 @@ function MemberManageScreen({ user }: any) {
   const [search, setSearch] = useState("");
   const [unionFilter, setUnionFilter] = useState("전체");
   const [form, setForm] = useState(null);
+  const [vacInfo, setVacInfo] = useState<any>(null); // 결원 수정 시 최근 사유 표시
+  useEffect(() => {
+    const f: any = form;
+    if (f && f.id && String(f.name || "").includes("결원")) {
+      supabase
+        .from("vacancy_log")
+        .select("reason, occurred_date, memo, created_at")
+        .eq("member_id", String(f.id))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .then(({ data }) => setVacInfo(data && data[0] ? data[0] : null));
+    } else {
+      setVacInfo(null);
+    }
+  }, [(form as any)?.id]);
 
   const loadMembers = () => {
     supabase
@@ -10707,6 +10722,13 @@ function MemberManageScreen({ user }: any) {
             >
               {form.id ? "조합원 수정" : "조합원 추가"}
             </div>
+            {vacInfo && (
+              <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#B91C1C", lineHeight: 1.6, marginBottom: 12 }}>
+                🕳 결원 사유: <b>{vacInfo.reason}</b>
+                {vacInfo.occurred_date ? ` · ${String(vacInfo.occurred_date).slice(5, 7)}/${String(vacInfo.occurred_date).slice(8, 10)} 발생` : ""}
+                {vacInfo.memo ? ` · ${vacInfo.memo}` : ""}
+              </div>
+            )}
             <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
               이름
             </div>
@@ -20830,6 +20852,8 @@ function VacancyStatus() {
   const [fillName, setFillName] = React.useState("");
   const [fillEmp, setFillEmp] = React.useState("");
   const [fillPhone, setFillPhone] = React.useState("");
+  const [fillDate, setFillDate] = React.useState(""); // 전입일 (기록용)
+  const [fillPool, setFillPool] = React.useState<any[]>([]); // 사업소 전체 명단 (자동 검색용)
   const [fillSaving, setFillSaving] = React.useState(false);
 
   const load = async () => {
@@ -20915,7 +20939,32 @@ function VacancyStatus() {
     setFillName("");
     setFillEmp("");
     setFillPhone("");
+    setFillDate(todayLocalStr());
+    if (fillPool.length === 0) {
+      supabase
+        .from("members")
+        .select("id, name, employee_number, phone, work_type, work_group, start_position")
+        .then(({ data }) => {
+          if (data) setFillPool(data as any[]);
+        });
+    }
   };
+  // 이름으로 기존 인원 자동 검색 (결원 제외 · 정확 일치)
+  const fillMatches = React.useMemo(() => {
+    const q = fillName.trim();
+    if (!q || q.includes("결원")) return [];
+    return fillPool.filter((m) => String(m.name) === q && !String(m.name).includes("결원"));
+  }, [fillName, fillPool]);
+  const fillMatch = fillMatches.length === 1 ? fillMatches[0] : null;
+  const matchHasSeat = fillMatch && (fillMatch.work_type === "교번" || fillMatch.work_type === "통상");
+  React.useEffect(() => {
+    // 교대 등 의자 없는 인원이면 사번·전화 자동 입력
+    if (fillMatch && !matchHasSeat) {
+      setFillEmp(String(fillMatch.employee_number || ""));
+      setFillPhone(String(fillMatch.phone || ""));
+    }
+  }, [fillMatch ? fillMatch.id : null]);
+
   const saveFill = async () => {
     if (!fill) return;
     const nm = fillName.trim(), emp = fillEmp.trim();
@@ -20927,9 +20976,27 @@ function VacancyStatus() {
       showToast('이름에 "결원"이 들어갈 수 없어요.', "error");
       return;
     }
-    if (vcMembers.some((m) => String(m.employee_number) === emp)) {
+    if (fillMatches.length > 1) {
+      showToast("동명이인이 있어요. 조합원 관리에서 직접 처리해주세요.", "error");
+      return;
+    }
+    if (matchHasSeat) {
+      showToast("이미 교번·통상 자리가 있는 사람이에요. 관리자 → 교번 자리 변경(영구)에서 맞바꾸기 하세요.", "error");
+      return;
+    }
+    // 사번 중복: 이동하는 본인(교대 옛 줄)의 사번이면 허용, 그 외엔 차단
+    const dup = vcMembers.find((m) => String(m.employee_number) === emp);
+    const dupPool = fillPool.find((m) => String(m.employee_number) === emp);
+    if ((dup || dupPool) && !(fillMatch && String(fillMatch.employee_number) === emp)) {
       showToast("이미 명단에 있는 사번이에요. 확인해주세요.", "error");
       return;
+    }
+    const moving = fillMatch && !matchHasSeat; // 교대 등 → 교번 이동
+    if (moving) {
+      const ok = window.confirm(
+        `${nm} 님은 현재 ${fillMatch.work_type || "다른"} 근무자입니다.\n\n이 자리(${fill.name})로 옮기고, 기존 ${fillMatch.work_type} 줄은 삭제합니다.\n(사번이 같아 휴가·기록은 그대로 이어집니다)\n\n계속할까요?`
+      );
+      if (!ok) return;
     }
     setFillSaving(true);
     // 이름표만 교체 — 자리·소속·근무형태·이력 전부 유지 (검증된 "빈 의자에 이름표" 방식)
@@ -20942,17 +21009,24 @@ function VacancyStatus() {
       showToast("저장 실패: " + error.message, "error");
       return;
     }
+    if (moving) {
+      const { error: delErr } = await supabase.from("members").delete().eq("id", fillMatch.id);
+      if (delErr) {
+        showToast(`⚠️ 옛 ${fillMatch.work_type} 줄 삭제 실패 — 조합원 관리에서 "${nm}" 옛 줄을 직접 정리하세요: ` + delErr.message, "error");
+      }
+    }
     // 채움 기록 (append-only — 언제 비고 언제 채워졌는지 족보)
     await supabase.from("vacancy_log").insert({
       member_id: String(fill.id),
       member_name: nm,
       reason: "채움",
-      occurred_date: todayLocalStr(),
-      memo: `${fill.name} 자리에 ${nm} 전입`,
+      occurred_date: fillDate || todayLocalStr(),
+      memo: moving ? `${fill.name} 자리에 ${nm} 이동 (${fillMatch.work_type}→교번)` : `${fill.name} 자리에 ${nm} 전입`,
     });
     setFillSaving(false);
     setFill(null);
-    showToast(`${nm} 배치 완료! 이제 본인에게 앱 가입을 안내하세요.`);
+    setFillPool([]);
+    showToast(moving ? `${nm} 이동 완료! 옛 줄까지 정리됐어요.` : `${nm} 배치 완료! 이제 본인에게 앱 가입을 안내하세요.`);
     load();
   };
 
@@ -21116,10 +21190,27 @@ function VacancyStatus() {
             </div>
             <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>이름</div>
             <input value={fillName} onChange={(e) => setFillName(e.target.value)} placeholder="새 기관사 이름" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+            {fillMatch && !matchHasSeat && (
+              <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#047857", lineHeight: 1.6, marginTop: 6 }}>
+                ✅ 명단에 있는 사람: <b>{fillMatch.name}</b> · {fillMatch.work_type || "형태 미지정"}{fillMatch.work_group ? ` · ${fillMatch.work_group}` : ""} — 사번·전화 자동 입력됨. 저장 시 이 자리로 옮기고 옛 줄은 정리합니다.
+              </div>
+            )}
+            {matchHasSeat && (
+              <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#B91C1C", lineHeight: 1.6, marginTop: 6 }}>
+                ⚠️ <b>{fillMatch.name}</b> 님은 이미 {fillMatch.work_type} 자리가 있어요. 자리 이동은 관리자 → <b>교번 자리 변경(영구)</b>에서 맞바꾸기 하세요 (여기서는 저장 안 됨).
+              </div>
+            )}
+            {fillMatches.length > 1 && (
+              <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "8px 11px", fontSize: 12, color: "#92400E", lineHeight: 1.6, marginTop: 6 }}>
+                ⚠️ 동명이인 {fillMatches.length}명 — 조합원 관리에서 직접 처리해주세요.
+              </div>
+            )}
             <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>사번</div>
             <input value={fillEmp} onChange={(e) => setFillEmp(e.target.value)} placeholder="사번" inputMode="numeric" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
             <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>전화번호 (선택)</div>
             <input value={fillPhone} onChange={(e) => setFillPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>전입일 (기록용)</div>
+            <input type="date" value={fillDate} onChange={(e) => setFillDate(e.target.value)} style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none", background: "#fff" }} />
             <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "8px 11px", fontSize: 11.5, color: "#3730A3", lineHeight: 1.6, marginTop: 12 }}>
               저장 후 본인에게 앱 가입을 안내하세요 (이름표 교체가 먼저, 가입이 나중 — 순서 지키기!)
             </div>
