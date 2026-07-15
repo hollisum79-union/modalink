@@ -17890,10 +17890,11 @@ function RotationEditScreen() {
   const [allRows, setAllRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewVer, setViewVer] = useState("");
-  const [edits, setEdits] = useState<Record<number, { dia_value?: string; work_type?: string }>>({});
+  const [edits, setEdits] = useState<Record<number, { dia_value?: string; work_type?: string; note?: string | null }>>({});
   const [sheetPos, setSheetPos] = useState<number | null>(null);
   const [sheetDia, setSheetDia] = useState("");
   const [sheetWt, setSheetWt] = useState("");
+  const [sheetNote, setSheetNote] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [effDate, setEffDate] = useState(todayLocalStr());
   const [saving, setSaving] = useState(false);
@@ -18063,7 +18064,7 @@ function RotationEditScreen() {
     [allRows, group, viewVer]
   );
   const curRows = baseRows.map((r) => ({ ...r, ...(edits[r.position] || {}) }));
-  const changedList = curRows.filter((r, i) => r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type);
+  const changedList = curRows.filter((r, i) => r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type || (r.note ?? "") !== (baseRows[i].note ?? ""));
   const isLatest = versions.length > 0 && viewVer === versions[0];
 
   // 다이아 검색: 목록은 전부 유지, 일치 칸만 형광 표시 + 첫 칸으로 자동 스크롤
@@ -18088,6 +18089,7 @@ function RotationEditScreen() {
     setSheetPos(r.position);
     setSheetDia(String(r.dia_value ?? ""));
     setSheetWt(String(r.work_type ?? ""));
+    setSheetNote(String(r.note ?? ""));
   };
   const applySheet = () => {
     if (sheetPos == null) return;
@@ -18096,7 +18098,7 @@ function RotationEditScreen() {
       showToast("다이아 값을 입력하세요", "error");
       return;
     }
-    setEdits((prev) => ({ ...prev, [sheetPos]: { dia_value: v, work_type: sheetWt } }));
+    setEdits((prev) => ({ ...prev, [sheetPos]: { dia_value: v, work_type: sheetWt, note: sheetNote.trim() || null } }));
     setSheetPos(null);
   };
 
@@ -18116,6 +18118,7 @@ function RotationEditScreen() {
       position: r.position,
       dia_value: r.dia_value,
       work_type: r.work_type,
+      note: r.note ?? null,
       effective_date: effDate,
     }));
     const { error } = await supabase.from("schedule_rotation").insert(rows);
@@ -18444,7 +18447,7 @@ function RotationEditScreen() {
           <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>배열 데이터가 없습니다.</div>
         ) : (
           curRows.map((r, i) => {
-            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type;
+            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type || (r.note ?? "") !== (baseRows[i].note ?? "");
             const hit = diaMatchPos.has(r.position);
             const ws = WT_STYLE[String(r.work_type)] || { bg: "#F3F4F6", fg: "#6B7280" };
             return (
@@ -18469,6 +18472,9 @@ function RotationEditScreen() {
                 <span style={{ fontWeight: 800, color: "#111827" }}>
                   {String(r.dia_value)}
                   {ch && <span style={{ color: "#B45309", fontSize: 11 }}> ✎</span>}
+                  {r.note && (
+                    <span style={{ display: "block", fontSize: 10.5, fontWeight: 600, color: "#6B7280" }}>📝 {String(r.note)}</span>
+                  )}
                 </span>
                 <span style={{ fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 999, justifySelf: "start", background: ws.bg, color: ws.fg }}>
                   {String(r.work_type)}
@@ -18575,6 +18581,16 @@ function RotationEditScreen() {
                 </button>
               ))}
             </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>메모 (선택) — 왜 이 값인지 기록</div>
+            <input
+              value={sheetNote}
+              onChange={(e) => setSheetNote(e.target.value)}
+              placeholder="예: 공사 강제 휴무지정 · 원래 대기61"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13.5, fontFamily: "inherit", outline: "none" }}
+            />
             <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
               <button
                 onClick={() => setSheetPos(null)}
