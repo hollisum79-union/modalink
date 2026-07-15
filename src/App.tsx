@@ -10188,6 +10188,11 @@ function MemberManageScreen({ user }: any) {
       ...(wtVal === "교번" && form.work_group
         ? { schedule_total: form.work_group === "도봉" ? 41 : 114 }
         : {}),
+      ...(wtVal === "통상"
+        ? form.tongsang_base_dia != null
+          ? { tongsang_base_dia: Number(form.tongsang_base_dia), tongsang_base_date: form.tongsang_base_date || todayLocalStr() }
+          : { tongsang_base_dia: null, tongsang_base_date: null }
+        : {}),
     };
     if (form.id) {
       const orig = members.find((mm: any) => mm.id === form.id);
@@ -10869,6 +10874,32 @@ function MemberManageScreen({ user }: any) {
                       </button>
                     );
                   })}
+                </div>
+              </>
+            )}
+            {form.work_type === "통상" && (
+              <>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
+                  통상 다이아 기준 — "이 날짜에 이 다이아"를 정하면 나머지는 51→54 순환으로 자동 계산
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  <input
+                    type="date"
+                    value={form.tongsang_base_date || ""}
+                    onChange={(e) => setForm({ ...form, tongsang_base_date: e.target.value })}
+                    style={{ WebkitAppearance: "none", appearance: "none", flex: 1.4, boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", outline: "none", background: "#fff" }}
+                  />
+                  <select
+                    value={form.tongsang_base_dia != null ? String(form.tongsang_base_dia) : ""}
+                    onChange={(e) => setForm({ ...form, tongsang_base_dia: e.target.value === "" ? null : Number(e.target.value) })}
+                    style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", background: "#fff" }}
+                  >
+                    <option value="">미지정</option>
+                    <option value="51">51</option>
+                    <option value="52">52</option>
+                    <option value="53">53</option>
+                    <option value="54">54</option>
+                  </select>
                 </div>
               </>
             )}
