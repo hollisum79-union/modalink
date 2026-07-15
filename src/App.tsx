@@ -77,13 +77,32 @@ function pickRotationVersion(rotationData: any[], groupName: string, dateStr: st
 const _holCache = new Map<number, Promise<string[]>>();
 function fetchHolidays(year: number): Promise<string[]> {
   if (!_holCache.has(year)) {
-    _holCache.set(
-      year,
-      fetch("/.netlify/functions/read-holidays?year=" + year)
-        .then((r) => r.json())
-        .then((j: any) => (j && j.holidays ? (j.holidays as string[]) : []))
-        .catch(() => [] as string[])
-    );
+    const lsKey = "holidays_" + year;
+    // 저장해둔 목록이 있으면 먼저 꺼냄 (하루 이내면 그대로 씀 → 기다림 없이 바로 빨간날 표시)
+    let saved: string[] = [];
+    let savedAt = 0;
+    try {
+      const raw = localStorage.getItem(lsKey);
+      if (raw) {
+        const j = JSON.parse(raw);
+        if (Array.isArray(j.list)) { saved = j.list; savedAt = Number(j.at) || 0; }
+      }
+    } catch (e) {}
+    const fresh = fetch("/.netlify/functions/read-holidays?year=" + year)
+      .then((r) => r.json())
+      .then((j: any) => {
+        const list: string[] = j && j.holidays ? j.holidays : [];
+        if (list.length > 0) {
+          try { localStorage.setItem(lsKey, JSON.stringify({ list, at: Date.now() })); } catch (e) {}
+          _holCache.set(year, Promise.resolve(list));
+          return list;
+        }
+        return saved;
+      })
+      .catch(() => saved);
+    const oneDay = 24 * 60 * 60 * 1000;
+    const usable = saved.length > 0 && Date.now() - savedAt < oneDay;
+    _holCache.set(year, usable ? Promise.resolve(saved) : fresh);
   }
   return _holCache.get(year)!;
 }
@@ -23410,17 +23429,9 @@ if (data) {
   // ============================================================
   // 공휴일 불러오기 (한국천문연구원 API)
   React.useEffect(() => {
-    const fetchHolidays = async () => {
-      try {
-        const res = await fetch(
-          "/.netlify/functions/read-holidays?year=" + currentYear
-        );
-        const json = await res.json();
-        if (json.holidays) setHolidays(json.holidays);
-      } catch (e) {
-      }
-    };
-    fetchHolidays();
+    fetchHolidays(currentYear).then((h) => {
+      if (h && h.length > 0) setHolidays(h);
+    });
   }, [currentYear]);
 
   // 교번 다이아 시간표 전체 불러오기
@@ -23936,7 +23947,7 @@ const getKyobunWork = (member: any, date: Date) => {
               const work = getShiftWork(crew, date);
               const info = workInfo(work);
               const isT = isToday(y, m, day);
-              const isSun = di === 0,
+              const isSun = di === 0 || isHolidayDate(new Date(y, m - 1, day)),
                 isSat = di === 6;
               const key = dateKey(y, m, day);
               const dayMemos = memos[key] || [];
