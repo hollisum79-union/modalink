@@ -20792,6 +20792,7 @@ function VacancyStatus() {
   const [occDate, setOccDate] = React.useState("");
   const [memo, setMemo] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [vcFilter, setVcFilter] = React.useState("전체");
 
   const load = async () => {
     const [mRes, rRes, hRes, lRes] = await Promise.all([
@@ -20846,8 +20847,14 @@ function VacancyStatus() {
       return { ...m, isTs, pos: isTs ? 0 : effStartOf(m), w1, w2, log };
     })
     .sort((a, b) => {
-      if (a.isTs !== b.isTs) return a.isTs ? 1 : -1; // 교번 먼저, 통상 뒤
-      return a.work_group === b.work_group ? a.pos - b.pos : String(a.work_group).localeCompare(String(b.work_group), "ko");
+      // 결원 번호(결원01, 결원02…) 순으로 항상 정렬, 번호 없으면 이름순
+      const numOf = (n: any) => {
+        const d = String(n ?? "").replace(/[^0-9]/g, "");
+        return d ? Number(d) : 9999;
+      };
+      const na = numOf(a.name), nb = numOf(b.name);
+      if (na !== nb) return na - nb;
+      return String(a.name).localeCompare(String(b.name), "ko");
     });
 
   const cntDae = vacants.filter((v) => v.work_group === "대공원").length;
@@ -20907,18 +20914,30 @@ function VacancyStatus() {
               [cntDo, "도봉", "#FEF2F2", "#DC2626"],
               [vacants.length, "전체", "#F3F4F6", "#1F2937"],
             ].map(([n, l, bg, fg]: any) => (
-              <div key={l} style={{ flex: 1, background: bg, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+              <div
+                key={l}
+                onClick={() => setVcFilter(l)}
+                style={{
+                  flex: 1,
+                  background: bg,
+                  borderRadius: 12,
+                  padding: "10px 8px",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  border: vcFilter === l ? `2px solid ${fg}` : "2px solid transparent",
+                }}
+              >
                 <div style={{ fontSize: 20, fontWeight: 900, color: fg }}>{vcLoaded ? n : "–"}</div>
-                <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700, marginTop: 2 }}>{l}</div>
+                <div style={{ fontSize: 10.5, color: vcFilter === l ? fg : "#9CA3AF", fontWeight: 700, marginTop: 2 }}>{l}</div>
               </div>
             ))}
           </div>
-          {vacants.length === 0 ? (
+          {vacants.filter((v) => (vcFilter === "전체" ? true : v.work_group === vcFilter)).length === 0 ? (
             <div style={{ textAlign: "center", padding: "16px 0", color: "#9CA3AF", fontSize: 13 }}>
               {vcLoaded ? "결원이 없습니다." : "불러오는 중..."}
             </div>
           ) : (
-            vacants.map((v, i) => (
+            vacants.filter((v) => (vcFilter === "전체" ? true : v.work_group === vcFilter)).map((v, i) => (
               <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", borderTop: i === 0 ? 0 : "1px solid #F3F4F6" }}>
                 <div style={{ width: 40, height: 40, borderRadius: 12, background: v.isTs ? "#FFF7ED" : "#FEF2F2", color: v.isTs ? "#C2410C" : "#DC2626", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: v.isTs ? 11 : 13, flexShrink: 0 }}>
                   {v.isTs ? (v.w1 ? v.w1.dia : "51~54") : v.pos}
@@ -21139,7 +21158,7 @@ function StartBatchAssign() {
               if (Number(String(aoa[headRow][c] ?? "").trim()) === dayNum) { dayCol = c; break; }
             }
             const noCol = nameCol - 1;
-            const people: { no: number; name: string; dia: string }[] = [];
+            const people: { no: number; name: string; dia: string; row: number }[] = [];
             const skipped: string[] = [];
             for (let r = headRow + 1; r < aoa.length; r++) {
               const row = aoa[r] || [];
@@ -21147,7 +21166,7 @@ function StartBatchAssign() {
               const nm = String(row[nameCol] ?? "").trim();
               if (!noRaw && !nm) continue;
               if (!/^\d+$/.test(noRaw)) { if (nm) skipped.push(`${noRaw || "?"} ${nm}`); continue; }
-              people.push({ no: Number(noRaw), name: nm, dia: dayCol >= 0 ? String(row[dayCol] ?? "").trim() : "" });
+              people.push({ no: Number(noRaw), name: nm, dia: dayCol >= 0 ? String(row[dayCol] ?? "").trim() : "", row: r });
             }
             if (people.length === 0) { msgs.push({ type: "warn", msg: `${sn} 시트: 명단을 읽지 못함` }); continue; }
             if (skipped.length) msgs.push({ type: "warn", msg: `${sn}: 순번 밖 행 제외 — ${skipped.join(", ")}` });
@@ -21240,6 +21259,34 @@ function StartBatchAssign() {
               continue;
             }
             msgs.push({ type: "ok", msg: `${sn}: ${dateStr} 열 ↔ 배열 대조 일치 ${L - best.bad}/${L}칸 (회전 위치 자동 인식)` });
+            // ★ 한 달 전체 검산: 파일의 모든 날짜 열 × 전원 vs 배열 (파일 반출 없이 눈으로 확정)
+            {
+              const dayColsAll: { d: number; c: number }[] = [];
+              for (let c = nameCol + 1; c < (aoa[headRow] || []).length; c++) {
+                const dn = Number(String(aoa[headRow][c] ?? "").trim());
+                if (Number.isInteger(dn) && dn >= 1 && dn <= 31) dayColsAll.push({ d: dn, c });
+              }
+              let totalCells = 0, badCells = 0;
+              const badList: string[] = [];
+              for (const dc of dayColsAll) {
+                const delta = dc.d - dayNum;
+                for (const p of people) {
+                  const val = String((aoa[p.row] || [])[dc.c] ?? "").trim();
+                  if (!val) continue;
+                  const expect = diaSeq[((((p.no - 1 + best.off + delta) % L) + L) % L)];
+                  totalCells++;
+                  if (norm(expect) !== norm(val)) {
+                    badCells++;
+                    if (badList.length < 8) badList.push(`${dc.d}일 ${p.no}번 ${p.name}: 파일 "${val}" vs 배열 "${expect}"`);
+                  }
+                }
+              }
+              msgs.push(
+                badCells === 0
+                  ? { type: "ok", msg: `${sn}: 한 달 전체 검산 통과 ✅ — ${totalCells}칸 전부 배열과 일치` }
+                  : { type: "warn", msg: `${sn}: 한 달 전체 검산 — ${totalCells}칸 중 ${badCells}칸 불일치 (그날 근무조정이면 정상) — ${badList.join(" / ")}${badCells > 8 ? ` 외 ${badCells - 8}칸` : ""}` }
+              );
+            }
             if (best.bad > 0) {
               const diffs: string[] = [];
               for (let i = 0; i < L; i++) {
