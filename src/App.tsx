@@ -17730,6 +17730,7 @@ function RotationEditScreen() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [ratioOpen, setRatioOpen] = useState(false);
+  const [diaSearch, setDiaSearch] = useState("");
 
   const edOf = (r: any) => String(r.effective_date || ROTATION_BASE_DATE).slice(0, 10);
 
@@ -18233,13 +18234,45 @@ function RotationEditScreen() {
           <span>다이아</span>
           <span>근무형태</span>
         </div>
+        <input
+          value={diaSearch}
+          onChange={(e) => setDiaSearch(e.target.value)}
+          placeholder="🔍 다이아 검색 (예: 79) — 순번 위치 빨리 찾기"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit", marginBottom: 6, outline: "none" }}
+        />
+        {diaSearch.trim() && (
+          <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 700, padding: "0 2px 6px" }}>
+            {(() => {
+              const q = diaSearch.trim();
+              const hits = curRows.filter((r) => String(r.dia_value).replace(/\s+/g, "") === q || String(r.dia_value).replace(/\s+/g, "") === q + "~");
+              const loose = curRows.filter((r) => String(r.dia_value).includes(q));
+              const n = hits.length || loose.length;
+              return n === 0 ? `"${q}" — 이 판에 없음 (${group} 기준, 위에서 그룹 전환)` : `"${q}" 결과 ${n}칸 — ${group}`;
+            })()}
+          </div>
+        )}
         {loading ? (
           <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>불러오는 중...</div>
         ) : baseRows.length === 0 ? (
           <div style={{ textAlign: "center", padding: "26px 0", color: "#9CA3AF", fontSize: 13 }}>배열 데이터가 없습니다.</div>
         ) : (
-          curRows.map((r, i) => {
-            const ch = r.dia_value !== baseRows[i].dia_value || r.work_type !== baseRows[i].work_type;
+          curRows.filter((r) => {
+            const q = diaSearch.trim();
+            if (!q) return true;
+            const dv = String(r.dia_value).replace(/\s+/g, "");
+            if (curRows.some((x) => {
+              const xv = String(x.dia_value).replace(/\s+/g, "");
+              return xv === q || xv === q + "~";
+            })) {
+              return dv === q || dv === q + "~";
+            }
+            return String(r.dia_value).includes(q);
+          }).map((r) => {
+            const bi = curRows.findIndex((x) => x.position === r.position);
+            const ch = r.dia_value !== baseRows[bi].dia_value || r.work_type !== baseRows[bi].work_type;
             const ws = WT_STYLE[String(r.work_type)] || { bg: "#F3F4F6", fg: "#6B7280" };
             return (
               <div
@@ -20793,6 +20826,11 @@ function VacancyStatus() {
   const [memo, setMemo] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [vcFilter, setVcFilter] = React.useState("전체");
+  const [fill, setFill] = React.useState<any>(null); // 채우기 대상 결원
+  const [fillName, setFillName] = React.useState("");
+  const [fillEmp, setFillEmp] = React.useState("");
+  const [fillPhone, setFillPhone] = React.useState("");
+  const [fillSaving, setFillSaving] = React.useState(false);
 
   const load = async () => {
     const [mRes, rRes, hRes, lRes] = await Promise.all([
@@ -20862,7 +20900,7 @@ function VacancyStatus() {
   const cntKb = vacants.filter((v) => !v.isTs).length;
   const cntTs = vacants.filter((v) => v.isTs).length;
 
-  const REASON_COLOR: Record<string, string> = { 퇴사: "#DC2626", 전출: "#D97706", "휴직(장기)": "#7C3AED", 기타: "#6B7280" };
+  const REASON_COLOR: Record<string, string> = { 퇴사: "#DC2626", 전출: "#D97706", "휴직(장기)": "#7C3AED", 기타: "#6B7280", 채움: "#059669" };
   const wLabel = (w: any) => (w ? `${w.dia}${w.type === "주간" || w.type === "야간" ? ` (${w.type})` : w.type ? ` (${w.type})` : ""}` : "-");
   const mdOf = (s: string) => (s ? `${Number(String(s).slice(5, 7))}/${Number(String(s).slice(8, 10))}` : "");
 
@@ -20872,6 +20910,52 @@ function VacancyStatus() {
     setOccDate(v.log && v.log.occurred_date ? String(v.log.occurred_date).slice(0, 10) : "");
     setMemo(v.log && v.log.memo ? v.log.memo : "");
   };
+  const openFill = (v: any) => {
+    setFill(v);
+    setFillName("");
+    setFillEmp("");
+    setFillPhone("");
+  };
+  const saveFill = async () => {
+    if (!fill) return;
+    const nm = fillName.trim(), emp = fillEmp.trim();
+    if (!nm || !emp) {
+      showToast("이름과 사번은 필수입니다.", "error");
+      return;
+    }
+    if (nm.includes("결원")) {
+      showToast('이름에 "결원"이 들어갈 수 없어요.', "error");
+      return;
+    }
+    if (vcMembers.some((m) => String(m.employee_number) === emp)) {
+      showToast("이미 명단에 있는 사번이에요. 확인해주세요.", "error");
+      return;
+    }
+    setFillSaving(true);
+    // 이름표만 교체 — 자리·소속·근무형태·이력 전부 유지 (검증된 "빈 의자에 이름표" 방식)
+    const { error } = await supabase
+      .from("members")
+      .update({ name: nm, employee_number: emp, ...(fillPhone.trim() ? { phone: fillPhone.trim() } : {}) })
+      .eq("id", fill.id);
+    if (error) {
+      setFillSaving(false);
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    // 채움 기록 (append-only — 언제 비고 언제 채워졌는지 족보)
+    await supabase.from("vacancy_log").insert({
+      member_id: String(fill.id),
+      member_name: nm,
+      reason: "채움",
+      occurred_date: todayLocalStr(),
+      memo: `${fill.name} 자리에 ${nm} 전입`,
+    });
+    setFillSaving(false);
+    setFill(null);
+    showToast(`${nm} 배치 완료! 이제 본인에게 앱 가입을 안내하세요.`);
+    load();
+  };
+
   const saveLog = async () => {
     if (!sheet) return;
     setSaving(true);
@@ -20967,6 +21051,23 @@ function VacancyStatus() {
                   )}
                 </div>
                 <button
+                  onClick={() => openFill(v)}
+                  style={{
+                    border: "1.5px solid #A7F3D0",
+                    background: "#ECFDF5",
+                    color: "#059669",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    borderRadius: 8,
+                    padding: "7px 10px",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    flexShrink: 0,
+                  }}
+                >
+                  채우기
+                </button>
+                <button
                   onClick={() => openSheet(v)}
                   style={{
                     border: v.log ? "1.5px solid #E5E7EB" : "1.5px solid #FCA5A5",
@@ -20988,12 +21089,48 @@ function VacancyStatus() {
           )}
           <div style={{ background: "#EEF2FF", borderRadius: 12, padding: "12px 14px", marginTop: 12, fontSize: 12.5, color: "#3730A3", lineHeight: 1.7 }}>
             <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 결원 채우기 · 만들기</div>
-            <b>신규 전입:</b> 관리자 → 조합원 관리 → "결원" 검색 → 채울 자리 수정 → 이름·사번을 그 사람 것으로 변경 → 저장 후 본인에게 가입 안내 (순서 꼭 지키기!)
+            <b>신규 전입:</b> 위 결원 카드의 <b>[채우기]</b> 버튼 → 이름·사번 입력 → 저장 후 본인에게 가입 안내 (순서 꼭 지키기!)
             <br />
             <b>퇴직:</b> 조합원 관리에서 그 사람 이름을 다시 "결원○○"로 되돌린 뒤, 여기서 사유를 적어두세요.
           </div>
           <div style={{ fontSize: 10.5, color: "#9CA3AF", marginTop: 8, lineHeight: 1.6 }}>
             결원 수·순번·근무는 조합원 명단에서 자동 집계됩니다. 사유 수정도 새 기록으로 쌓입니다(덮어쓰기 없음).
+          </div>
+        </div>
+      )}
+
+      {/* 채우기 시트 (신규 전입 배치) */}
+      {fill && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setFill(null);
+          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000 }}
+        >
+          <div style={{ background: "#fff", width: "100%", maxWidth: 430, borderRadius: "20px 20px 0 0", padding: "18px 18px calc(24px + env(safe-area-inset-bottom, 0px))" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
+              👤 {fill.name} 자리 채우기 · 순번 {fill.pos} ({fill.work_group})
+            </div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", margin: "4px 0 6px", lineHeight: 1.6 }}>
+              이름표만 바뀝니다 — 자리·소속·근무형태·근무 이력은 그대로 유지돼요.
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>이름</div>
+            <input value={fillName} onChange={(e) => setFillName(e.target.value)} placeholder="새 기관사 이름" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>사번</div>
+            <input value={fillEmp} onChange={(e) => setFillEmp(e.target.value)} placeholder="사번" inputMode="numeric" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, margin: "12px 0 6px" }}>전화번호 (선택)</div>
+            <input value={fillPhone} onChange={(e) => setFillPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ WebkitAppearance: "none", appearance: "none", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
+            <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "8px 11px", fontSize: 11.5, color: "#3730A3", lineHeight: 1.6, marginTop: 12 }}>
+              저장 후 본인에게 앱 가입을 안내하세요 (이름표 교체가 먼저, 가입이 나중 — 순서 지키기!)
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button onClick={() => setFill(null)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "1.5px solid #E5E7EB", background: "#fff", color: "#6B7280", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>
+                취소
+              </button>
+              <button onClick={saveFill} disabled={fillSaving} style={{ flex: 1.4, padding: "13px 0", borderRadius: 12, border: 0, background: fillSaving ? "#9CA3AF" : "#059669", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>
+                {fillSaving ? "저장 중..." : "배치 저장"}
+              </button>
+            </div>
           </div>
         </div>
       )}
