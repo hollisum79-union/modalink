@@ -16907,6 +16907,70 @@ const APPLY_KINDS: Record<string, string> = {
   no_holiday_fill: "휴무충당 불가",
 };
 
+// ── 신청 날짜 검사 (지원근무·지정근무·신청함 대리 입력 공용) ──
+//   규칙 ① 지난 날짜는 안 됨 (오늘 포함 이후만)
+//        ② 본인이 나오는 날(주간·야간·대기)에는 안 됨
+//        ③ 비번도 안 됨 (야간 뛰고 난 다음날이라 못 나옴)
+//        ④ 단, 강제휴무 예정일은 됨 — 원래 근무지만 미영업 다이아라 안 나오는 날이므로
+//           (주간 26·27·28·29·40 = 휴일 / 야간 61~64 = 휴일+다음날 휴일)
+//   문제가 있으면 사유 문자열을, 없으면 빈 문자열을 돌려준다.
+async function checkApplyDate(memberId: any, workDate: string): Promise<string> {
+  if (!workDate) return "날짜를 선택하세요";
+  if (workDate < todayLocalStr()) return "지난 날짜는 신청할 수 없어요";
+  const { data: m } = await supabase
+    .from("members")
+    .select("id, name, employee_number, work_group, work_type, start_position, schedule_total, shift_team")
+    .eq("id", memberId)
+    .maybeSingle();
+  if (!m) return ""; // 사람을 못 찾으면 막지 않음 (저장 단계에서 걸림)
+  const d = new Date(workDate + "T00:00:00");
+
+  if (m.work_type === "교번" && m.start_position != null) {
+    const [rotRes, shRes, swRes, allRes, hols] = await Promise.all([
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_start_history").select("*"),
+      supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+      supabase.from("members").select("id, employee_number, work_group, start_position, schedule_total"),
+      fetchHolidays(d.getFullYear()),
+    ]);
+    const w: any = calcKyobunWork(m, d, rotRes.data || [], swRes.data || [], allRes.data || [], shRes.data || []);
+    if (!w) return "";
+    if (w.type === "비번") return `그날은 ${m.name}님 비번이에요 (야간 다음날). 근무 없는 날만 신청할 수 있어요.`;
+    if (w.type === "주간" || w.type === "야간") {
+      // 강제휴무 예정일인지 확인 — 미영업 다이아면 안 나오는 날이라 신청 가능
+      const isHol = (dt: Date) => {
+        const g = dt.getDay();
+        if (g === 0 || g === 6) return true;
+        const ss = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+        return Array.isArray(hols) && hols.includes(ss);
+      };
+      const ds = String(w.dia).replace(/\s+/g, "");
+      const n = /^\d+$/.test(ds) ? Number(ds) : -1;
+      let forcedRest = false;
+      if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(d)) forcedRest = true;
+      if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(d)) {
+        const tm = new Date(d);
+        tm.setDate(tm.getDate() + 1);
+        if (isHol(tm)) forcedRest = true;
+      }
+      if (!forcedRest)
+        return `그날은 ${m.name}님 근무일이에요 (${w.type} ${w.dia}). 근무 없는 날만 신청할 수 있어요.`;
+    }
+  } else if (m.work_type === "교대" && m.shift_team) {
+    const { data: sb } = await supabase
+      .from("shift_base")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const t = calcShiftWork(m.shift_team, d, sb);
+    if (t === "비번") return `그날은 ${m.name}님 비번이에요 (야간 다음날). 근무 없는 날만 신청할 수 있어요.`;
+    if (t === "주간" || t === "야간")
+      return `그날은 ${m.name}님 근무일이에요 (교대 ${t}). 근무 없는 날만 신청할 수 있어요.`;
+  }
+  return "";
+}
+
 // ── 명단에서 바로 신청 (지원근무·지정근무 공용 팝업) ──
 //   사람은 이미 정해져 있고 날짜만 고른다. 저장 규칙(중복 방지 포함)은 신청함 대리 입력과 동일.
 //   ※ 두 화면이 이 하나를 같이 씀 — 규칙이 바뀌어도 고칠 곳은 여기 한 곳.
@@ -16929,6 +16993,12 @@ function QuickApplyModal({
   const save = async () => {
     if (!workDate) return showToast("날짜를 선택하세요", "error");
     setSaving(true);
+    // 지난 날짜 · 본인 근무일 차단
+    const bad = await checkApplyDate(member.id, workDate);
+    if (bad) {
+      setSaving(false);
+      return showToast(bad, "error");
+    }
     // 지원근무: 같은 2개월분에 유지 중인 신청이 이미 있으면 중복 방지 (신청함과 같은 규칙)
     if (kind === "support") {
       const wd = new Date(workDate + "T00:00:00");
@@ -16987,9 +17057,13 @@ function QuickApplyModal({
         <input
           type="date"
           value={workDate}
+          min={todayLocalStr()}
           onChange={(e) => setWorkDate(e.target.value)}
           style={{ width: "100%", border: "1.5px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 14, fontFamily: "inherit", outline: "none", WebkitAppearance: "none", appearance: "none" }}
         />
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6, lineHeight: 1.6 }}>
+          휴무 또는 강제휴무 예정일만 됩니다. 근무일·비번·지난 날짜는 안 돼요.
+        </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button
             onClick={onClose}
@@ -17072,6 +17146,15 @@ function OperatorApply({ opName }: { opName: string }) {
       return;
     }
     setSaving(true);
+    // 지난 날짜 · 본인 근무일 차단 (휴무충당 불가 기록은 근무일에도 적을 수 있어 제외)
+    if (kind === "designated" || kind === "support") {
+      const bad = await checkApplyDate(picked.id, workDate);
+      if (bad) {
+        setSaving(false);
+        showToast(bad, "error");
+        return;
+      }
+    }
     // 지원근무: 같은 2개월분에 유지 중인 신청이 이미 있으면 중복 방지
     if (kind === "support") {
       const wd = new Date(workDate + "T00:00:00");
@@ -17293,6 +17376,7 @@ function OperatorApply({ opName }: { opName: string }) {
           <input
             type="date"
             value={workDate}
+            min={kind === "no_holiday_fill" ? undefined : todayLocalStr()}
             onChange={(e) => setWorkDate(e.target.value)}
             style={{ ...inputSt, marginBottom: 4 }}
           />
