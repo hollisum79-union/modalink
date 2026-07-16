@@ -16553,7 +16553,8 @@ function OperatorHist() {
 }
 
 // ── 지정근무: 강제 휴무 → 지정근무 현황 (자동 집계 · 신청은 실데이터) ──
-function OperatorDesignated() {
+function OperatorDesignated({ opName }: { opName: string }) {
+  const [quickFor, setQuickFor] = useState<any>(null); // 명단에서 바로 신청할 사람
   const [applies, setApplies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [ledger, setLedger] = useState<any[]>([]);
@@ -16575,18 +16576,20 @@ function OperatorDesignated() {
     await supabase.from("op_settings").upsert({ key: "forced_rest_base_date", value: v });
   };
 
+  // 신청 목록 (명단에서 바로 신청한 뒤에도 다시 부름)
+  const load = async () => {
+    const { data } = await supabase
+      .from("chungdang_apply")
+      .select("*")
+      .eq("kind", "designated")
+      .neq("status", "canceled")
+      .order("work_date", { ascending: true })
+      .limit(50);
+    setApplies(data || []);
+    setLoading(false);
+  };
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from("chungdang_apply")
-        .select("*")
-        .eq("kind", "designated")
-        .neq("status", "canceled")
-        .order("work_date", { ascending: true })
-        .limit(50);
-      setApplies(data || []);
-      setLoading(false);
-    })();
+    load();
   }, []);
 
   // 지정근무 현황 자동 계산 (읽기 전용 집계 — 아무것도 쓰지 않음)
@@ -16674,7 +16677,7 @@ function OperatorDesignated() {
             owedList.push({ d: hd.str, label: `${hd.md}${w.type === "야간" ? "야" : "주"}${ds}` });
           }
           const paidList = paidByEmp.get(emp) || [];
-          if (owedList.length > 0 || paidList.length > 0) rows.push({ name: m.name, owedList, paidList });
+          if (owedList.length > 0 || paidList.length > 0) rows.push({ id: m.id, name: m.name, owedList, paidList });
         }
         setLedger(rows);
       } catch (e) {
@@ -16829,6 +16832,14 @@ function OperatorDesignated() {
               >
                 {remain > 0 ? `지정 ${remain}회 예정` : "✓ 완료"}
               </span>
+              {remain > 0 && l.id != null && (
+                <button
+                  onClick={() => setQuickFor({ id: l.id, name: l.name })}
+                  style={{ marginLeft: 8, border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
+                >
+                  신청
+                </button>
+              )}
             </div>
           );
         })
@@ -16875,6 +16886,16 @@ function OperatorDesignated() {
         <br />
         취소하거나 날짜를 바꾸면 미이행이고, 확정 후 휴가를 내면 이행한 것으로 칩니다.
       </div>
+
+      {quickFor && (
+        <QuickApplyModal
+          kind="designated"
+          member={quickFor}
+          opName={opName}
+          onClose={() => setQuickFor(null)}
+          onSaved={() => { setQuickFor(null); load(); }}
+        />
+      )}
     </div>
   );
 }
@@ -16885,6 +16906,109 @@ const APPLY_KINDS: Record<string, string> = {
   support: "지원근무",
   no_holiday_fill: "휴무충당 불가",
 };
+
+// ── 명단에서 바로 신청 (지원근무·지정근무 공용 팝업) ──
+//   사람은 이미 정해져 있고 날짜만 고른다. 저장 규칙(중복 방지 포함)은 신청함 대리 입력과 동일.
+//   ※ 두 화면이 이 하나를 같이 씀 — 규칙이 바뀌어도 고칠 곳은 여기 한 곳.
+function QuickApplyModal({
+  kind,
+  member,
+  opName,
+  onClose,
+  onSaved,
+}: {
+  kind: "designated" | "support";
+  member: any;
+  opName: string;
+  onClose: () => void;
+  onSaved?: () => void;
+}) {
+  const [workDate, setWorkDate] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!workDate) return showToast("날짜를 선택하세요", "error");
+    setSaving(true);
+    // 지원근무: 같은 2개월분에 유지 중인 신청이 이미 있으면 중복 방지 (신청함과 같은 규칙)
+    if (kind === "support") {
+      const wd = new Date(workDate + "T00:00:00");
+      const wy = wd.getFullYear();
+      const wStartM = wd.getMonth() - (wd.getMonth() % 2);
+      const bs = `${wy}-${String(wStartM + 1).padStart(2, "0")}-01`;
+      const bLast = new Date(wy, wStartM + 2, 0).getDate();
+      const be = `${wy}-${String(wStartM + 2).padStart(2, "0")}-${String(bLast).padStart(2, "0")}`;
+      const { data: dup } = await supabase
+        .from("chungdang_apply")
+        .select("id, work_date")
+        .eq("kind", "support")
+        .eq("member_id", member.id)
+        .eq("status", "applied")
+        .gte("work_date", bs)
+        .lte("work_date", be)
+        .limit(1);
+      if (dup && dup.length > 0) {
+        setSaving(false);
+        return showToast(
+          `${member.name}님은 이미 ${dup[0].work_date}에 유지 중인 신청이 있어요. 날짜를 바꾸려면 기존 신청을 먼저 취소하세요.`,
+          "error"
+        );
+      }
+    }
+    const { error } = await supabase.from("chungdang_apply").insert({
+      member_id: member.id,
+      member_name: member.name,
+      kind,
+      work_date: workDate,
+      via: opName,
+    });
+    setSaving(false);
+    if (error) return showToast("저장 실패: " + error.message, "error");
+    showToast(`${member.name} · ${APPLY_KINDS[kind]} 입력됨`);
+    onClose();
+    if (onSaved) onSaved();
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 380 }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
+          {member.name} · {APPLY_KINDS[kind]} 신청
+        </div>
+        <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4, marginBottom: 14 }}>
+          대리 입력 · {opName}
+        </div>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 6 }}>근무 날짜</div>
+        <input
+          type="date"
+          value={workDate}
+          onChange={(e) => setWorkDate(e.target.value)}
+          style={{ width: "100%", border: "1.5px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 14, fontFamily: "inherit", outline: "none", WebkitAppearance: "none", appearance: "none" }}
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button
+            onClick={onClose}
+            style={{ flex: 1, border: "1.5px solid #E5E7EB", borderRadius: 12, background: "#fff", color: "#6B7280", fontSize: 13.5, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            닫기
+          </button>
+          <button
+            onClick={save}
+            disabled={saving || !workDate}
+            style={{ flex: 2, border: 0, borderRadius: 12, background: saving || !workDate ? "#E5E7EB" : OP_TEAL, color: saving || !workDate ? "#9CA3AF" : "#fff", fontSize: 13.5, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: saving || !workDate ? "default" : "pointer" }}
+          >
+            {saving ? "저장 중…" : "신청 입력"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function OperatorApply({ opName }: { opName: string }) {
   const [items, setItems] = useState<any[]>([]);
@@ -17720,8 +17844,10 @@ function OperatorRank() {
   );
 }
 
-function OperatorSupport() {
+function OperatorSupport({ opName }: { opName: string }) {
   const now = new Date();
+  const [quickFor, setQuickFor] = useState<any>(null); // 명단에서 바로 신청할 사람
+  const [applyReload, setApplyReload] = useState(0);
   const [year, setYear] = useState(now.getFullYear());
   // 기 = 0(1-2월) ~ 5(11-12월)
   const [term, setTerm] = useState(Math.floor(now.getMonth() / 2));
@@ -17841,7 +17967,7 @@ function OperatorSupport() {
       }
       setSumLoading(false);
     })();
-  }, [year, term, targets]);
+  }, [year, term, targets, applyReload]);
 
   // ── 3단계 분류: 완료 / 신청해둠 / 무신청 ──
   const todayYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -18107,6 +18233,12 @@ function OperatorSupport() {
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
                     <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>{m.note}</div>
                   </div>
+                  <button
+                    onClick={() => setQuickFor(m)}
+                    style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                  >
+                    신청
+                  </button>
                 </div>
               ))
             )}
@@ -18195,6 +18327,16 @@ function OperatorSupport() {
       >
         대상자 지정
       </button>
+
+      {quickFor && (
+        <QuickApplyModal
+          kind="support"
+          member={quickFor}
+          opName={opName}
+          onClose={() => setQuickFor(null)}
+          onSaved={() => setApplyReload((k) => k + 1)}
+        />
+      )}
     </div>
   );
 }
@@ -18251,8 +18393,8 @@ function OperatorMockPanel({ tab, opName }: { tab: string; opName: string }) {
   );
 
   if (tab === "home") return <OperatorHome opName={opName} />;
-  if (tab === "designated") return <OperatorDesignated />;
-  if (tab === "support") return <OperatorSupport />;
+  if (tab === "designated") return <OperatorDesignated opName={opName} />;
+  if (tab === "support") return <OperatorSupport opName={opName} />;
 
   if (tab === "apply") return <OperatorApply opName={opName} />;
 
