@@ -77,6 +77,94 @@ function pickRotationVersion(rotationData: any[], groupName: string, dateStr: st
 const _holCache = new Map<number, Promise<string[]>>();
 const HOL_MIN = 10; // 한 해 공휴일 최소 개수 — 이보다 적으면 "반쪽 목록"으로 보고 믿지 않음
 
+// ── 기기 등록제 ──
+//   로그인 성공 → 이 기기에 기기표(무작위 토큰) 발급 + device_sessions 기록.
+//   허용 대수(members.max_devices: 기관사 1 · 관리자/운용 2 · 지회장 3)를 넘으면
+//   "제일 오래 안 쓴 기기"부터 자동으로 끊는다. 끊긴 기기는 다음에 열 때 로그아웃됨.
+//   ※ device_sessions 표가 없으면(미배포) 전부 조용히 통과 — 기존 동작 그대로.
+const DEVICE_KEY = "ml_device";
+function deviceName(): string {
+  const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+  if (/iPad/.test(ua)) return "iPad";
+  if (/iPhone/.test(ua)) return "iPhone";
+  if (/Android/.test(ua)) return "Android";
+  if (/Macintosh/.test(ua)) return "Mac";
+  if (/Windows/.test(ua)) return "PC";
+  return "기기";
+}
+function newDeviceToken(): string {
+  try {
+    const a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    return Array.from(a).map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch (e) {
+    return String(Date.now()) + Math.random().toString(36).slice(2);
+  }
+}
+async function registerDevice(emp: any): Promise<void> {
+  if (!emp) return; // 특수 관리자 계정 등 사번 없는 로그인은 대상 아님
+  try {
+    const token = newDeviceToken();
+    const { error } = await supabase.from("device_sessions").insert({
+      employee_number: String(emp),
+      token,
+      device_name: deviceName(),
+    });
+    if (error) return; // 표 미생성 등 — 막지 않음
+    localStorage.setItem(DEVICE_KEY, token);
+    const { data: m } = await supabase
+      .from("members")
+      .select("max_devices")
+      .eq("employee_number", String(emp))
+      .maybeSingle();
+    const max = Math.max(1, Number(m && (m as any).max_devices) || 1);
+    const { data: list } = await supabase
+      .from("device_sessions")
+      .select("id, last_seen")
+      .eq("employee_number", String(emp))
+      .order("last_seen", { ascending: false });
+    const over = (list || []).slice(max);
+    if (over.length > 0) {
+      await supabase.from("device_sessions").delete().in("id", over.map((r: any) => r.id));
+    }
+  } catch (e) {}
+}
+async function checkDevice(emp: any): Promise<"ok" | "kicked"> {
+  if (!emp) return "ok";
+  try {
+    const token = localStorage.getItem(DEVICE_KEY);
+    if (!token) {
+      // 기기표가 없는 기존 로그인 사용자 → 지금 이 기기를 등록 (강제 로그아웃 없이 자연 전환)
+      await registerDevice(emp);
+      return "ok";
+    }
+    const { data, error } = await supabase
+      .from("device_sessions")
+      .select("id")
+      .eq("token", token)
+      .maybeSingle();
+    if (error) return "ok"; // 표 없음·네트워크 오류 → 막지 않음 (오탐으로 로그아웃시키지 않기)
+    if (!data) return "kicked"; // 다른 기기 로그인으로 끊긴 기기표
+    supabase
+      .from("device_sessions")
+      .update({ last_seen: new Date().toISOString() })
+      .eq("token", token)
+      .then(() => {});
+    return "ok";
+  } catch (e) {
+    return "ok";
+  }
+}
+async function dropDevice(): Promise<void> {
+  try {
+    const token = localStorage.getItem(DEVICE_KEY);
+    if (token) {
+      await supabase.from("device_sessions").delete().eq("token", token);
+      localStorage.removeItem(DEVICE_KEY);
+    }
+  } catch (e) {}
+}
+
 // ── 공휴일 예외 (holiday_exceptions) ──
 //   한국천문연구원 API는 "관공서 공휴일"을 준다. 우리가 필요한 건 "열차 운행 기준"이라 다를 수 있다.
 //   예) 근로자의날(5/1) = 관공서 공휴일이지만 열차는 **평일 다이아**로 운행 → 휴일에서 빼야 함.
@@ -38407,6 +38495,16 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         ) {
           setUser(parsed);
           setScreen("home");
+          // 기기표 확인 — 다른 기기 로그인으로 끊겼으면 로그아웃
+          checkDevice(parsed.employee_number).then((r) => {
+            if (r === "kicked") {
+              localStorage.removeItem("union_user");
+              localStorage.removeItem(DEVICE_KEY);
+              setUser(null);
+              setScreen("login");
+              showToast("다른 기기에서 로그인되어 이 기기는 로그아웃되었습니다.", "error");
+            }
+          });
         } else {
           localStorage.removeItem("union_user");
         }
@@ -39083,6 +39181,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           localStorage.setItem("union_user", JSON.stringify({ ...u }));
           setUser(u);
           setScreen("home");
+          registerDevice(u.employee_number); // 기기표 발급 + 초과 기기 끊기
         }}
         onGoRegister={() => setScreen("register")}
       />
@@ -39478,8 +39577,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
           notifSettings={notifSettings}
           setNotifSettings={setNotifSettings}
           onLogout={() => {
+            dropDevice(); // 기기표 반납 (자리 하나 비움)
             localStorage.removeItem("union_user");
-
             setUser(null);
             setScreen("login");
           }}
