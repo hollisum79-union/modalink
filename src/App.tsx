@@ -16909,9 +16909,10 @@ const APPLY_KINDS: Record<string, string> = {
 
 // ── 신청 날짜 검사 (지원근무·지정근무·신청함 대리 입력 공용) ──
 //   규칙 ① 지난 날짜는 안 됨 (오늘 포함 이후만)
-//        ② 본인이 나오는 날(주간·야간·대기)에는 안 됨
-//        ③ 비번도 안 됨 (야간 뛰고 난 다음날이라 못 나옴)
-//        ④ 단, 강제휴무 예정일은 됨 — 원래 근무지만 미영업 다이아라 안 나오는 날이므로
+//        ② 휴가(leave_history)·유고(operator_absence)가 있는 날은 안 됨 — 기간 유고는 걸치기만 해도 차단
+//        ③ 본인이 나오는 날(주간·야간·대기)에는 안 됨
+//        ④ 비번도 안 됨 (야간 뛰고 난 다음날이라 못 나옴)
+//        ⑤ 단, 강제휴무 예정일은 됨 — 원래 근무지만 미영업 다이아라 안 나오는 날이므로
 //           (주간 26·27·28·29·40 = 휴일 / 야간 61~64 = 휴일+다음날 휴일)
 //   문제가 있으면 사유 문자열을, 없으면 빈 문자열을 돌려준다.
 async function checkApplyDate(memberId: any, workDate: string): Promise<string> {
@@ -16924,6 +16925,45 @@ async function checkApplyDate(memberId: any, workDate: string): Promise<string> 
     .maybeSingle();
   if (!m) return ""; // 사람을 못 찾으면 막지 않음 (저장 단계에서 걸림)
   const d = new Date(workDate + "T00:00:00");
+
+  // ⓪ 휴가(leave_history) · 유고(operator_absence) — 있으면 그날은 못 나옴. 기간 유고는 걸치기만 해도 차단.
+  const LV_KO: Record<string, string> = {
+    annual: "연차",
+    tempAnnual: "가연차",
+    promotedAnnual: "촉진연차",
+    substitute: "대체휴가",
+    study: "학습휴가",
+    longService: "장기재직휴가",
+    petition: "청원휴가",
+  };
+  const [lvRes, abRes] = await Promise.all([
+    supabase
+      .from("leave_history")
+      .select("leave_type, used_date")
+      .eq("employee_number", String(m.employee_number))
+      .eq("used_date", workDate)
+      .neq("status", "취소")
+      .limit(1),
+    supabase
+      .from("operator_absence")
+      .select("reason, work_date, end_date")
+      .eq("employee_number", String(m.employee_number))
+      .lte("work_date", workDate)
+      .gte("end_date", workDate)
+      .limit(1),
+  ]);
+  if (lvRes.data && lvRes.data.length > 0) {
+    const lv = lvRes.data[0] as any;
+    return `그날 ${m.name}님은 ${LV_KO[lv.leave_type] || lv.leave_type || "휴가"}예요. 휴가·유고가 있는 날은 신청할 수 없어요.`;
+  }
+  if (abRes.data && abRes.data.length > 0) {
+    const ab = abRes.data[0] as any;
+    const span =
+      ab.end_date && ab.end_date !== ab.work_date
+        ? ` (${String(ab.work_date).slice(5)}~${String(ab.end_date).slice(5)})`
+        : "";
+    return `그날 ${m.name}님은 「${ab.reason}」이에요${span}. 휴가·유고가 있는 날은 신청할 수 없어요.`;
+  }
 
   if (m.work_type === "교번" && m.start_position != null) {
     const [rotRes, shRes, swRes, allRes, hols] = await Promise.all([
@@ -17062,7 +17102,7 @@ function QuickApplyModal({
           style={{ width: "100%", border: "1.5px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 14, fontFamily: "inherit", outline: "none", WebkitAppearance: "none", appearance: "none" }}
         />
         <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6, lineHeight: 1.6 }}>
-          휴무 또는 강제휴무 예정일만 됩니다. 근무일·비번·지난 날짜는 안 돼요.
+          휴무 또는 강제휴무 예정일만 됩니다. 근무일·비번·휴가·유고·지난 날짜는 안 돼요.
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button
