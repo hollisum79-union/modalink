@@ -76,6 +76,36 @@ function pickRotationVersion(rotationData: any[], groupName: string, dateStr: st
 //   같은 해는 앱이 켜 있는 동안 한 번만 부르고 재사용. (요청 자체를 저장해 동시 호출도 1번으로 합침)
 const _holCache = new Map<number, Promise<string[]>>();
 const HOL_MIN = 10; // 한 해 공휴일 최소 개수 — 이보다 적으면 "반쪽 목록"으로 보고 믿지 않음
+
+// ── 공휴일 예외 (holiday_exceptions) ──
+//   한국천문연구원 API는 "관공서 공휴일"을 준다. 우리가 필요한 건 "열차 운행 기준"이라 다를 수 있다.
+//   예) 근로자의날(5/1) = 관공서 공휴일이지만 열차는 **평일 다이아**로 운행 → 휴일에서 빼야 함.
+//   kind='work'    : 공휴일 목록에서 뺀다 (그날은 평일 운행)
+//   kind='holiday' : 공휴일 목록에 넣는다 (공휴일이 아닌데 휴일 운행)
+//   the_date = 특정 날짜 / yearly_md = 'MM-DD' 매년 반복
+async function applyHolidayExceptions(year: number): Promise<{ apply: (list: string[]) => string[] }> {
+  let rows: any[] = [];
+  try {
+    const { data } = await supabase.from("holiday_exceptions").select("kind, the_date, yearly_md");
+    rows = data || [];
+  } catch (e) {}
+  const toDate = (r: any): string => {
+    if (r.the_date) return String(r.the_date);
+    if (r.yearly_md) return `${year}-${String(r.yearly_md).replace(/^-/, "")}`;
+    return "";
+  };
+  const drop = new Set(rows.filter((r) => r.kind === "work").map(toDate).filter(Boolean));
+  const add = rows.filter((r) => r.kind === "holiday").map(toDate).filter(Boolean);
+  return {
+    apply: (list: string[]) => {
+      const out = list.filter((d) => !drop.has(d));
+      add.forEach((d) => {
+        if (d.startsWith(String(year)) && !out.includes(d)) out.push(d);
+      });
+      return out.sort();
+    },
+  };
+}
 // ※ localStorage "holidays_연도" 칸은 예전부터 **순수 배열**로 저장돼 있고
 //    getCachedHolidays()·홈 화면이 그 모양 그대로 읽는다. 절대 다른 모양으로 덮어쓰지 말 것.
 //    받은 시각은 별도 칸("holidays_at_연도")에 따로 적는다.
@@ -93,10 +123,14 @@ function fetchHolidays(year: number): Promise<string[]> {
       }
       savedAt = Number(localStorage.getItem(atKey)) || 0;
     } catch (e) {}
-    const fresh = fetch("/.netlify/functions/read-holidays?year=" + year)
-      .then((r) => r.json())
-      .then((j: any) => {
-        const list: string[] = j && Array.isArray(j.holidays) ? j.holidays : [];
+    const fresh = Promise.all([
+      fetch("/.netlify/functions/read-holidays?year=" + year).then((r) => r.json()),
+      applyHolidayExceptions(year),
+    ])
+      .then(([j, exc]: any[]) => {
+        const raw: string[] = j && Array.isArray(j.holidays) ? j.holidays : [];
+        // 관공서 공휴일 ≠ 열차 운행 기준 → 예외 표로 보정
+        const list = raw.length >= HOL_MIN ? exc.apply(raw) : raw;
         if (list.length >= HOL_MIN) {
           try {
             localStorage.setItem(lsKey, JSON.stringify(list)); // 순수 배열로만 저장
@@ -39397,10 +39431,12 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         user={user}
       />
     );
+  // 공지 관리는 관리자 첫 화면에서 바로 들어옴 → 뒤로가기도 관리자로
+  if (screen === "notice-admin")
+    return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("admin"); }} />;
+  // 경조사 관리는 "홈 콘텐츠 관리" 안에 있음 → 관리자로 보내면 한 단계 건너뛰게 되어 그대로 둠
   if (screen === "events-admin")
     return <EventsAdminPage onBack={() => setScreen("home")} />;
-  if (screen === "notice-admin")
-    return <NoticeAdminPage onBack={() => { loadNotices(); setScreen("home"); }} />;
   if (screen === "workAdjust")
         return <WorkAdjustScreen onBack={() => { setSchedRefresh((v) => v + 1); setScreen(adjustReturn); }} user={user} initialDate={adjustInitDate} initialTab={adjustInitTab} />;
   if (screen === "salary")
