@@ -46,6 +46,7 @@ exports.handler = async (event) => {
     const ops = ["getRestDeInfo", "getHoliDeInfo"];
 
     // 한 번 부르기 (6초 넘으면 포기 — 전체가 10초에 죽지 않게)
+    let failCount = 0; // 하나라도 실패하면 "반쪽 목록"일 수 있으니 캐시하지 않음
     const grab = async (url) => {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 6000);
@@ -53,6 +54,7 @@ exports.handler = async (event) => {
         const resp = await fetch(url, { signal: ctrl.signal });
         return await resp.text();
       } catch (e) {
+        failCount++;
         return "";
       } finally {
         clearTimeout(timer);
@@ -93,7 +95,8 @@ exports.handler = async (event) => {
     }
 
     const list = Array.from(dates).sort();
-    if (list.length > 0) _cache.set(year, list);
+    // 전부 성공했고 개수가 정상일 때만 캐시 (반쪽 목록이 함수에 눌러앉는 것 방지)
+    if (failCount === 0 && list.length >= 10) _cache.set(year, list);
 
     return {
       statusCode: 200,

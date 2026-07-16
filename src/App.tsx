@@ -75,34 +75,50 @@ function pickRotationVersion(rotationData: any[], groupName: string, dateStr: st
 //   read-holidays는 Netlify 함수라 처음 부를 때 깨우는 시간(콜드스타트)이 걸림.
 //   같은 해는 앱이 켜 있는 동안 한 번만 부르고 재사용. (요청 자체를 저장해 동시 호출도 1번으로 합침)
 const _holCache = new Map<number, Promise<string[]>>();
+const HOL_MIN = 10; // 한 해 공휴일 최소 개수 — 이보다 적으면 "반쪽 목록"으로 보고 믿지 않음
+// ※ localStorage "holidays_연도" 칸은 예전부터 **순수 배열**로 저장돼 있고
+//    getCachedHolidays()·홈 화면이 그 모양 그대로 읽는다. 절대 다른 모양으로 덮어쓰지 말 것.
+//    받은 시각은 별도 칸("holidays_at_연도")에 따로 적는다.
 function fetchHolidays(year: number): Promise<string[]> {
   if (!_holCache.has(year)) {
     const lsKey = "holidays_" + year;
-    // 저장해둔 목록이 있으면 먼저 꺼냄 (하루 이내면 그대로 씀 → 기다림 없이 바로 빨간날 표시)
+    const atKey = "holidays_at_" + year;
     let saved: string[] = [];
     let savedAt = 0;
     try {
       const raw = localStorage.getItem(lsKey);
       if (raw) {
         const j = JSON.parse(raw);
-        if (Array.isArray(j.list)) { saved = j.list; savedAt = Number(j.at) || 0; }
+        if (Array.isArray(j)) saved = j; // 배열일 때만 사용 (예전 모양 그대로)
       }
+      savedAt = Number(localStorage.getItem(atKey)) || 0;
     } catch (e) {}
     const fresh = fetch("/.netlify/functions/read-holidays?year=" + year)
       .then((r) => r.json())
       .then((j: any) => {
-        const list: string[] = j && j.holidays ? j.holidays : [];
-        if (list.length > 0) {
-          try { localStorage.setItem(lsKey, JSON.stringify({ list, at: Date.now() })); } catch (e) {}
+        const list: string[] = j && Array.isArray(j.holidays) ? j.holidays : [];
+        if (list.length >= HOL_MIN) {
+          try {
+            localStorage.setItem(lsKey, JSON.stringify(list)); // 순수 배열로만 저장
+            localStorage.setItem(atKey, String(Date.now()));
+          } catch (e) {}
           _holCache.set(year, Promise.resolve(list));
           return list;
         }
+        _holCache.delete(year); // 반쪽/빈 목록은 물고 있지 않음 → 다음에 재시도
         return saved;
       })
-      .catch(() => saved);
+      .catch(() => {
+        _holCache.delete(year);
+        return saved;
+      });
     const oneDay = 24 * 60 * 60 * 1000;
-    const usable = saved.length > 0 && Date.now() - savedAt < oneDay;
-    _holCache.set(year, usable ? Promise.resolve(saved) : fresh);
+    if (saved.length >= HOL_MIN && Date.now() - savedAt < oneDay) {
+      _holCache.set(year, Promise.resolve(saved)); // 기다림 없이 즉시
+      fresh.catch(() => {});
+    } else {
+      _holCache.set(year, fresh);
+    }
   }
   return _holCache.get(year)!;
 }
@@ -243,9 +259,15 @@ function calcTongsangWork(member: any, date: Date, holidays: string[] = []) {
 // (20일 휴일→19일, 19일도 휴일→18일 ...).
 function getCachedHolidays(year: number): string[] {
   // 홈 화면이 localStorage("holidays_연도")에 캐시해둔 공휴일을 동기적으로 읽는다.
+  // 배열이 아닌 게 들어있어도 화면이 죽지 않게 방어 (예전 잘못된 값이 남아 있을 수 있음)
   try {
     const raw = localStorage.getItem("holidays_" + year);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const j = JSON.parse(raw);
+      if (Array.isArray(j)) return j;
+      if (j && Array.isArray(j.list)) return j.list; // 잘못 저장된 모양 구제
+      localStorage.removeItem("holidays_" + year);   // 못 쓰는 값은 치움
+    }
   } catch (e) {}
   return [];
 }
@@ -14744,7 +14766,7 @@ function OperatorHome({ opName }: { opName: string }) {
   // 공휴일 (근무표와 같은 소스 · read-holidays)
   const [opHolidays, setOpHolidays] = useState<string[]>([]);
   useEffect(() => {
-    fetchHolidays(target.getFullYear()).then((h) => setOpHolidays(h));
+    fetchHolidays(target.getFullYear()).then((h) => { if (Array.isArray(h)) setOpHolidays(h); });
   }, [targetStr]);
 
   // 채우는 다이아의 그 날짜 기준 정보 (kyobun_dia · dia_image · 읽기 전용)
@@ -23443,7 +23465,7 @@ if (data) {
   // 공휴일 불러오기 (한국천문연구원 API)
   React.useEffect(() => {
     fetchHolidays(currentYear).then((h) => {
-      if (h && h.length > 0) setHolidays(h);
+      if (Array.isArray(h) && h.length > 0) setHolidays(h);
     });
   }, [currentYear]);
 
@@ -23652,7 +23674,8 @@ if (data) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
-    return holidays.includes(`${y}-${m}-${dd}`);
+    // 배열이 아닌 값이 들어와도 화면이 죽지 않게 방어 (달력 3개가 매 칸마다 부름)
+    return Array.isArray(holidays) && holidays.includes(`${y}-${m}-${dd}`);
   };
 
   // "확인" 표시 판정 (표시 전용 — 근무·급여 계산 무영향)
@@ -37967,8 +37990,16 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const hYear = new Date().getFullYear();
       const cacheKey = "holidays_" + hYear;
       const cachedHoli = localStorage.getItem(cacheKey);
-      if (cachedHoli) {
-        setHomeHolidays(JSON.parse(cachedHoli));
+      const cachedArr = (() => {
+        try {
+          const j = cachedHoli ? JSON.parse(cachedHoli) : null;
+          if (Array.isArray(j)) return j;
+          if (j && Array.isArray(j.list)) return j.list;
+        } catch (e) {}
+        return null;
+      })();
+      if (cachedArr) {
+        setHomeHolidays(cachedArr);
       } else {
         fetch("/.netlify/functions/read-holidays?year=" + hYear)
           .then((r) => r.json())
