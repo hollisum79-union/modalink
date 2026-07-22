@@ -101,7 +101,7 @@ function newDeviceToken(): string {
     return String(Date.now()) + Math.random().toString(36).slice(2);
   }
 }
-async function registerDevice(emp: any): Promise<void> {
+async function registerDevice(emp: any, quiet?: boolean): Promise<void> {
   if (!emp) return; // 특수 관리자 계정 등 사번 없는 로그인은 대상 아님
   try {
     const token = newDeviceToken();
@@ -112,6 +112,22 @@ async function registerDevice(emp: any): Promise<void> {
     });
     if (error) return; // 표 미생성 등 — 막지 않음
     localStorage.setItem(DEVICE_KEY, token);
+    // ── 새 기기 로그인 알림 (Plan A) ──
+    //    비번 도용은 못 막아도 반드시 들키게: 본인 기기들에 즉시 푸시.
+    //    quiet = 기존 로그인 사용자의 기기표 자동 전환(마이그레이션) — 알림 안 보냄.
+    if (!quiet) {
+      fetch("/.netlify/functions/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: String(emp),
+          type: "device",
+          title: "🔐 새 기기 로그인",
+          message: `새 ${deviceName()}에서 방금 로그인했어요. 본인이 아니면 즉시 비밀번호를 바꿔주세요.`,
+          url: "/",
+        }),
+      }).catch(() => {});
+    }
     const { data: m } = await supabase
       .from("members")
       .select("max_devices")
@@ -135,7 +151,8 @@ async function checkDevice(emp: any): Promise<"ok" | "kicked"> {
     const token = localStorage.getItem(DEVICE_KEY);
     if (!token) {
       // 기기표가 없는 기존 로그인 사용자 → 지금 이 기기를 등록 (강제 로그아웃 없이 자연 전환)
-      await registerDevice(emp);
+      // quiet=true: 배포 직후 전 조합원에게 "새 기기 로그인" 알림이 쏟아지는 것 방지
+      await registerDevice(emp, true);
       return "ok";
     }
     const { data, error } = await supabase
@@ -6680,12 +6697,18 @@ const [showCheck, setShowCheck] = useState(false);
   // 비밀번호로 내 제보 + 답변 확인하기
   const handleCheck = async () => {
     if (!checkCode.trim()) return;
-    const { data } = await supabase
-      .from("anonymous_reports")
-      .select("*")
-      .eq("access_code", checkCode.trim())
-      .maybeSingle();
-    setCheckResult(data || "notfound");
+    // 서버 경유 (익명제보는 anon 키 접근 차단 — 보안)
+    try {
+      const res = await fetch("/.netlify/functions/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check", access_code: checkCode.trim() }),
+      });
+      const j = await res.json();
+      setCheckResult((j.report || "notfound") as any);
+    } catch (e) {
+      setCheckResult("notfound" as any);
+    }
   };
   const handleSubmit = async () => {
     if (!category || !title.trim() || !content.trim()) return;
@@ -6693,12 +6716,28 @@ const [showCheck, setShowCheck] = useState(false);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     setAccessCode(code);
     // DB에 저장 (작성자 정보 없이 = 완전 익명)
-    await supabase.from("anonymous_reports").insert({
-      category,
-      title: title.trim(),
-      content: content.trim(),
-      access_code: code,
-    });
+    // 저장이 실제로 됐는지 확인 — 실패하면 완료 화면으로 넘어가지 않음
+    try {
+      const res = await fetch("/.netlify/functions/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          category,
+          title: title.trim(),
+          content: content.trim(),
+          access_code: code,
+        }),
+      });
+      const j = await res.json();
+      if (!j.ok) {
+        showToast("제보 저장 실패: " + (j.error || "서버 오류") + " — 지회로 알려주세요", "error");
+        return;
+      }
+    } catch (e) {
+      showToast("제보 저장 실패 — 인터넷 연결을 확인하고 다시 시도해주세요", "error");
+      return;
+    }
     onSubmit({ category, title, content });
     setDone(true);
   };
@@ -7148,10 +7187,16 @@ const [selectedReport, setSelectedReport] = useState(null);
   // 관리자 답변 저장
   const saveReply = async () => {
     if (!selectedReport) return;
-    await supabase
-      .from("anonymous_reports")
-      .update({ admin_reply: replyText, status: "답변완료" })
-      .eq("id", selectedReport.id);
+    await fetch("/.netlify/functions/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reply",
+        employee_number: user?.employee_number,
+        id: selectedReport.id,
+        reply: replyText,
+      }),
+    }).catch(() => {});
     setReports((prev) =>
       prev.map((r) =>
         r.id === selectedReport.id
@@ -7165,26 +7210,30 @@ const [selectedReport, setSelectedReport] = useState(null);
   };
   // DB에서 익명제보 목록 불러오기
   useEffect(() => {
-    supabase
-      .from("anonymous_reports")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        if (data)
+    // 서버 경유 (관리자 여부는 서버가 사번으로 재확인)
+    fetch("/.netlify/functions/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "list", employee_number: user?.employee_number }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.reports)
           setReports(
-            data.map((r) => ({
+            j.reports.map((r: any) => ({
               ...r,
               date: r.created_at?.slice(0, 10).replace(/-/g, "."),
             }))
           );
-      });
+      })
+      .catch(() => {});
     // 관리자가 제보 목록을 열면 모두 '읽음' 처리 (알림 사라짐)
     if (user?.is_admin) {
-      supabase
-        .from("anonymous_reports")
-        .update({ admin_read: true })
-        .eq("admin_read", false)
-        .then(() => {});
+      fetch("/.netlify/functions/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "markRead", employee_number: user?.employee_number }),
+      }).catch(() => {});
     }
   }, []);
 
@@ -15040,20 +15089,50 @@ function OperatorHome({ opName }: { opName: string }) {
     })();
   }, [targetStr]);
 
-  const stampsByDay: Record<number, any[]> = {
-    1: [
-      { label: "1차 확정", who: "하경수", when: "7/10 14:20" },
-      { label: "2차 확정", who: "", when: "" },
-    ],
-    2: [
-      { label: "1차 확정", who: "", when: "" },
-      { label: "2차 확정", who: "", when: "" },
-    ],
+  // ── 확정 도장 (operator_confirm · append-only · 실데이터) ──
+  const dateStrOf = (off: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + off);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   };
-  const stamps = stampsByDay[dayOffset] || [
-    { label: "1차 확정", who: "", when: "" },
-    { label: "2차 확정", who: "", when: "" },
+  const [confirmRows, setConfirmRows] = useState<any[]>([]);
+  const [stampReload, setStampReload] = useState(0);
+  useEffect(() => {
+    (async () => {
+      const dates = Array.from(new Set([dateStrOf(1), dateStrOf(2), targetStr]));
+      const { data } = await supabase
+        .from("operator_confirm")
+        .select("work_date, stage, confirmed_by, created_at")
+        .in("work_date", dates)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
+      setConfirmRows(data || []);
+    })();
+  }, [targetStr, stampReload]);
+  // append-only → 그 날짜·단계의 "마지막" 도장이 유효
+  const lastStamp = (ds: string, stage: string) => {
+    let hit: any = null;
+    confirmRows.forEach((r) => {
+      if (String(r.work_date) === ds && r.stage === stage) hit = r;
+    });
+    return hit;
+  };
+  const stampInfo = (r: any) => {
+    if (!r) return { who: "", when: "" };
+    const d = new Date(r.created_at);
+    return {
+      who: String(r.confirmed_by || ""),
+      when: `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
+    };
+  };
+  const stamps = [
+    { label: "1차 확정", ...stampInfo(lastStamp(targetStr, "1차")) },
+    { label: "2차 확정", ...stampInfo(lastStamp(targetStr, "2차")) },
   ];
+  // ── 22시 잠금: 근무 당일 22시부터 이 날짜는 수정 불가 (야간 급휴가 대응 시간까지 열어둠) ──
+  const lockTime = new Date(target);
+  lockTime.setHours(22, 0, 0, 0);
+  const isLocked = Date.now() >= lockTime.getTime();
 
   const usedNames = Object.values(assigned).map((a) => a.name);
 
@@ -15139,11 +15218,22 @@ function OperatorHome({ opName }: { opName: string }) {
     return `${d.getMonth() + 1}/${d.getDate()} (${["일", "월", "화", "수", "목", "금", "토"][d.getDay()]})`;
   };
 
-  // 오늘 할 일 (예시 — 확정 기능이 생기면 실제 기록으로 판단)
-  const tasks = [
-    { off: 1, step: "2차 확정", note: "1차 완료 · 하경수", hot: true },
-    { off: 2, step: "1차 작성", note: "아직 아무것도 없음", hot: false },
-  ];
+  // 오늘 할 일 (실데이터 — 확정 기록으로 판단)
+  const tasks = [1, 2].map((off) => {
+    const ds = dateStrOf(off);
+    const s1 = lastStamp(ds, "1차");
+    const s2 = lastStamp(ds, "2차");
+    return {
+      off,
+      step: s2 ? "완료 ✓" : s1 ? "2차 확정" : "1차 작성",
+      note: s2
+        ? `2차 완료 · ${String(s2.confirmed_by || "")}`
+        : s1
+        ? `1차 완료 · ${String(s1.confirmed_by || "")}`
+        : "아직 아무것도 없음",
+      hot: !!s1 && !s2,
+    };
+  });
 
   // ── 유고 입력 화면 ──
   if (showAbsence) {
@@ -15647,6 +15737,7 @@ function OperatorHome({ opName }: { opName: string }) {
       .filter((c: any) => !usedNames.includes(c.name) && c.name !== slot.name);
 
     const pick = async (name: string, via: string, emp?: string) => {
+      if (isLocked) return showToast("🔒 22시 잠금 — 이 날짜는 더 이상 수정할 수 없어요", "error");
       const { error } = await supabase.from("operator_assign").insert({
         work_date: targetStr,
         dia_no: String(fillDia),
@@ -15916,7 +16007,6 @@ function OperatorHome({ opName }: { opName: string }) {
     <div style={{ ...card, padding: "14px 16px", marginBottom: isWide ? 0 : 12 }}>
       <div style={{ ...ttl, marginBottom: 8 }}>
         오늘 할 일
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: "#C4C7CC" }}>예시</span>
       </div>
       <div style={{ display: isWide ? "flex" : "block", gap: 10 }}>
         {tasks.map((t, i) => (
@@ -16013,7 +16103,7 @@ function OperatorHome({ opName }: { opName: string }) {
       }}
     >
       {opLoaded
-        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 유고 등 앱에 없는 결근은 '+휴가·유고 입력'으로 곧 추가됩니다. 확정 도장은 아직 예시입니다."
+        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 배정·확정 도장은 실제로 저장되며, 근무 당일 22시에 잠깁니다."
         : "실제 근무 데이터를 불러오는 중…"}
     </div>
   );
@@ -16092,6 +16182,7 @@ function OperatorHome({ opName }: { opName: string }) {
             {a ? (
               <button
                 onClick={async () => {
+                  if (isLocked) return showToast("🔒 22시 잠금 — 이 날짜는 더 이상 수정할 수 없어요", "error");
                   const cur = assigned[e.dia];
                   const { error } = await supabase.from("operator_assign").insert({
                     work_date: targetStr,
@@ -16355,27 +16446,42 @@ function OperatorHome({ opName }: { opName: string }) {
           padding: "10px 12px",
         }}
       >
-        확정해도 잠기지 않습니다. 당일 아침까지 고칠 수 있고, 고치면 이 기록에 남습니다.
+        확정해도 잠기지 않습니다. 근무 당일 22시까지 고칠 수 있고, 고치면 전부 기록에 남습니다. 22시부터는 잠깁니다.
       </div>
     </div>
   );
 
+  const nextStage = !stamps[0].who ? "1차" : !stamps[1].who ? "2차" : "";
+  const doConfirm = async () => {
+    if (isLocked || !nextStage) return;
+    const { error } = await supabase.from("operator_confirm").insert({
+      work_date: targetStr,
+      stage: nextStage,
+      confirmed_by: opName,
+    });
+    if (error) return showToast("확정 저장 실패: " + error.message, "error");
+    showToast(`${nextStage} 확정 도장을 찍었습니다 ✓`);
+    setStampReload((k) => k + 1);
+  };
+  const confirmOff = isLocked || !nextStage;
   const confirmBtn = (
     <button
+      onClick={doConfirm}
+      disabled={confirmOff}
       style={{
         width: "100%",
         border: 0,
         borderRadius: 14,
-        background: "linear-gradient(135deg,#0F766E,#0D9488)",
-        color: "#fff",
+        background: confirmOff ? "#E5E7EB" : "linear-gradient(135deg,#0F766E,#0D9488)",
+        color: confirmOff ? "#9CA3AF" : "#fff",
         fontSize: 14.5,
         fontWeight: 800,
         padding: "16px 0",
         fontFamily: "inherit",
-        cursor: "pointer",
+        cursor: confirmOff ? "default" : "pointer",
       }}
     >
-      1차 확정
+      {isLocked ? "🔒 22시 잠금 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : `${nextStage} 확정`}
     </button>
   );
 
@@ -38778,14 +38884,19 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       });
   }, [screen, user]);
   useEffect(() => {
-    supabase
-      .from("anonymous_reports")
-      .select("id", { count: "exact", head: true })
-      .eq("admin_read", false)
-      .then(({ count }) => {
-        if (count !== null) setUnreadReportCount(count);
-      });
-  }, [screen]);
+    // 서버 경유 — 관리자만 숫자를 받음 (일반 조합원은 0)
+    if (!user?.is_admin) return;
+    fetch("/.netlify/functions/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "unreadCount", employee_number: user?.employee_number }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (typeof j.count === "number") setUnreadReportCount(j.count);
+      })
+      .catch(() => {});
+  }, [screen, user?.employee_number]);
   useEffect(() => {
     supabase
       .from("posts")
