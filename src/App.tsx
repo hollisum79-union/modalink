@@ -19697,6 +19697,18 @@ function RotationEditScreen() {
   );
 }
 
+// 문자 앱 열기 (여러 명) — 아이폰/아이패드는 전용 주소 형식이 필요
+function openSmsApp(nums: any[], body: string) {
+  const ua = navigator.userAgent || "";
+  const isIOS =
+    /iPhone|iPad|iPod/.test(ua) ||
+    (/Mac/.test(ua) && (navigator as any).maxTouchPoints > 1);
+  const enc = encodeURIComponent(body);
+  window.location.href = isIOS
+    ? "sms://open?addresses=" + nums.join(",") + ";body=" + enc
+    : "sms:" + nums.join(",") + "?&body=" + enc;
+}
+
 // ── 모금 (조합원) ──
 function FundScreen({ onBack, user }) {
   const [campaigns, setCampaigns] = useState<any[]>([]);
@@ -20259,7 +20271,7 @@ function FundAdminScreen({ user }) {
                       <button
                         key={i}
                         onClick={() => {
-                          window.location.href = "sms:" + ch.join(",") + "?&body=" + encodeURIComponent(bodyText);
+                          openSmsApp(ch, bodyText);
                         }}
                         style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#2563EB", marginTop: 10, cursor: "pointer" }}
                       >
@@ -20394,7 +20406,7 @@ function GroupSmsScreen() {
       showToast("문자 내용을 입력해주세요", "error");
       return;
     }
-    window.location.href = "sms:" + chunks[i].join(",") + "?&body=" + encodeURIComponent(smsText.trim());
+    openSmsApp(chunks[i], smsText.trim());
     setSentChunks({ ...sentChunks, [i]: true });
   };
 
