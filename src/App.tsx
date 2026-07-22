@@ -40642,12 +40642,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       icon: "M3 10h18M3 10V6a2 2 0 012-2h14a2 2 0 012 2v4M3 10l2 10h14l2-10M10 6V4m4 2V4M12 14v2m0 0h-2m2 0h2",
     },
     {
-      id: "fund",
-      label: "모금",
-      sub: "함께하는 마음",
-      icon: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
-    },
-    {
       id: "inquiry",
       label: "1:1 문의",
       sub: "궁금한 점 문의",
@@ -41613,7 +41607,6 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   if (item.id === "board") { localStorage.setItem("lastSeen_post", new Date().toISOString()); setNewPostCount(0); setBoardTab("전체"); setScreen("board"); }
                  if (item.id === "inquiry") { localStorage.setItem("lastSeen_inquiry", new Date().toISOString()); setNewInquiryCount(0); setScreen("inquiry"); }
                   if (item.id === "welfare") setScreen("welfare");
-                  if (item.id === "fund") setScreen("fund");
                   if (item.id === "vote") { setScreen("vote"); }
                   if (item.id === "anonymous") setScreen("anonymous");
                   if (item.id === "archive") setScreen("archive");
