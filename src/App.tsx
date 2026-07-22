@@ -6705,9 +6705,9 @@ const [showCheck, setShowCheck] = useState(false);
         body: JSON.stringify({ action: "check", access_code: checkCode.trim() }),
       });
       const j = await res.json();
-      setCheckResult(j.report || "notfound");
+      setCheckResult((j.report || "notfound") as any);
     } catch (e) {
-      setCheckResult("notfound");
+      setCheckResult("notfound" as any);
     }
   };
   const handleSubmit = async () => {
@@ -6716,17 +6716,28 @@ const [showCheck, setShowCheck] = useState(false);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     setAccessCode(code);
     // DB에 저장 (작성자 정보 없이 = 완전 익명)
-    await fetch("/.netlify/functions/reports", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create",
-        category,
-        title: title.trim(),
-        content: content.trim(),
-        access_code: code,
-      }),
-    }).catch(() => {});
+    // 저장이 실제로 됐는지 확인 — 실패하면 완료 화면으로 넘어가지 않음
+    try {
+      const res = await fetch("/.netlify/functions/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          category,
+          title: title.trim(),
+          content: content.trim(),
+          access_code: code,
+        }),
+      });
+      const j = await res.json();
+      if (!j.ok) {
+        showToast("제보 저장 실패: " + (j.error || "서버 오류") + " — 지회로 알려주세요", "error");
+        return;
+      }
+    } catch (e) {
+      showToast("제보 저장 실패 — 인터넷 연결을 확인하고 다시 시도해주세요", "error");
+      return;
+    }
     onSubmit({ category, title, content });
     setDone(true);
   };
