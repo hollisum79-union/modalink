@@ -19987,7 +19987,11 @@ function FundAdminScreen({ user }) {
     try {
       const res = await fetch(fundApi + "?action=campaignList");
       const j = await res.json();
-      const list = j.campaigns || [];
+      const raw = j.campaigns || [];
+      const list = [
+        ...raw.filter((c: any) => c.status === "open"),
+        ...raw.filter((c: any) => c.status !== "open"),
+      ];
       setCampaigns(list);
       if (list.length > 0 && curId == null) setCurId(list[0].id);
     } catch (e) {
@@ -20134,8 +20138,16 @@ function FundAdminScreen({ user }) {
     : [];
 
   let recTotal = 0;
+  const recPerPerson: any = {};
   records.forEach((r: any) => {
-    recTotal += (r.action === "cancel" ? -1 : 1) * (Number(r.amount) || 0);
+    const v = (r.action === "cancel" ? -1 : 1) * (Number(r.amount) || 0);
+    recTotal += v;
+    const k = String(r.employee_number || "");
+    recPerPerson[k] = (recPerPerson[k] || 0) + v;
+  });
+  let recPeople = 0;
+  Object.keys(recPerPerson).forEach((k) => {
+    if (recPerPerson[k] > 0) recPeople += 1;
   });
 
   return (
@@ -20154,7 +20166,7 @@ function FundAdminScreen({ user }) {
         {cur && (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
             <div style={{ fontSize: 13, color: "#6B7280" }}>
-              합계 <b style={{ color: "#111827", fontVariantNumeric: "tabular-nums" }}>{won(recTotal)}원</b> · 기록 {records.length}건
+              합계 <b style={{ color: "#111827", fontVariantNumeric: "tabular-nums" }}>{won(recTotal)}원</b> · 참여 <b style={{ color: "#2563EB" }}>{recPeople}명</b> · 기록 {records.length}건
             </div>
             <button onClick={toggleStatus} style={{ fontSize: 12, fontWeight: 600, color: cur.status === "open" ? "#DC2626" : "#2563EB", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
               {cur.status === "open" ? "마감하기" : "다시 열기"}
