@@ -1,159 +1,89 @@
-// 익명제보 서버 API (reports.js)
-//
-// [배경] 익명제보가 anon 키로 직접 읽고 쓰여서, 기술을 아는 사람이면 제보 전체를
-//        통째로 뽑을 수 있었음. → 모든 접근을 이 함수(service_role)로만 하고
-//        DB의 anon 권한은 끊는다.
-//
-// [규칙]
-//  - 제보 작성(create)·내 제보 확인(check)은 누구나 — 단, check는 6자리 비밀번호가 맞아야만.
-//  - 목록(list)·답변(reply)·읽음(markRead)·안읽음 수(unreadCount)는
-//    사번을 받아 members.is_admin을 서버에서 직접 확인한 뒤에만 처리.
-//    (화면의 is_admin 값은 위조 가능하므로 믿지 않는다)
-
+const webpush = require("web-push");
 const { createClient } = require("@supabase/supabase-js");
+
+// [2026-07 수정] 문제 2개를 고침:
+//   ① 152명에게 한 명씩 순서대로(await) 발송 → Netlify 10초 제한에 걸려
+//      앞사람 일부만 받고 나머지는 발송 자체가 안 됐음.
+//      → 한꺼번에(병렬) 발송. 152명이어도 1~2초.
+//   ② urgency 미설정(기본 normal) → Apple이 배터리 절약으로 배달을 미뤄뒀다가
+//      기기가 깨어날 때(앱 열 때) 몰아서 줌. "접속할 때 알림 옴"의 원인.
+//      → urgency: "high" + TTL 24시간.
+
+webpush.setVapidDetails(
+  process.env.VAPID_SUBJECT,
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
 
 const supabase = createClient(
   "https://svbvawioldgundtpogkc.supabase.co",
   process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY
 );
 
-const json = (code, body) => ({
-  statusCode: code,
-  headers: {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Content-Type": "application/json; charset=utf-8",
-  },
-  body: JSON.stringify(body),
-});
-
-// 관리자 확인 — 사번으로 members.is_admin을 서버에서 직접 조회
-async function isAdmin(emp) {
-  if (!emp) return false;
-  const { data } = await supabase
-    .from("members")
-    .select("is_admin")
-    .eq("employee_number", String(emp))
-    .maybeSingle();
-  return !!(data && data.is_admin);
-}
-
 exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") return json(200, {});
   try {
     const body = JSON.parse(event.body || "{}");
-    const qs = event.queryStringParameters || {};
-    const action = body.action || qs.action;
+    const { title, message, url, type } = body;
 
-    // ── 진단: 주소창에서 ?action=ping — 키 존재 여부 + DB 접근 시험 (키 값은 절대 안 보여줌) ──
-    if (action === "ping") {
-      let db_read = "";
-      let db_write = "";
-      try {
-        const { error } = await supabase
-          .from("anonymous_reports")
-          .select("id", { count: "exact", head: true });
-        db_read = error ? error.message : "ok";
-      } catch (e) {
-        db_read = String(e);
+    let query = supabase.from("push_subscriptions").select("*");
+
+    // 특정 대상 / 발신자 제외
+    if (body.to) query = query.eq("employee_number", String(body.to));
+    if (body.from) query = query.neq("employee_number", String(body.from));
+
+    // ── 알림 종류별 필터 ──
+    // 공지(notice)·긴급(urgent)·조합일정(event)은 "중요 알림"이라
+    // 사용자 설정과 무관하게 무조건 전체 발송한다. (필터 없음)
+    // comment·inquiry는 본인(to)에게만 가므로 추가 필터 없음.
+    // 그 외(swap·vote)는 사용자 설정대로 발송한다.
+    if (type === "swap") query = query.eq("notify_swap", true);
+    else if (type === "vote") query = query.eq("notify_vote", true);
+
+    const { data: subs, error } = await query;
+    if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+
+    const payload = JSON.stringify({
+      title: title || "MODALINK",
+      body: message || "",
+      url: url || "/",
+    });
+
+    // 즉시 배달 + 24시간 안에 못 주면 버림 (묵은 알림이 나중에 몰려오는 것 방지)
+    const pushOptions = { TTL: 60 * 60 * 24, urgency: "high" };
+
+    // 전원에게 "한꺼번에" 발송 (한 명씩 기다리지 않음)
+    const results = await Promise.allSettled(
+      (subs || []).map((s) =>
+        webpush.sendNotification(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          payload,
+          pushOptions
+        )
+      )
+    );
+
+    // 결과 집계 + 죽은 구독(404/410) 정리
+    let sent = 0;
+    let failed = 0;
+    const deadEndpoints = [];
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled") {
+        sent++;
+      } else {
+        failed++;
+        const code = r.reason && r.reason.statusCode;
+        if ((code === 404 || code === 410) && subs[i]) deadEndpoints.push(subs[i].endpoint);
       }
-      try {
-        // 시험 줄을 넣었다 바로 지움 (진짜 제보와 섞이지 않게 표시)
-        const { data, error } = await supabase
-          .from("anonymous_reports")
-          .insert({ category: "_ping", title: "_ping", content: "_ping", access_code: "_ping" })
-          .select("id")
-          .maybeSingle();
-        if (error) db_write = error.message;
-        else {
-          db_write = "ok";
-          if (data && data.id) await supabase.from("anonymous_reports").delete().eq("id", data.id);
-        }
-      } catch (e) {
-        db_write = String(e);
-      }
-      return json(200, {
-        ok: true,
-        service_role_env: !!process.env.SUPABASE_SERVICE_ROLE,
-        service_key_env: !!process.env.SUPABASE_SERVICE_KEY,
-        db_read,
-        db_write,
-      });
+    });
+    if (deadEndpoints.length > 0) {
+      await supabase.from("push_subscriptions").delete().in("endpoint", deadEndpoints);
     }
 
-    // ── 제보 작성 (누구나 · 작성자 정보 없음 = 완전 익명) ──
-    if (action === "create") {
-      const { category, title, content, access_code } = body;
-      if (!category || !title || !content || !access_code)
-        return json(400, { error: "필수 항목 누락" });
-      const { error } = await supabase.from("anonymous_reports").insert({
-        category,
-        title: String(title).trim(),
-        content: String(content).trim(),
-        access_code: String(access_code),
-      });
-      if (error) return json(500, { error: error.message });
-      return json(200, { ok: true });
-    }
-
-    // ── 내 제보 + 답변 확인 (6자리 비밀번호가 맞아야만) ──
-    if (action === "check") {
-      const code = String(body.access_code || "").trim();
-      if (!code) return json(400, { error: "비밀번호 누락" });
-      const { data, error } = await supabase
-        .from("anonymous_reports")
-        .select("category, title, content, status, admin_reply, created_at")
-        .eq("access_code", code)
-        .maybeSingle();
-      if (error) return json(500, { error: error.message });
-      return json(200, { report: data || null });
-    }
-
-    // ── 여기부터는 관리자 전용 ──
-    const admin = await isAdmin(body.employee_number);
-    if (!admin) return json(403, { error: "관리자만 가능합니다" });
-
-    if (action === "list") {
-      const { data, error } = await supabase
-        .from("anonymous_reports")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) return json(500, { error: error.message });
-      return json(200, { reports: data || [] });
-    }
-
-    if (action === "reply") {
-      const { id, reply } = body;
-      if (!id) return json(400, { error: "id 누락" });
-      const { error } = await supabase
-        .from("anonymous_reports")
-        .update({ admin_reply: reply || "", status: "답변완료" })
-        .eq("id", id);
-      if (error) return json(500, { error: error.message });
-      return json(200, { ok: true });
-    }
-
-    if (action === "markRead") {
-      const { error } = await supabase
-        .from("anonymous_reports")
-        .update({ admin_read: true })
-        .eq("admin_read", false);
-      if (error) return json(500, { error: error.message });
-      return json(200, { ok: true });
-    }
-
-    if (action === "unreadCount") {
-      const { count, error } = await supabase
-        .from("anonymous_reports")
-        .select("id", { count: "exact", head: true })
-        .eq("admin_read", false);
-      if (error) return json(500, { error: error.message });
-      return json(200, { count: count || 0 });
-    }
-
-    return json(400, { error: "알 수 없는 action" });
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ sent, failed, total: (subs || []).length, cleaned: deadEndpoints.length }),
+    };
   } catch (e) {
-    return json(500, { error: String(e) });
+    return { statusCode: 500, body: JSON.stringify({ error: String(e) }) };
   }
 };
