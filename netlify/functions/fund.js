@@ -1,5 +1,5 @@
 // 모금 fund.js
-const SB_URL = process.env.SUPABASE_URL;
+const SB_URL = process.env.SUPABASE_URL || "https://svbvawioldgundtpogkc.supabase.co";
 const KEY = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY;
 
 const BASE_HEADERS = {
