@@ -19958,6 +19958,8 @@ function FundAdminScreen({ user }) {
   const [pick, setPick] = useState<any>(null);
   const [amount, setAmount] = useState("");
   const [paidDate, setPaidDate] = useState(todayLocalStr());
+  const [unpaidOpen, setUnpaidOpen] = useState(false);
+  const [smsBody, setSmsBody] = useState("");
 
   const fundApi = "/.netlify/functions/fund";
   const myEmp = String(user?.employee_number || "");
@@ -20018,7 +20020,7 @@ function FundAdminScreen({ user }) {
   useEffect(() => {
     supabase
       .from("members")
-      .select("employee_number, name")
+      .select("employee_number, name, phone")
       .then(({ data }) => {
         const list = (data || []).filter((m: any) => !String(m.name || "").startsWith("결원"));
         setMembers(list);
@@ -20207,6 +20209,76 @@ function FundAdminScreen({ user }) {
         )}
       </div>
 
+      {/* 미참여자 */}
+      {cur && (() => {
+        const unpaidList = members.filter(
+          (m: any) => !(recPerPerson[String(m.employee_number)] > 0)
+        );
+        const nums = unpaidList
+          .map((m: any) => String(m.phone || "").replace(/[^0-9]/g, ""))
+          .filter((n: string) => n.length >= 10);
+        const noPhone = unpaidList.length - nums.length;
+        const chunks: any[] = [];
+        for (let i = 0; i < nums.length; i += 20) chunks.push(nums.slice(i, i + 20));
+        const bodyText =
+          smsBody ||
+          "[대공원승무지회] " + cur.title + " 모금에 함께해주세요. 자세한 내용은 앱 공지를 확인해주세요.";
+        return (
+          <div style={cardSt}>
+            <div
+              onClick={() => setUnpaidOpen(!unpaidOpen)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280" }}>
+                미참여 <b style={{ color: "#DC2626" }}>{unpaidList.length}명</b>
+              </div>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>{unpaidOpen ? "접기" : "펼치기"}</span>
+            </div>
+            {unpaidOpen && (
+              <div>
+                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.9, marginTop: 10 }}>
+                  {unpaidList.map((m: any) => (
+                    <span key={m.employee_number} style={{ display: "inline-block", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "2px 8px", marginRight: 6, marginBottom: 6 }}>
+                      {m.name}
+                    </span>
+                  ))}
+                  {unpaidList.length === 0 && (
+                    <span style={{ color: "#9CA3AF" }}>전원 참여 완료 🎉</span>
+                  )}
+                </div>
+                {unpaidList.length > 0 && (
+                  <div>
+                    <label style={labelSt}>문자 내용</label>
+                    <textarea
+                      value={bodyText}
+                      onChange={(e) => setSmsBody(e.target.value)}
+                      rows={3}
+                      style={{ ...inputSt, resize: "none", fontFamily: "inherit" }}
+                    />
+                    {chunks.map((ch: any, i: number) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          window.location.href = "sms:" + ch.join(",") + "?&body=" + encodeURIComponent(bodyText);
+                        }}
+                        style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#2563EB", marginTop: 10, cursor: "pointer" }}
+                      >
+                        문자 보내기 {chunks.length > 1 ? (i + 1) + "번째 묶음 (" + ch.length + "명)" : "(" + ch.length + "명)"}
+                      </button>
+                    ))}
+                    {noPhone > 0 && (
+                      <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 8, textAlign: "center" }}>
+                        전화번호 없는 {noPhone}명은 문자 대상에서 빠졌어요
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* 납부 기록 */}
       {cur && (
         <div style={cardSt}>
@@ -20264,6 +20336,138 @@ function FundAdminScreen({ user }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── 단체 문자 (관리자) ──
+function GroupSmsScreen() {
+  const [smsMembers, setSmsMembers] = useState<any[]>([]);
+  const [smsTab, setSmsTab] = useState("전체");
+  const [smsQuery, setSmsQuery] = useState("");
+  const [smsSel, setSmsSel] = useState<any>({});
+  const [smsText, setSmsText] = useState("");
+  const [sentChunks, setSentChunks] = useState<any>({});
+
+  useEffect(() => {
+    supabase
+      .from("members")
+      .select("employee_number, name, phone, work_type, work_group")
+      .then(({ data }) => {
+        const list = (data || []).filter((m: any) => !String(m.name || "").startsWith("결원"));
+        list.sort((a: any, b: any) => String(a.name || "").localeCompare(String(b.name || ""), "ko"));
+        setSmsMembers(list);
+      });
+  }, []);
+
+  const visible = smsMembers.filter((m: any) => {
+    if (smsTab !== "전체" && m.work_group !== smsTab) return false;
+    if (smsQuery.trim() && !String(m.name || "").includes(smsQuery.trim())) return false;
+    return true;
+  });
+
+  const targets = smsMembers.filter((m: any) => smsSel[String(m.employee_number)]);
+  const nums = targets
+    .map((m: any) => String(m.phone || "").replace(/[^0-9]/g, ""))
+    .filter((n: string) => n.length >= 10);
+  const noPhone = targets.length - nums.length;
+  const chunks: any[] = [];
+  for (let i = 0; i < nums.length; i += 20) chunks.push(nums.slice(i, i + 20));
+
+  const toggleOne = (emp: string) => {
+    setSmsSel({ ...smsSel, [emp]: !smsSel[emp] });
+    setSentChunks({});
+  };
+  const selectVisible = () => {
+    const s: any = { ...smsSel };
+    visible.forEach((m: any) => { s[String(m.employee_number)] = true; });
+    setSmsSel(s);
+    setSentChunks({});
+  };
+  const clearAll = () => {
+    setSmsSel({});
+    setSentChunks({});
+  };
+
+  const sendChunk = (i: number) => {
+    if (!smsText.trim()) {
+      showToast("문자 내용을 입력해주세요", "error");
+      return;
+    }
+    window.location.href = "sms:" + chunks[i].join(",") + "?&body=" + encodeURIComponent(smsText.trim());
+    setSentChunks({ ...sentChunks, [i]: true });
+  };
+
+  const cardSt: any = { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 14, padding: 16, marginBottom: 12 };
+  const inputSt: any = {
+    width: "100%", border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 12px",
+    fontSize: 14, color: "#111827", background: "#fff",
+    WebkitAppearance: "none", appearance: "none", boxSizing: "border-box",
+  };
+
+  return (
+    <div>
+      <div style={cardSt}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", marginBottom: 8 }}>받는 사람 고르기</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          {["전체", "대공원", "도봉"].map((t) => (
+            <button key={t} onClick={() => setSmsTab(t)} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 10, fontSize: 13, border: "1px solid " + (smsTab === t ? "#2563EB" : "#E5E7EB"), color: smsTab === t ? "#2563EB" : "#6B7280", fontWeight: smsTab === t ? 600 : 400, background: smsTab === t ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <input value={smsQuery} onChange={(e) => setSmsQuery(e.target.value)} placeholder="이름 검색" style={inputSt} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "10px 0", fontSize: 13, color: "#374151" }}>
+          <span>선택 <b style={{ color: "#2563EB" }}>{targets.length}명</b> / {smsMembers.length}명</span>
+          <span>
+            <button onClick={selectVisible} style={{ fontSize: 12, color: "#2563EB", fontWeight: 600, background: "none", border: "none", cursor: "pointer" }}>
+              {smsTab === "전체" && !smsQuery.trim() ? "전체 선택" : "보이는 사람 선택"}
+            </button>
+            {" · "}
+            <button onClick={clearAll} style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, background: "none", border: "none", cursor: "pointer" }}>전체 해제</button>
+          </span>
+        </div>
+        <div style={{ maxHeight: 320, overflowY: "auto" }}>
+          {visible.map((m: any) => {
+            const emp = String(m.employee_number);
+            const on = !!smsSel[emp];
+            return (
+              <div key={emp} onClick={() => toggleOne(emp)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 2px", borderBottom: "1px solid #F3F4F6", fontSize: 14, color: "#111827", cursor: "pointer" }}>
+                <div style={{ width: 20, height: 20, borderRadius: 6, border: "1.5px solid " + (on ? "#2563EB" : "#D1D5DB"), background: on ? "#2563EB" : "#fff", color: "#fff", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {on ? "✓" : ""}
+                </div>
+                <span>{m.name}</span>
+                <span style={{ fontSize: 12, color: "#9CA3AF" }}>
+                  {emp}{m.work_type ? " · " + m.work_type : ""}
+                </span>
+              </div>
+            );
+          })}
+          {visible.length === 0 && (
+            <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "14px 0" }}>검색 결과가 없어요</div>
+          )}
+        </div>
+      </div>
+
+      <div style={cardSt}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", marginBottom: 8 }}>문자 내용</div>
+        <textarea value={smsText} onChange={(e) => setSmsText(e.target.value)} rows={4} placeholder="[대공원승무지회] 전달할 내용을 입력해주세요" style={{ ...inputSt, resize: "none", fontFamily: "inherit" }} />
+        {targets.length === 0 && (
+          <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", marginTop: 10 }}>위에서 받는 사람을 먼저 골라주세요</div>
+        )}
+        {chunks.map((ch: any, i: number) => (
+          <button key={i} onClick={() => sendChunk(i)} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: sentChunks[i] ? "#F9FAFB" : "#fff", color: sentChunks[i] ? "#9CA3AF" : "#2563EB", marginTop: 10, cursor: "pointer" }}>
+            {sentChunks[i] ? "✓ " : ""}
+            {chunks.length > 1 ? (i + 1) + "번째 묶음 (" + ch.length + "명)" : "문자 보내기 (" + ch.length + "명)"}
+            {sentChunks[i] ? " — 보냄" : ""}
+          </button>
+        ))}
+        {noPhone > 0 && (
+          <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", marginTop: 8 }}>
+            전화번호 없는 {noPhone}명은 대상에서 빠졌어요
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -20413,6 +20617,14 @@ useEffect(() => {
       icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
       color: "#0D9488",
       bg: "#CCFBF1",
+      badge: 0,
+    },
+    {
+      id: "sms",
+      label: "단체 문자",
+      icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+      color: "#2563EB",
+      bg: "#DBEAFE",
       badge: 0,
     },
     {
@@ -20726,6 +20938,7 @@ useEffect(() => {
         )}
         {activeMenu === "memberlist" && <MemberManageScreen user={user} />}
         {activeMenu === "fund" && <FundAdminScreen user={user} />}
+        {activeMenu === "sms" && <GroupSmsScreen />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "worktime" && <WorkTimeAdmin />}
         {activeMenu === "deduction" && <DeductionAdmin />}
