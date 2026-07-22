@@ -17,7 +17,7 @@ webpush.setVapidDetails(
 
 const supabase = createClient(
   "https://svbvawioldgundtpogkc.supabase.co",
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY
 );
 
 exports.handler = async (event) => {

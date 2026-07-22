@@ -46,12 +46,49 @@ exports.handler = async (event) => {
     const qs = event.queryStringParameters || {};
     const action = body.action || qs.action;
 
-    // ── 진단: 주소창에서 ?action=ping — 서버 키가 있는지만 알려줌 (키 값은 절대 안 보여줌) ──
+    // ── 진단: 주소창에서 ?action=ping — 키 존재 여부 + DB 접근 시험 (키 값은 절대 안 보여줌) ──
     if (action === "ping") {
+      let db_read = "";
+      let db_write = "";
+      try {
+        const { error } = await supabase
+          .from("anonymous_reports")
+          .select("id", { count: "exact", head: true });
+        db_read = error ? error.message : "ok";
+      } catch (e) {
+        db_read = String(e);
+      }
+      try {
+        // 시험 줄을 넣었다 바로 지움 (진짜 제보와 섞이지 않게 표시)
+        const { data, error } = await supabase
+          .from("anonymous_reports")
+          .insert({ category: "_ping", title: "_ping", content: "_ping", access_code: "_ping" })
+          .select("id")
+          .maybeSingle();
+        if (error) db_write = error.message;
+        else {
+          db_write = "ok";
+          if (data && data.id) await supabase.from("anonymous_reports").delete().eq("id", data.id);
+        }
+      } catch (e) {
+        db_write = String(e);
+      }
+      // 함수가 쥐고 있는 키의 정체(role)만 확인 — 키 값 자체는 절대 노출 안 함
+      let key_role = "없음";
+      try {
+        const k = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY || "";
+        const payload = JSON.parse(Buffer.from(k.split(".")[1] || "", "base64").toString("utf8"));
+        key_role = payload.role || "알수없음";
+      } catch (e) {
+        key_role = "해석불가";
+      }
       return json(200, {
         ok: true,
         service_role_env: !!process.env.SUPABASE_SERVICE_ROLE,
         service_key_env: !!process.env.SUPABASE_SERVICE_KEY,
+        key_role,
+        db_read,
+        db_write,
       });
     }
 
