@@ -73,10 +73,20 @@ exports.handler = async (event) => {
       } catch (e) {
         db_write = String(e);
       }
+      // 함수가 쥐고 있는 키의 정체(role)만 확인 — 키 값 자체는 절대 노출 안 함
+      let key_role = "없음";
+      try {
+        const k = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY || "";
+        const payload = JSON.parse(Buffer.from(k.split(".")[1] || "", "base64").toString("utf8"));
+        key_role = payload.role || "알수없음";
+      } catch (e) {
+        key_role = "해석불가";
+      }
       return json(200, {
         ok: true,
         service_role_env: !!process.env.SUPABASE_SERVICE_ROLE,
         service_key_env: !!process.env.SUPABASE_SERVICE_KEY,
+        key_role,
         db_read,
         db_write,
       });
