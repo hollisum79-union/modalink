@@ -6697,12 +6697,18 @@ const [showCheck, setShowCheck] = useState(false);
   // 비밀번호로 내 제보 + 답변 확인하기
   const handleCheck = async () => {
     if (!checkCode.trim()) return;
-    const { data } = await supabase
-      .from("anonymous_reports")
-      .select("*")
-      .eq("access_code", checkCode.trim())
-      .maybeSingle();
-    setCheckResult(data || "notfound");
+    // 서버 경유 (익명제보는 anon 키 접근 차단 — 보안)
+    try {
+      const res = await fetch("/.netlify/functions/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check", access_code: checkCode.trim() }),
+      });
+      const j = await res.json();
+      setCheckResult(j.report || "notfound");
+    } catch (e) {
+      setCheckResult("notfound");
+    }
   };
   const handleSubmit = async () => {
     if (!category || !title.trim() || !content.trim()) return;
@@ -6710,12 +6716,17 @@ const [showCheck, setShowCheck] = useState(false);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     setAccessCode(code);
     // DB에 저장 (작성자 정보 없이 = 완전 익명)
-    await supabase.from("anonymous_reports").insert({
-      category,
-      title: title.trim(),
-      content: content.trim(),
-      access_code: code,
-    });
+    await fetch("/.netlify/functions/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create",
+        category,
+        title: title.trim(),
+        content: content.trim(),
+        access_code: code,
+      }),
+    }).catch(() => {});
     onSubmit({ category, title, content });
     setDone(true);
   };
@@ -7165,10 +7176,16 @@ const [selectedReport, setSelectedReport] = useState(null);
   // 관리자 답변 저장
   const saveReply = async () => {
     if (!selectedReport) return;
-    await supabase
-      .from("anonymous_reports")
-      .update({ admin_reply: replyText, status: "답변완료" })
-      .eq("id", selectedReport.id);
+    await fetch("/.netlify/functions/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "reply",
+        employee_number: user?.employee_number,
+        id: selectedReport.id,
+        reply: replyText,
+      }),
+    }).catch(() => {});
     setReports((prev) =>
       prev.map((r) =>
         r.id === selectedReport.id
@@ -7182,26 +7199,30 @@ const [selectedReport, setSelectedReport] = useState(null);
   };
   // DB에서 익명제보 목록 불러오기
   useEffect(() => {
-    supabase
-      .from("anonymous_reports")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        if (data)
+    // 서버 경유 (관리자 여부는 서버가 사번으로 재확인)
+    fetch("/.netlify/functions/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "list", employee_number: user?.employee_number }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.reports)
           setReports(
-            data.map((r) => ({
+            j.reports.map((r: any) => ({
               ...r,
               date: r.created_at?.slice(0, 10).replace(/-/g, "."),
             }))
           );
-      });
+      })
+      .catch(() => {});
     // 관리자가 제보 목록을 열면 모두 '읽음' 처리 (알림 사라짐)
     if (user?.is_admin) {
-      supabase
-        .from("anonymous_reports")
-        .update({ admin_read: true })
-        .eq("admin_read", false)
-        .then(() => {});
+      fetch("/.netlify/functions/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "markRead", employee_number: user?.employee_number }),
+      }).catch(() => {});
     }
   }, []);
 
@@ -38852,14 +38873,19 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       });
   }, [screen, user]);
   useEffect(() => {
-    supabase
-      .from("anonymous_reports")
-      .select("id", { count: "exact", head: true })
-      .eq("admin_read", false)
-      .then(({ count }) => {
-        if (count !== null) setUnreadReportCount(count);
-      });
-  }, [screen]);
+    // 서버 경유 — 관리자만 숫자를 받음 (일반 조합원은 0)
+    if (!user?.is_admin) return;
+    fetch("/.netlify/functions/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "unreadCount", employee_number: user?.employee_number }),
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (typeof j.count === "number") setUnreadReportCount(j.count);
+      })
+      .catch(() => {});
+  }, [screen, user?.employee_number]);
   useEffect(() => {
     supabase
       .from("posts")
