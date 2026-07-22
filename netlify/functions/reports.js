@@ -23,7 +23,7 @@ const json = (code, body) => ({
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Content-Type": "application/json",
+    "Content-Type": "application/json; charset=utf-8",
   },
   body: JSON.stringify(body),
 });
