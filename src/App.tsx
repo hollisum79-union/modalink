@@ -19697,6 +19697,565 @@ function RotationEditScreen() {
   );
 }
 
+// ── 모금 (조합원) ──
+function FundScreen({ onBack, user }) {
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<any>(null);
+  const [summary, setSummary] = useState<any>(null);
+  const [myRecords, setMyRecords] = useState<any[]>([]);
+  const [myNet, setMyNet] = useState(0);
+
+  useEffect(() => {
+    (window as any).__backHandler = () => {
+      if (selected) { setSelected(null); return true; }
+      return false;
+    };
+    return () => { (window as any).__backHandler = null; };
+  });
+
+  const fundApi = "/.netlify/functions/fund";
+  const won = (n: any) => (Number(n) || 0).toLocaleString();
+  const md = (d: any) => {
+    if (!d) return "";
+    const s = String(d).slice(0, 10).split("-");
+    return s.length === 3 ? Number(s[1]) + "/" + Number(s[2]) : String(d);
+  };
+
+  const loadCampaigns = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(fundApi + "?action=campaignList");
+      const j = await res.json();
+      setCampaigns(j.campaigns || []);
+    } catch (e) {
+      showToast("모금 목록을 불러오지 못했습니다", "error");
+    }
+    setLoading(false);
+  };
+  useEffect(() => { loadCampaigns(); }, []);
+
+  const openDetail = async (c: any) => {
+    setSelected(c);
+    setSummary(null);
+    setMyRecords([]);
+    setMyNet(0);
+    try {
+      const emp = encodeURIComponent(String(user?.employee_number || ""));
+      const [s, m] = await Promise.all([
+        fetch(fundApi + "?action=summary&campaign_id=" + c.id).then((r) => r.json()),
+        fetch(fundApi + "?action=my&campaign_id=" + c.id + "&employee_number=" + emp).then((r) => r.json()),
+      ]);
+      setSummary(s);
+      setMyRecords(m.records || []);
+      setMyNet(m.net || 0);
+    } catch (e) {
+      showToast("상세 정보를 불러오지 못했습니다", "error");
+    }
+  };
+
+  const copyAccount = (text: string) => {
+    try {
+      navigator.clipboard.writeText(text);
+      showToast("계좌번호를 복사했습니다");
+    } catch (e) {
+      showToast("복사에 실패했습니다 — 길게 눌러 복사해주세요", "error");
+    }
+  };
+
+  const cardSt: any = {
+    background: "#fff",
+    border: "1px solid #E5E7EB",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+  };
+  const badgeSt = (open: boolean): any => ({
+    display: "inline-block",
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 8px",
+    borderRadius: 999,
+    background: open ? "#EFF6FF" : "#F3F4F6",
+    color: open ? "#2563EB" : "#9CA3AF",
+  });
+  const barWrap: any = {
+    height: 6,
+    background: "#F3F4F6",
+    borderRadius: 999,
+    marginTop: 10,
+    overflow: "hidden",
+  };
+
+  const pct = (s: any) =>
+    s && s.member_count > 0
+      ? Math.min(100, Math.round((s.participants / s.member_count) * 100))
+      : 0;
+
+  const kindLabel = (c: any) =>
+    c.kind === "fixed" ? "1인 " + won(c.fixed_amount) + "원" : "자유 금액";
+
+  // ── 상세 화면 ──
+  if (selected) {
+    const p = pct(summary);
+    return (
+      <div style={{ maxWidth: 430, margin: "0 auto", minHeight: "100vh", background: "#F9FAFB", fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", background: "#fff", borderBottom: "1px solid #F3F4F6" }}>
+          <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <Icon path="M15 19l-7-7 7-7" color="#6B7280" size={20} />
+          </button>
+          <div style={{ fontSize: 17, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {selected.title}
+          </div>
+        </div>
+        <div style={{ padding: 16 }}>
+          <div style={cardSt}>
+            <div style={{ fontSize: 13, color: "#6B7280" }}>지금까지 모인 금액</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", fontVariantNumeric: "tabular-nums" }}>
+                {summary ? won(summary.total) : "—"}
+                <span style={{ fontSize: 13, fontWeight: 400, color: "#6B7280" }}>원</span>
+              </div>
+              <span style={badgeSt(selected.status === "open")}>
+                {selected.status === "open" ? (selected.end_date ? "진행중 · ~" + md(selected.end_date) : "진행중") : "마감"}
+              </span>
+            </div>
+            <div style={barWrap}><div style={{ height: "100%", width: p + "%", background: "#2563EB", borderRadius: 999 }} /></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+              <span>{summary ? "참여 " + summary.participants + "명 / " + summary.member_count + "명" : "불러오는 중"}</span>
+              <span>{p}%</span>
+            </div>
+            {selected.account_info && (
+              <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, fontSize: 13, color: "#374151", marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span style={{ wordBreak: "break-all" }}>{selected.account_info}</span>
+                <button onClick={() => copyAccount(selected.account_info)} style={{ fontSize: 12, color: "#2563EB", fontWeight: 600, background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>복사</button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", margin: "18px 0 8px" }}>내 참여 내역</div>
+          <div style={cardSt}>
+            {myRecords.length === 0 && (
+              <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "10px 0" }}>
+                아직 참여 내역이 없어요
+              </div>
+            )}
+            {myRecords.map((r: any, i: number) => (
+              <div key={r.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: i === myRecords.length - 1 ? "none" : "1px solid #F3F4F6", fontSize: 14 }}>
+                <span style={{ color: r.action === "cancel" ? "#DC2626" : "#111827" }}>
+                  {won(r.amount)}원 {r.action === "cancel" ? "취소" : "납부"}
+                </span>
+                <span style={{ fontSize: 12, color: "#9CA3AF" }}>{md(r.paid_date || r.created_at)}</span>
+              </div>
+            ))}
+            {myRecords.length > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 12, borderTop: "1px solid #F3F4F6", fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                <span>합계</span>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>{won(myNet)}원</span>
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", marginTop: 10, lineHeight: 1.6 }}>
+            입금은 위 계좌로 직접 해주세요.<br />
+            확인 후 총무가 기록하면 여기에 표시됩니다.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 목록 화면 ──
+  return (
+    <div style={{ maxWidth: 430, margin: "0 auto", minHeight: "100vh", background: "#F9FAFB", fontFamily: "'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", background: "#fff", borderBottom: "1px solid #F3F4F6" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+          <Icon path="M15 19l-7-7 7-7" color="#6B7280" size={20} />
+        </button>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>모금</div>
+      </div>
+      <div style={{ padding: 16 }}>
+        {loading && (
+          <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "30px 0" }}>불러오는 중...</div>
+        )}
+        {!loading && campaigns.length === 0 && (
+          <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "30px 0" }}>
+            진행 중인 모금이 없어요
+          </div>
+        )}
+        {campaigns.map((c: any) => (
+          <FundListCard key={c.id} c={c} onOpen={() => openDetail(c)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 목록 카드 (요약을 카드별로 따로 불러옴)
+function FundListCard({ c, onOpen }) {
+  const [s, setS] = useState<any>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/.netlify/functions/fund?action=summary&campaign_id=" + c.id)
+      .then((r) => r.json())
+      .then((j) => { if (alive) setS(j); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [c.id]);
+  const won = (n: any) => (Number(n) || 0).toLocaleString();
+  const md = (d: any) => {
+    if (!d) return "";
+    const p = String(d).slice(0, 10).split("-");
+    return p.length === 3 ? Number(p[1]) + "/" + Number(p[2]) : String(d);
+  };
+  const open = c.status === "open";
+  const pct = s && s.member_count > 0 ? Math.min(100, Math.round((s.participants / s.member_count) * 100)) : 0;
+  return (
+    <div onClick={onOpen} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 14, padding: 16, marginBottom: 12, cursor: "pointer", opacity: open ? 1 : 0.6 }}>
+      <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 999, background: open ? "#EFF6FF" : "#F3F4F6", color: open ? "#2563EB" : "#9CA3AF" }}>
+        {open ? "진행중" : "마감"}
+      </span>
+      <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "8px 0 4px" }}>{c.title}</div>
+      <div style={{ fontSize: 13, color: "#6B7280" }}>
+        {(c.start_date ? md(c.start_date) : "") + (c.end_date ? " ~ " + md(c.end_date) : "")}
+        {(c.start_date || c.end_date) ? " · " : ""}
+        {c.kind === "fixed" ? "1인 " + won(c.fixed_amount) + "원" : "자유 금액"}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: "#111827", fontVariantNumeric: "tabular-nums", marginTop: 10 }}>
+        {s ? won(s.total) : "—"}
+        <span style={{ fontSize: 13, fontWeight: 400, color: "#6B7280" }}>원</span>
+      </div>
+      {open && (
+        <>
+          <div style={{ height: 6, background: "#F3F4F6", borderRadius: 999, marginTop: 10, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: pct + "%", background: "#2563EB", borderRadius: 999 }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+            <span>{s ? "참여 " + s.participants + "명 / " + s.member_count + "명" : ""}</span>
+            <span>{s ? pct + "%" : ""}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── 모금 관리 (지회장·총무) ──
+function FundAdminScreen({ user }) {
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [curId, setCurId] = useState<any>(null);
+  const [records, setRecords] = useState<any[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState("free");
+  const [fixedAmount, setFixedAmount] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [account, setAccount] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [members, setMembers] = useState<any[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [pick, setPick] = useState<any>(null);
+  const [amount, setAmount] = useState("");
+  const [paidDate, setPaidDate] = useState(todayLocalStr());
+
+  const fundApi = "/.netlify/functions/fund";
+  const myEmp = String(user?.employee_number || "");
+  const won = (n: any) => (Number(n) || 0).toLocaleString();
+  const md = (d: any) => {
+    if (!d) return "";
+    const p = String(d).slice(0, 10).split("-");
+    return p.length === 3 ? Number(p[1]) + "/" + Number(p[2]) : String(d);
+  };
+
+  const inputSt: any = {
+    width: "100%",
+    border: "1px solid #E5E7EB",
+    borderRadius: 10,
+    padding: "11px 12px",
+    fontSize: 14,
+    color: "#111827",
+    background: "#fff",
+    WebkitAppearance: "none",
+    appearance: "none",
+    boxSizing: "border-box",
+  };
+  const labelSt: any = { fontSize: 13, fontWeight: 600, color: "#374151", marginTop: 14, marginBottom: 6, display: "block" };
+  const cardSt: any = { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 14, padding: 16, marginBottom: 12 };
+
+  const loadCampaigns = async () => {
+    try {
+      const res = await fetch(fundApi + "?action=campaignList");
+      const j = await res.json();
+      const list = j.campaigns || [];
+      setCampaigns(list);
+      if (list.length > 0 && curId == null) setCurId(list[0].id);
+    } catch (e) {
+      showToast("모금 목록을 불러오지 못했습니다", "error");
+    }
+  };
+  useEffect(() => { loadCampaigns(); }, []);
+
+  const cur = campaigns.find((c: any) => String(c.id) === String(curId)) || null;
+
+  const loadRecords = async (cid: any) => {
+    if (!cid) { setRecords([]); return; }
+    try {
+      const res = await fetch(fundApi + "?action=list&campaign_id=" + cid + "&employee_number=" + encodeURIComponent(myEmp));
+      const j = await res.json();
+      if (j.error) { showToast("명단 조회 실패: " + j.error, "error"); setRecords([]); return; }
+      setRecords(j.records || []);
+    } catch (e) {
+      showToast("명단을 불러오지 못했습니다", "error");
+    }
+  };
+  useEffect(() => { loadRecords(curId); }, [curId]);
+
+  useEffect(() => {
+    supabase
+      .from("members")
+      .select("employee_number, name")
+      .then(({ data }) => {
+        const list = (data || []).filter((m: any) => !String(m.name || "").startsWith("결원"));
+        setMembers(list);
+      });
+  }, []);
+
+  const createCampaign = async () => {
+    if (!title.trim()) { showToast("제목을 입력해주세요", "error"); return; }
+    if (kind === "fixed" && (!Number(fixedAmount) || Number(fixedAmount) <= 0)) {
+      showToast("정액 금액을 입력해주세요", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(fundApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "campaignCreate",
+          employee_number: myEmp,
+          title: title.trim(),
+          kind,
+          fixed_amount: kind === "fixed" ? Number(fixedAmount) : null,
+          start_date: startDate || null,
+          end_date: endDate || null,
+          account_info: account.trim() || null,
+        }),
+      });
+      const j = await res.json();
+      if (j.error) { showToast("모금 만들기 실패: " + j.error, "error"); setSaving(false); return; }
+      showToast("모금을 시작했습니다");
+      setTitle(""); setFixedAmount(""); setStartDate(""); setEndDate(""); setAccount(""); setKind("free");
+      setCreateOpen(false);
+      await loadCampaigns();
+      if (j.campaign) setCurId(j.campaign.id);
+    } catch (e) {
+      showToast("모금 만들기 실패 — 인터넷 연결을 확인해주세요", "error");
+    }
+    setSaving(false);
+  };
+
+  const toggleStatus = async () => {
+    if (!cur) return;
+    const next = cur.status === "open" ? "closed" : "open";
+    if (!window.confirm(next === "closed" ? "이 모금을 마감할까요?" : "이 모금을 다시 열까요?")) return;
+    try {
+      const res = await fetch(fundApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "campaignStatus", employee_number: myEmp, campaign_id: cur.id, status: next }),
+      });
+      const j = await res.json();
+      if (j.error) { showToast("변경 실패: " + j.error, "error"); return; }
+      showToast(next === "closed" ? "마감했습니다" : "다시 열었습니다");
+      loadCampaigns();
+    } catch (e) {
+      showToast("변경 실패 — 인터넷 연결을 확인해주세요", "error");
+    }
+  };
+
+  const addRecord = async () => {
+    if (!cur) return;
+    if (!pick) { showToast("조합원을 선택해주세요", "error"); return; }
+    if (!Number(amount) || Number(amount) <= 0) { showToast("금액을 입력해주세요", "error"); return; }
+    try {
+      const res = await fetch(fundApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add",
+          employee_number: myEmp,
+          campaign_id: cur.id,
+          target_employee_number: String(pick.employee_number),
+          member_name: pick.name,
+          amount: Number(amount),
+          paid_date: paidDate || null,
+        }),
+      });
+      const j = await res.json();
+      if (j.error) { showToast("기록 실패: " + j.error, "error"); return; }
+      showToast(pick.name + " " + won(amount) + "원 기록했습니다");
+      setPick(null); setMemberQuery(""); setAmount(cur.kind === "fixed" ? String(cur.fixed_amount || "") : "");
+      loadRecords(cur.id);
+    } catch (e) {
+      showToast("기록 실패 — 인터넷 연결을 확인해주세요", "error");
+    }
+  };
+
+  const cancelRecord = async (r: any) => {
+    if (!cur) return;
+    if (!window.confirm(r.member_name + " " + won(r.amount) + "원 납부를 취소할까요? (취소 기록이 추가됩니다)")) return;
+    try {
+      const res = await fetch(fundApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "cancel",
+          employee_number: myEmp,
+          campaign_id: cur.id,
+          target_employee_number: String(r.employee_number),
+          member_name: r.member_name,
+          amount: Number(r.amount),
+          paid_date: todayLocalStr(),
+        }),
+      });
+      const j = await res.json();
+      if (j.error) { showToast("취소 실패: " + j.error, "error"); return; }
+      showToast("취소 기록을 추가했습니다");
+      loadRecords(cur.id);
+    } catch (e) {
+      showToast("취소 실패 — 인터넷 연결을 확인해주세요", "error");
+    }
+  };
+
+  const filteredMembers = memberQuery.trim()
+    ? members.filter((m: any) => String(m.name || "").includes(memberQuery.trim())).slice(0, 8)
+    : [];
+
+  let recTotal = 0;
+  records.forEach((r: any) => {
+    recTotal += (r.action === "cancel" ? -1 : 1) * (Number(r.amount) || 0);
+  });
+
+  return (
+    <div>
+      {/* 모금 선택 + 마감 */}
+      <div style={cardSt}>
+        <label style={{ ...labelSt, marginTop: 0 }}>모금 선택</label>
+        <select value={curId == null ? "" : String(curId)} onChange={(e) => setCurId(e.target.value)} style={inputSt}>
+          {campaigns.length === 0 && <option value="">아직 만든 모금이 없어요</option>}
+          {campaigns.map((c: any) => (
+            <option key={c.id} value={String(c.id)}>
+              {(c.status === "open" ? "" : "[마감] ") + c.title}
+            </option>
+          ))}
+        </select>
+        {cur && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+            <div style={{ fontSize: 13, color: "#6B7280" }}>
+              합계 <b style={{ color: "#111827", fontVariantNumeric: "tabular-nums" }}>{won(recTotal)}원</b> · 기록 {records.length}건
+            </div>
+            <button onClick={toggleStatus} style={{ fontSize: 12, fontWeight: 600, color: cur.status === "open" ? "#DC2626" : "#2563EB", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+              {cur.status === "open" ? "마감하기" : "다시 열기"}
+            </button>
+          </div>
+        )}
+        <button onClick={() => setCreateOpen(!createOpen)} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", marginTop: 12, cursor: "pointer" }}>
+          {createOpen ? "새 모금 접기" : "+ 새 모금 만들기"}
+        </button>
+        {createOpen && (
+          <div>
+            <label style={labelSt}>제목</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 조의금 모금" style={inputSt} />
+            <label style={labelSt}>방식</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[["free", "자유 금액"], ["fixed", "정액"]].map(([k, lb]) => (
+                <button key={k} onClick={() => setKind(k)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, fontSize: 14, border: "1px solid " + (kind === k ? "#2563EB" : "#E5E7EB"), color: kind === k ? "#2563EB" : "#6B7280", fontWeight: kind === k ? 600 : 400, background: kind === k ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
+                  {lb}
+                </button>
+              ))}
+            </div>
+            {kind === "fixed" && (
+              <div>
+                <label style={labelSt}>1인 금액 (원)</label>
+                <input value={fixedAmount} onChange={(e) => setFixedAmount(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="10000" style={inputSt} />
+              </div>
+            )}
+            <label style={labelSt}>시작일</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={inputSt} />
+            <label style={labelSt}>종료일</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputSt} />
+            <label style={labelSt}>입금 계좌</label>
+            <input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="예: 농협 000-0000-0000-00 (대공원승무지회)" style={inputSt} />
+            <button onClick={createCampaign} disabled={saving} style={{ display: "block", width: "100%", textAlign: "center", padding: "13px 0", borderRadius: 12, fontSize: 15, fontWeight: 600, border: "none", background: "#2563EB", color: "#fff", marginTop: 14, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+              {saving ? "저장 중..." : "모금 시작"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 납부 기록 */}
+      {cur && (
+        <div style={cardSt}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", marginBottom: 8 }}>납부 기록 — {cur.title}</div>
+          <button onClick={() => { setAddOpen(!addOpen); setAmount(cur.kind === "fixed" ? String(cur.fixed_amount || "") : ""); setPaidDate(todayLocalStr()); }} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", cursor: "pointer" }}>
+            {addOpen ? "입력 접기" : "+ 납부 기록 추가"}
+          </button>
+          {addOpen && (
+            <div>
+              <label style={labelSt}>조합원</label>
+              {pick ? (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #2563EB", background: "#EFF6FF", borderRadius: 10, padding: "11px 12px", fontSize: 14 }}>
+                  <span style={{ color: "#111827", fontWeight: 600 }}>{pick.name} <span style={{ color: "#6B7280", fontWeight: 400 }}>({pick.employee_number})</span></span>
+                  <button onClick={() => { setPick(null); setMemberQuery(""); }} style={{ fontSize: 12, color: "#6B7280", background: "none", border: "none", cursor: "pointer" }}>변경</button>
+                </div>
+              ) : (
+                <div>
+                  <input value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder="이름 검색" style={inputSt} />
+                  {filteredMembers.map((m: any) => (
+                    <div key={m.employee_number} onClick={() => { setPick(m); setMemberQuery(""); }} style={{ padding: "10px 12px", fontSize: 14, color: "#111827", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}>
+                      {m.name} <span style={{ color: "#9CA3AF", fontSize: 12 }}>({m.employee_number})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label style={labelSt}>금액 (원)</label>
+              <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="50000" style={inputSt} />
+              <label style={labelSt}>입금일</label>
+              <input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} style={inputSt} />
+              <button onClick={addRecord} style={{ display: "block", width: "100%", textAlign: "center", padding: "13px 0", borderRadius: 12, fontSize: 15, fontWeight: 600, border: "none", background: "#2563EB", color: "#fff", marginTop: 14, cursor: "pointer" }}>
+                기록 저장
+              </button>
+            </div>
+          )}
+          <div style={{ marginTop: 8 }}>
+            {records.length === 0 && (
+              <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "14px 0" }}>아직 기록이 없어요</div>
+            )}
+            {records.map((r: any) => (
+              <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: "1px solid #F3F4F6", fontSize: 14 }}>
+                <span style={{ color: "#111827" }}>
+                  {r.member_name || r.employee_number}
+                  <span style={{ fontSize: 12, color: "#9CA3AF", marginLeft: 6 }}>{md(r.paid_date || r.created_at)}</span>
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", color: r.action === "cancel" ? "#DC2626" : "#111827" }}>
+                    {(r.action === "cancel" ? "-" : "") + won(r.amount)}
+                  </span>
+                  {r.action !== "cancel" && (
+                    <button onClick={() => cancelRecord(r)} style={{ fontSize: 12, color: "#DC2626", background: "none", border: "none", cursor: "pointer" }}>취소</button>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminScreen({ onBack, user, onNavigate }) {
   const [activeMenu, setActiveMenu] = useState("home");
   const [fpTab, setFpTab] = useState<"field" | "ranking">("field");
@@ -19842,6 +20401,14 @@ useEffect(() => {
       icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
       color: "#0D9488",
       bg: "#CCFBF1",
+      badge: 0,
+    },
+    {
+      id: "fund",
+      label: "모금 관리",
+      icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+      color: "#DC2626",
+      bg: "#FEE2E2",
       badge: 0,
     },
   ];
@@ -20146,6 +20713,7 @@ useEffect(() => {
           </div>
         )}
         {activeMenu === "memberlist" && <MemberManageScreen user={user} />}
+        {activeMenu === "fund" && <FundAdminScreen user={user} />}
         {activeMenu === "paysettings" && <PaySettingScreen />}
         {activeMenu === "worktime" && <WorkTimeAdmin />}
         {activeMenu === "deduction" && <DeductionAdmin />}
@@ -39606,6 +40174,8 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
     );
   if (screen === "welfare")
     return <WelfareScreen onBack={() => setScreen("home")} user={user} />;
+  if (screen === "fund")
+    return <FundScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "vote")
     return <VoteScreen onBack={() => setScreen("home")} user={user} />;
   if (screen === "anonymous")
@@ -40070,6 +40640,12 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       label: "설문·투표",
       sub: "의견을 들려주세요",
       icon: "M3 10h18M3 10V6a2 2 0 012-2h14a2 2 0 012 2v4M3 10l2 10h14l2-10M10 6V4m4 2V4M12 14v2m0 0h-2m2 0h2",
+    },
+    {
+      id: "fund",
+      label: "모금",
+      sub: "함께하는 마음",
+      icon: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
     },
     {
       id: "inquiry",
@@ -41037,6 +41613,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   if (item.id === "board") { localStorage.setItem("lastSeen_post", new Date().toISOString()); setNewPostCount(0); setBoardTab("전체"); setScreen("board"); }
                  if (item.id === "inquiry") { localStorage.setItem("lastSeen_inquiry", new Date().toISOString()); setNewInquiryCount(0); setScreen("inquiry"); }
                   if (item.id === "welfare") setScreen("welfare");
+                  if (item.id === "fund") setScreen("fund");
                   if (item.id === "vote") { setScreen("vote"); }
                   if (item.id === "anonymous") setScreen("anonymous");
                   if (item.id === "archive") setScreen("archive");
