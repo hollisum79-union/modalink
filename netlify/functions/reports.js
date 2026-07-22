@@ -43,7 +43,17 @@ exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return json(200, {});
   try {
     const body = JSON.parse(event.body || "{}");
-    const action = body.action;
+    const qs = event.queryStringParameters || {};
+    const action = body.action || qs.action;
+
+    // ── 진단: 주소창에서 ?action=ping — 서버 키가 있는지만 알려줌 (키 값은 절대 안 보여줌) ──
+    if (action === "ping") {
+      return json(200, {
+        ok: true,
+        service_role_env: !!process.env.SUPABASE_SERVICE_ROLE,
+        service_key_env: !!process.env.SUPABASE_SERVICE_KEY,
+      });
+    }
 
     // ── 제보 작성 (누구나 · 작성자 정보 없음 = 완전 익명) ──
     if (action === "create") {
