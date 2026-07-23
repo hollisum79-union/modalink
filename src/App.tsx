@@ -15296,6 +15296,22 @@ function OperatorHome({ opName }: { opName: string }) {
           );
           return;
         }
+        // 앱에서 낸 휴가와 겹침 방지 (leave_history)
+        const { data: lvDup } = await supabase
+          .from("leave_history")
+          .select("leave_type, used_date")
+          .eq("employee_number", String(absSel.employee_number))
+          .neq("status", "취소")
+          .gte("used_date", startD)
+          .lte("used_date", endD)
+          .limit(1);
+        if (lvDup && lvDup.length > 0) {
+          const LVN: Record<string, string> = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체휴가", study: "학습휴가", longService: "장기재직", petition: "청원휴가" };
+          setAbsMsg(
+            `⚠️ ${absSel.name}님은 ${String(lvDup[0].used_date).slice(5).replace("-", "/")}에 앱에서 신청한 「${LVN[lvDup[0].leave_type] || lvDup[0].leave_type}」가 있습니다. 같은 날에 두 개를 입력할 수 없어요.`
+          );
+          return;
+        }
         const { error } = await supabase
           .from("operator_absence")
           .insert({
@@ -15644,6 +15660,31 @@ function OperatorHome({ opName }: { opName: string }) {
                 </div>
               );
             })
+          )}
+
+          {opLeaves.length > 0 && (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", margin: "16px 0 8px" }}>
+                이 날짜 앱 휴가 ({opLeaves.length})
+              </div>
+              {opLeaves.map((lv: any, i: number) => {
+                const m = (opAllMembers.length ? opAllMembers : opMembers).find(
+                  (x: any) => String(x.employee_number) === String(lv.employee_number)
+                );
+                const LVN: Record<string, string> = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체휴가", study: "학습휴가", longService: "장기재직", petition: "청원휴가" };
+                return (
+                  <div key={"oplv" + i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === opLeaves.length - 1 ? 0 : "1px solid #F5F5F7" }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 7px", borderRadius: 6, background: "#EEF0FF", color: "#4F46E5", flex: "none" }}>앱 휴가</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{m ? m.name : lv.employee_number}</div>
+                      <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
+                        {LVN[lv.leave_type] || lv.leave_type} · 본인이 앱에서 신청 — 여기선 삭제 불가
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </div>
@@ -24790,6 +24831,20 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     loadLeave();
   }, [selectedMember, refreshSignal]);
 
+  // 운용기관사가 입력한 유고 (operator_absence · 표시 전용 · 본인 것만 달력에 보임)
+  const [opAbsRecords, setOpAbsRecords] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    if (!selectedMember?.employee_number) { setOpAbsRecords([]); return; }
+    const loadOpAbs = async () => {
+      const { data } = await supabase
+        .from("operator_absence")
+        .select("*")
+        .eq("employee_number", String(selectedMember.employee_number));
+      if (data) setOpAbsRecords(data);
+    };
+    loadOpAbs();
+  }, [selectedMember, refreshSignal]);
+
   // 근무조정 기록 불러오기 (선택된 사람 기준)
   React.useEffect(() => {
     if (!selectedMember?.employee_number) { setAdjustRecords([]); return; }
@@ -25605,6 +25660,20 @@ const getKyobunWork = (member: any, date: Date) => {
                       </div>
                     );
                   })()}
+                  {(() => {
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
+                    const abs = opAbsRecords.filter((r: any) => r.work_date <= key && (r.end_date || r.work_date) >= key);
+                    if (abs.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {abs.map((r: any, i: number) => (
+                          <div key={`ab${i}`} style={{ background: "#FFF7ED", borderRadius: 5, padding: "2px 3px" }}>
+                            <div style={{ fontSize: 9, color: "#C2410C", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{r.reason || "유고"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   {dayMemos.length > 0 && (
                     <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
                       {dayMemos.slice(0, 2).map((m: any, i: number) => (
@@ -26242,6 +26311,15 @@ const getKyobunWork = (member: any, date: Date) => {
                         <div key={`lv${i}`} style={{ background: "#EEF0FF", borderRadius: 5, padding: "2px 3px" }}>
                           <div style={{ fontSize: 9, color: "#4F46E5", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{LVL[r.leave_type] || r.leave_type}</div>
                           <div style={{ fontSize: 9, color: "#4F46E5", lineHeight: 1.3, textAlign: "center" }}>{r.days}일</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isSelf && opAbsRecords.filter((r: any) => r.work_date <= dstr && (r.end_date || r.work_date) >= dstr).length > 0 && (
+                    <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {opAbsRecords.filter((r: any) => r.work_date <= dstr && (r.end_date || r.work_date) >= dstr).map((r: any, i: number) => (
+                        <div key={`ab${i}`} style={{ background: "#FFF7ED", borderRadius: 5, padding: "2px 3px" }}>
+                          <div style={{ fontSize: 9, color: "#C2410C", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{r.reason || "유고"}</div>
                         </div>
                       ))}
                     </div>
@@ -27376,6 +27454,21 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                       </div>
                     );
                   })()}  
+                {(() => {
+                    const dstr2 = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
+                    const abs = opAbsRecords.filter((r: any) => r.work_date <= dstr2 && (r.end_date || r.work_date) >= dstr2);
+                    if (abs.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {abs.map((r: any, i: number) => (
+                          <div key={`ab${i}`} style={{ background: "#FFF7ED", borderRadius: 5, padding: "2px 3px" }}>
+                            <div style={{ fontSize: 9, color: "#C2410C", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{r.reason || "유고"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                                 {dayMemos.length > 0 && String(selectedMember?.employee_number) === String(user?.employee_number) && (
                     <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
                       {dayMemos.slice(0, 2).map((m: any, i: number) => (
@@ -32279,6 +32372,19 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("로그인 정보가 없습니다.", "error");
       return;
     }
+    // 0. 같은 날 중복 · 운용기관사 유고 겹침 방지
+    const [dupRes, abRes] = await Promise.all([
+      supabase.from("leave_history").select("id").eq("employee_number", user.employee_number).eq("used_date", useDate).neq("status", "취소").limit(1),
+      supabase.from("operator_absence").select("reason").eq("employee_number", String(user.employee_number)).lte("work_date", useDate).gte("end_date", useDate).limit(1),
+    ]);
+    if (dupRes.data && dupRes.data.length > 0) {
+      showToast(`${String(useDate).slice(5).replace("-", "/")}에는 이미 사용한 휴가가 있습니다. 같은 날에 두 개를 입력할 수 없어요.`, "error");
+      return;
+    }
+    if (abRes.data && abRes.data.length > 0) {
+      showToast(`${String(useDate).slice(5).replace("-", "/")}에는 운용기관사가 입력한 「${abRes.data[0].reason}」이 있어요. 겹치는 날에는 휴가를 입력할 수 없습니다.`, "error");
+      return;
+    }
     // 1. 사용 이력 저장
     const { error: histError } = await supabase.from("leave_history").insert({
       employee_number: user.employee_number,
@@ -34021,6 +34127,27 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       ? (pickedDia ? pickedDia.name : `임시 ${tempStart}~${tempEnd}`)
       : formFillType === "다이아" ? `다이아 ${formDiaNum}번` : "취급실";
     const fullMemo = formMemo ? `${fillInfo} · ${formMemo}` : fillInfo;
+
+    // 같은 날 근무조정 중복 · 휴가 · 유고 겹침 방지
+    const [adjDup, lvDup2, abDup2] = await Promise.all([
+      supabase.from("work_adjust").select("id, adjust_type").eq("employee_number", user.employee_number).eq("work_date", formDate).limit(1),
+      supabase.from("leave_history").select("id").eq("employee_number", user.employee_number).eq("used_date", formDate).neq("status", "취소").limit(1),
+      supabase.from("operator_absence").select("reason").eq("employee_number", String(user.employee_number)).lte("work_date", formDate).gte("end_date", formDate).limit(1),
+    ]);
+    const mdTxt = String(formDate).slice(5).replace("-", "/");
+    if (adjDup.data && adjDup.data.length > 0) {
+      const ADJN: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무" };
+      showToast(`${mdTxt}에는 이미 「${ADJN[adjDup.data[0].adjust_type] || adjDup.data[0].adjust_type}」 기록이 있습니다. 같은 날에 두 개를 입력할 수 없어요.`, "error");
+      return;
+    }
+    if (lvDup2.data && lvDup2.data.length > 0) {
+      showToast(`${mdTxt}에는 휴가가 있습니다. 휴가 있는 날에는 근무를 입력할 수 없어요.`, "error");
+      return;
+    }
+    if (abDup2.data && abDup2.data.length > 0) {
+      showToast(`${mdTxt}에는 운용기관사가 입력한 「${abDup2.data[0].reason}」이 있어요. 근무를 입력할 수 없습니다.`, "error");
+      return;
+    }
 
     const { error } = await supabase.from("work_adjust").insert([
       {
