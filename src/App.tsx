@@ -16946,6 +16946,8 @@ function OperatorDesignated({ opName }: { opName: string }) {
   const [baseDate, setBaseDate] = useState("");
   const [baseLoaded, setBaseLoaded] = useState(false);
   const [monthSel, setMonthSel] = useState("전체");
+  const [cardFilter, setCardFilter] = useState<"" | "target">(""); // 카드 터치 → 대상자만 보기
+  const appliesRef = React.useRef<HTMLDivElement | null>(null); // 신청됨 카드 → 예정 목록 스크롤
   const [searchName, setSearchName] = useState("");
 
   // 기준일 로드 (op_settings) — 과거 충당 기록이 없는 기간을 장부에서 제외하기 위한 시작점
@@ -17189,6 +17191,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
     .filter((l: any) => !searchName.trim() || String(l.name).includes(searchName.trim()))
     .sort((a: any, b: any) => (b.owed + b.planned - b.paid) - (a.owed + a.planned - a.paid) || b.owed - a.owed);
   const remainTotal = viewLedger.reduce((s: number, l: any) => s + Math.max(0, l.owed + l.planned - l.paid), 0);
+  const viewShown = cardFilter === "target" ? viewLedger.filter((l: any) => l.owed + l.planned - l.paid > 0) : viewLedger;
 
   return (
     <div>
@@ -17208,16 +17211,29 @@ function OperatorDesignated({ opName }: { opName: string }) {
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-        {[
-          [ledgerLoading ? "–" : String(viewLedger.filter((l: any) => l.owed + l.planned - l.paid > 0).length), "지정 대상자"],
-          [ledgerLoading ? "–" : String(remainTotal), "지정 예정"],
-          [String(applies.length), "신청됨"],
-        ].map(([n, l]) => (
-          <div key={l} style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px" }}>
-            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{loading && l === "신청됨" ? "–" : n}</div>
-            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}</div>
-          </div>
-        ))}
+        {([
+          [ledgerLoading ? "–" : String(viewLedger.filter((l: any) => l.owed + l.planned - l.paid > 0).length), "지정 대상자", "target"],
+          [ledgerLoading ? "–" : String(remainTotal), "지정 예정", "target"],
+          [String(applies.length), "신청됨", "applied"],
+        ] as [string, string, string][]).map(([n, l, act]) => {
+          const on = act === "target" && cardFilter === "target";
+          return (
+            <div
+              key={l}
+              onClick={() => {
+                if (act === "applied") {
+                  if (appliesRef.current) appliesRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+                } else {
+                  setCardFilter(cardFilter === "target" ? "" : "target");
+                }
+              }}
+              style={{ ...card, flex: 1, margin: 0, textAlign: "center", padding: "14px 8px", cursor: "pointer", border: on ? "2px solid #0D9488" : "1px solid #E9EDEC" }}
+            >
+              <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -1, color: "#111827" }}>{loading && l === "신청됨" ? "–" : n}</div>
+              <div style={{ fontSize: 11, color: on ? "#0F766E" : "#9CA3AF", fontWeight: 700, marginTop: 4 }}>{l}{on ? " · 대상자만" : ""}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div style={card}>
@@ -17260,16 +17276,16 @@ function OperatorDesignated({ opName }: { opName: string }) {
         />
         {ledgerLoading ? (
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>계산 중…</div>
-        ) : viewLedger.length === 0 ? (
+        ) : viewShown.length === 0 ? (
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
             {searchName.trim() ? "검색 결과가 없습니다." : `${monthSel === "전체" ? "기준일 이후" : `${monthSel.slice(2, 4)}.${Number(monthSel.slice(5, 7))}`} 강제 휴무 발생·예정이 없습니다. 🎉`}
           </div>
         ) : (
-        viewLedger.map((l, i) => {
+        viewShown.map((l, i) => {
           const remain = l.owed + l.planned - l.paid;
           const pastMonth = monthSel !== "전체" && monthSel < nowYm;
           return (
-            <div key={l.name} style={{ ...row, borderBottom: i === viewLedger.length - 1 ? 0 : row.borderBottom }}>
+            <div key={l.name} style={{ ...row, borderBottom: i === viewShown.length - 1 ? 0 : row.borderBottom }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: remain > 0 ? "#111827" : "#C4C7CC" }}>{l.name}</div>
                 <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
@@ -17308,7 +17324,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
         )}
       </div>
 
-      <div style={card}>
+      <div style={card} ref={appliesRef}>
         <div style={ttl}>
           예정된 지정근무 <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>{applies.length}건</span>
         </div>
