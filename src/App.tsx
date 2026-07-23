@@ -14931,18 +14931,28 @@ function OperatorHome({ opName }: { opName: string }) {
         const emps = applies.map((a) => empOf.get(a.member_id)).filter(Boolean);
         const dates = applies.map((a) => a.work_date);
         if (emps.length > 0) {
-          const { data: lvs } = await supabase
-            .from("leave_history")
-            .select("employee_number, used_date")
-            .in("employee_number", emps as string[])
-            .in("used_date", dates)
-            .neq("status", "취소");
+          const [{ data: lvs }, { data: abs2 }] = await Promise.all([
+            supabase
+              .from("leave_history")
+              .select("employee_number, used_date")
+              .in("employee_number", emps as string[])
+              .in("used_date", dates)
+              .neq("status", "취소"),
+            supabase
+              .from("operator_absence")
+              .select("employee_number, work_date, end_date")
+              .in("employee_number", emps as string[]),
+          ]);
           const lvSet = new Set((lvs || []).map((l) => String(l.employee_number) + "|" + l.used_date));
+          const abCover = (emp: string, d: string) =>
+            (abs2 || []).some(
+              (ab: any) => String(ab.employee_number) === emp && String(ab.work_date) <= d && String(ab.end_date || ab.work_date) >= d
+            );
           setOpSupportLeaveDone(
             applies
               .filter((a) => {
                 const emp = empOf.get(a.member_id);
-                return emp && lvSet.has(emp + "|" + a.work_date);
+                return emp && (lvSet.has(emp + "|" + a.work_date) || abCover(String(emp), String(a.work_date)));
               })
               .map((a) => String(empOf.get(a.member_id)))
           );
@@ -15722,6 +15732,16 @@ function OperatorHome({ opName }: { opName: string }) {
     const slot = empty.find((e) => e.dia === fillDia)!;
     const s = shiftOf(fillDia);
 
+    // 그날 휴가·유고 사번 — 신청 유지 + 휴가·유고 = 이행 처리 → 배정 후보에서 제외
+    const offToday = new Set<string>([
+      ...opLeaves.map((lv: any) => String(lv.employee_number)),
+      ...opAbsences.map((ab: any) => String(ab.employee_number)),
+    ]);
+    const empOfId = new Map<any, string>();
+    opMembers.forEach((m: any) => empOfId.set(m.id, String(m.employee_number)));
+    opAllMembers.forEach((m: any) => { if (!empOfId.has(m.id)) empOfId.set(m.id, String(m.employee_number)); });
+    const desigOff = (d: any) => { const e = empOfId.get(d.member_id); return !!e && offToday.has(e); };
+
     // 충당 순서대로 후보 구성 (예시)
     const standbyCands = standby
       .filter((x) => x.usable && shiftOf(x.slot) === s && !usedNames.includes(x.name))
@@ -15745,6 +15765,7 @@ function OperatorHome({ opName }: { opName: string }) {
         (c) =>
           !opSupportDone.includes(String(c.employee_number)) &&
           !opSupportLeaveDone.includes(String(c.employee_number)) &&
+          !offToday.has(String(c.employee_number)) &&
           !usedNames.includes(c.name)
       )
       .map((c) => {
@@ -15946,37 +15967,52 @@ function OperatorHome({ opName }: { opName: string }) {
 
         <div style={secTtl}>⓪ 지정근무 신청자 (실데이터)</div>
         <div style={{ ...card, marginBottom: 4 }}>
-          {desigApplies.filter((d) => !usedNames.includes(d.member_name)).length === 0 ? (
-            <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
-              이 날짜 지정근무 신청이 없습니다.
-            </div>
-          ) : (
-            desigApplies
-              .filter((d) => !usedNames.includes(d.member_name))
-              .map((d, i, arr) => (
-                <div key={d.id} style={{ ...row, borderBottom: i === arr.length - 1 ? 0 : row.borderBottom }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-                      {d.member_name}
-                      {i === 0 && (
-                        <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#FCE7F3", color: "#BE185D" }}>
-                          최우선
-                        </span>
-                      )}
+          {(() => {
+            const active = desigApplies.filter((d) => !usedNames.includes(d.member_name) && !desigOff(d));
+            const done = desigApplies.filter((d) => !usedNames.includes(d.member_name) && desigOff(d));
+            if (active.length === 0 && done.length === 0)
+              return (
+                <div style={{ textAlign: "center", padding: "14px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+                  이 날짜 지정근무 신청이 없습니다.
+                </div>
+              );
+            const total = active.length + done.length;
+            return (
+              <>
+                {active.map((d, i) => (
+                  <div key={d.id} style={{ ...row, borderBottom: i === total - 1 ? 0 : row.borderBottom }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                        {d.member_name}
+                        {i === 0 && (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#FCE7F3", color: "#BE185D" }}>
+                            최우선
+                          </span>
+                        )}
+                      </div>
+                      <div style={meta}>
+                        지정근무 · {d.via === "app" || d.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${d.via}`}
+                      </div>
                     </div>
-                    <div style={meta}>
-                      지정근무 · {d.via === "app" || d.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${d.via}`}
+                    <button
+                      onClick={() => pick(d.member_name, "지정근무")}
+                      style={{ border: 0, borderRadius: 10, background: "#BE185D", color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                    >
+                      배정
+                    </button>
+                  </div>
+                ))}
+                {done.map((d, i) => (
+                  <div key={"off" + d.id} style={{ ...row, borderBottom: active.length + i === total - 1 ? 0 : row.borderBottom }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#C4C7CC", textDecoration: "line-through" }}>{d.member_name}</div>
+                      <div style={meta}>지정근무 신청 후 그날 휴가·유고 — 이행 처리됨 (배정 불가)</div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => pick(d.member_name, "지정근무")}
-                    style={{ border: 0, borderRadius: 10, background: "#BE185D", color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
-                  >
-                    배정
-                  </button>
-                </div>
-              ))
-          )}
+                ))}
+              </>
+            );
+          })()}
         </div>
 
         <div style={secTtl}>① 대기 근무자 ({s})</div>
@@ -16972,6 +17008,12 @@ function OperatorDesignated({ opName }: { opName: string }) {
           supabase.from("kyobun_swap").select("*").eq("status", "수락"),
           ...holYears.map((y) => fetchHolidays(y)),
         ] as any[])) as any[];
+        // 신청 유지 + 그날 휴가·유고 = 이행 처리 재료 (전부 읽기만)
+        const [dApRes, lvRes3, abRes3] = await Promise.all([
+          supabase.from("chungdang_apply").select("member_id, work_date").eq("kind", "designated").eq("status", "applied").gte("work_date", PERIOD_START).lte("work_date", endStr),
+          supabase.from("leave_history").select("employee_number, used_date").neq("status", "취소").gte("used_date", PERIOD_START).lte("used_date", endStr),
+          supabase.from("operator_absence").select("employee_number, work_date, end_date").lte("work_date", endStr).gte("end_date", PERIOD_START),
+        ]);
         const membersAll = (mRes.data || []).filter((m: any) => m.start_position != null && m.schedule_total);
         const people = membersAll.filter((m: any) => !(m.name || "").includes("결원"));
         const rotation = rRes.data || [];
@@ -17010,12 +17052,33 @@ function OperatorDesignated({ opName }: { opName: string }) {
         }
         // [속도] 이행 기록을 사번별로 미리 묶기 (사람마다 전체 기록을 훑지 않게)
         const paidByEmp = new Map<string, string[]>();
+        const paidKey = new Set<string>();
         adj.forEach((r: any) => {
           if (r.adjust_type !== "designated") return;
           const k = String(r.employee_number);
           if (!paidByEmp.has(k)) paidByEmp.set(k, []);
           paidByEmp.get(k)!.push(String(r.work_date));
+          paidKey.add(k + "|" + String(r.work_date));
         });
+        // 신청 유지 + 그날 휴가·유고 = 이행 처리 (실근무 기록과 중복 방지)
+        {
+          const empById = new Map<any, string>();
+          membersAll.forEach((m: any) => empById.set(m.id, String(m.employee_number)));
+          const lvSet = new Set((lvRes3.data || []).map((l: any) => String(l.employee_number) + "|" + String(l.used_date)));
+          const absList = abRes3.data || [];
+          const absCover = (emp: string, d: string) =>
+            absList.some((ab: any) => String(ab.employee_number) === emp && String(ab.work_date) <= d && String(ab.end_date || ab.work_date) >= d);
+          (dApRes.data || []).forEach((a: any) => {
+            const emp = empById.get(a.member_id);
+            if (!emp) return;
+            const d = String(a.work_date);
+            if (!(lvSet.has(emp + "|" + d) || absCover(emp, d))) return;
+            if (paidKey.has(emp + "|" + d)) return;
+            paidKey.add(emp + "|" + d);
+            if (!paidByEmp.has(emp)) paidByEmp.set(emp, []);
+            paidByEmp.get(emp)!.push(d);
+          });
+        }
         const rows: any[] = [];
         for (const m of people) {
           // [속도] 이 사람이 낀 교체만 넘김 (calcKyobunWork가 어차피 사번으로 걸러 씀 → 결과 동일)
