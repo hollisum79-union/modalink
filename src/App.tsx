@@ -10779,22 +10779,31 @@ function MemberManageScreen({ user }: any) {
       
       </div>
 
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="이름 또는 사번으로 검색"
-        style={{
-          width: "100%",
-          padding: "11px 14px",
-          borderRadius: 10,
-          border: "1.5px solid #E5E7EB",
-          fontSize: 14,
-          outline: "none",
-          boxSizing: "border-box",
-          fontFamily: "inherit",
-          marginBottom: 12,
-        }}
-      />
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="이름 또는 사번으로 검색"
+          style={{
+            width: "100%",
+            padding: "11px 38px 11px 14px",
+            borderRadius: 10,
+            border: "1.5px solid #E5E7EB",
+            fontSize: 14,
+            outline: "none",
+            boxSizing: "border-box",
+            fontFamily: "inherit",
+          }}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 24, height: 24, borderRadius: 12, border: "none", background: "#E5E7EB", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1, padding: 0 }}
+          >
+            ×
+          </button>
+        )}
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
   {(() => {
@@ -10804,21 +10813,21 @@ function MemberManageScreen({ user }: any) {
     const outU = sm.filter((m) => m.is_union !== true).length;
     return (
       <>
-  <div onClick={() => setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원")} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : q && inU > 0 ? "2px solid #A5B4FC" : "2px solid transparent" }}>
+  <div onClick={() => { setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원"); setPhoneFilter(false); }} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : q && inU > 0 ? "2px solid #A5B4FC" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#4F46E5" }}>
       {members.filter((m) => m.is_union === true && !(m.name || "").includes("결원")).length}명
     </div>
     {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: inU > 0 ? "#4F46E5" : "#C7CBD1", marginTop: 2 }}>{inU > 0 ? `🔍 여기 ${inU}명` : "일치 없음"}</div>}
   </div>
-  <div onClick={() => setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원")} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : q && outU > 0 ? "2px solid #C7CBD1" : "2px solid transparent" }}>
+  <div onClick={() => { setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원"); setPhoneFilter(false); }} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : q && outU > 0 ? "2px solid #C7CBD1" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>비조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#9CA3AF" }}>
             {members.filter((m) => m.is_union !== true && !(m.name || "").includes("결원")).length}명
     </div>
     {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: outU > 0 ? "#6B7280" : "#C7CBD1", marginTop: 2 }}>{outU > 0 ? `🔍 여기 ${outU}명` : "일치 없음"}</div>}
   </div>
-  <div onClick={() => setPhoneFilter(!phoneFilter)} style={{ flex: 1, background: "#FEF2F2", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: phoneFilter ? "2px solid #DC2626" : "2px solid transparent" }}>
+  <div onClick={() => { setPhoneFilter(!phoneFilter); setUnionFilter("전체"); }} style={{ flex: 1, background: "#FEF2F2", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: phoneFilter ? "2px solid #DC2626" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>번호 없음</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#DC2626" }}>
       {members.filter((m: any) => !(m.name || "").includes("결원") && String(m.phone || "").replace(/[^0-9]/g, "").length < 10).length}명
@@ -15287,6 +15296,22 @@ function OperatorHome({ opName }: { opName: string }) {
           );
           return;
         }
+        // 앱에서 낸 휴가와 겹침 방지 (leave_history)
+        const { data: lvDup } = await supabase
+          .from("leave_history")
+          .select("leave_type, used_date")
+          .eq("employee_number", String(absSel.employee_number))
+          .neq("status", "취소")
+          .gte("used_date", startD)
+          .lte("used_date", endD)
+          .limit(1);
+        if (lvDup && lvDup.length > 0) {
+          const LVN: Record<string, string> = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체휴가", study: "학습휴가", longService: "장기재직", petition: "청원휴가" };
+          setAbsMsg(
+            `⚠️ ${absSel.name}님은 ${String(lvDup[0].used_date).slice(5).replace("-", "/")}에 앱에서 신청한 「${LVN[lvDup[0].leave_type] || lvDup[0].leave_type}」가 있습니다. 같은 날에 두 개를 입력할 수 없어요.`
+          );
+          return;
+        }
         const { error } = await supabase
           .from("operator_absence")
           .insert({
@@ -15635,6 +15660,31 @@ function OperatorHome({ opName }: { opName: string }) {
                 </div>
               );
             })
+          )}
+
+          {opLeaves.length > 0 && (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", margin: "16px 0 8px" }}>
+                이 날짜 앱 휴가 ({opLeaves.length})
+              </div>
+              {opLeaves.map((lv: any, i: number) => {
+                const m = (opAllMembers.length ? opAllMembers : opMembers).find(
+                  (x: any) => String(x.employee_number) === String(lv.employee_number)
+                );
+                const LVN: Record<string, string> = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체휴가", study: "학습휴가", longService: "장기재직", petition: "청원휴가" };
+                return (
+                  <div key={"oplv" + i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === opLeaves.length - 1 ? 0 : "1px solid #F5F5F7" }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 7px", borderRadius: 6, background: "#EEF0FF", color: "#4F46E5", flex: "none" }}>앱 휴가</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{m ? m.name : lv.employee_number}</div>
+                      <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
+                        {LVN[lv.leave_type] || lv.leave_type} · 본인이 앱에서 신청 — 여기선 삭제 불가
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </div>
@@ -16552,7 +16602,7 @@ function OperatorHome({ opName }: { opName: string }) {
 }
 
 // ── 지원근무: 2개월 1기, 각 기 1회 의무. 대상자는 교대 근무자 중 지정 ──
-// ── 이력: 종류 구분 + 달력 팝업 (아직 예시 데이터) ──
+// ── 이력: 종류 구분 + 달력 팝업 (operator_assign 실데이터) ──
 const HIST_KINDS = ["전체", "대기충당", "휴무충당", "지정근무", "지원근무"] as const;
 
 function OperatorHist() {
@@ -16561,19 +16611,48 @@ function OperatorHist() {
   const [calOpen, setCalOpen] = useState(false);
   const [calYm, setCalYm] = useState<[number, number]>([now.getFullYear(), now.getMonth()]);
   const [pickDate, setPickDate] = useState<string>("");
+  const [hist, setHist] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 예시 이력 (3단계에서 실제 기록으로 교체)
-  const hist = [
-    { date: "2026-07-12", kind: "대기충당", who: "정하늘", dia: "32", by: "하경수", memo: "김철수 연차" },
-    { date: "2026-07-12", kind: "휴무충당", who: "박민수", dia: "47", by: "하경수", memo: "이영희 육아휴직" },
-    { date: "2026-07-11", kind: "지정근무", who: "김영상", dia: "11", by: "이운용", memo: "안진모 대체휴가" },
-    { date: "2026-07-08", kind: "휴무충당", who: "김철수", dia: "71", by: "이운용", memo: "" },
-    { date: "2026-07-06", kind: "대기충당", who: "구민재", dia: "15", by: "하경수", memo: "" },
-    { date: "2026-07-02", kind: "지원근무", who: "노하람", dia: "-", by: "박운용", memo: "7-8월분" },
-  ];
+  const [cy, cm] = calYm;
+
+  // 보고 있는 달의 배정 기록만 불러온다 (기록이 몇 년 쌓여도 느려지지 않음)
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    (async () => {
+      const mm = String(cm + 1).padStart(2, "0");
+      const first = `${cy}-${mm}-01`;
+      const lastDay = new Date(cy, cm + 1, 0).getDate();
+      const last = `${cy}-${mm}-${String(lastDay).padStart(2, "0")}`;
+      const { data } = await supabase
+        .from("operator_assign")
+        .select("work_date, dia_no, filled_name, via, action, created_by, memo, created_at")
+        .gte("work_date", first)
+        .lte("work_date", last)
+        .order("work_date", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (!alive) return;
+      setHist(
+        (data || []).map((r: any) => ({
+          date: String(r.work_date),
+          cancel: r.action === "cancel",
+          via: r.via || "-",
+          who: r.filled_name || "-",
+          dia: r.dia_no != null ? String(r.dia_no) : "-",
+          by: r.created_by || "-",
+          memo: r.memo || "",
+        }))
+      );
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [cy, cm]);
 
   const filtered = hist.filter(
-    (h) => (kindF === "전체" || h.kind === kindF) && (!pickDate || h.date === pickDate)
+    (h) => (kindF === "전체" || h.via === kindF) && (!pickDate || h.date === pickDate)
   );
 
   const kindColor: Record<string, [string, string]> = {
@@ -16581,6 +16660,7 @@ function OperatorHist() {
     휴무충당: ["#DBEAFE", "#1D4ED8"],
     지정근무: ["#FCE7F3", "#BE185D"],
     지원근무: ["#EDE9FE", "#6D28D9"],
+    배정취소: ["#F3F4F6", "#9CA3AF"],
   };
 
   const card: React.CSSProperties = {
@@ -16608,7 +16688,6 @@ function OperatorHist() {
   };
 
   // ── 미니 달력 ──
-  const [cy, cm] = calYm;
   const firstDow = new Date(cy, cm, 1).getDay();
   const daysIn = new Date(cy, cm + 1, 0).getDate();
   const cells: (number | null)[] = [
@@ -16621,21 +16700,6 @@ function OperatorHist() {
 
   return (
     <div>
-      <div
-        style={{
-          background: "#FEF3C7",
-          color: "#92400E",
-          borderRadius: 12,
-          padding: "10px 12px",
-          fontSize: 11.5,
-          fontWeight: 700,
-          marginBottom: 12,
-          lineHeight: 1.6,
-        }}
-      >
-        아래 이력은 예시입니다. 확정 기능이 생기면 실제 기록으로 바뀝니다.
-      </div>
-
       {/* 종류 필터 + 달력 버튼 */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
         {HIST_KINDS.map((k) => (
@@ -16683,19 +16747,19 @@ function OperatorHist() {
         )}
       </div>
 
-      {/* 달력 팝업 */}
+      {/* 달력 팝업 (달을 넘기면 그 달 기록을 새로 불러옴) */}
       {calOpen && (
         <div style={{ ...card, padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <button
-              onClick={() => setCalYm(cm === 0 ? [cy - 1, 11] : [cy, cm - 1])}
+              onClick={() => { setPickDate(""); setCalYm(cm === 0 ? [cy - 1, 11] : [cy, cm - 1]); }}
               style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
             >
               ‹
             </button>
             <div style={{ fontSize: 14.5, fontWeight: 800 }}>{cy}년 {cm + 1}월</div>
             <button
-              onClick={() => setCalYm(cm === 11 ? [cy + 1, 0] : [cy, cm + 1])}
+              onClick={() => { setPickDate(""); setCalYm(cm === 11 ? [cy + 1, 0] : [cy, cm + 1]); }}
               style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
             >
               ›
@@ -16743,31 +16807,37 @@ function OperatorHist() {
       {/* 이력 목록 */}
       <div style={card}>
         <div style={ttl}>
-          {pickDate ? `${pickDate.slice(5).replace("-", "/")} 이력` : "확정 이력"}
+          {pickDate ? `${pickDate.slice(5).replace("-", "/")} 이력` : `${cy}년 ${cm + 1}월 이력`}
           <span style={{ fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", padding: "3px 9px", borderRadius: 20 }}>
             {filtered.length}건
           </span>
         </div>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "28px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            불러오는 중…
+          </div>
+        ) : filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "28px 0", color: "#C4C7CC", fontSize: 12.5 }}>
             해당 기록이 없습니다.
           </div>
         ) : (
           filtered.map((h, i) => {
-            const [bg, fg] = kindColor[h.kind] || ["#F3F4F6", "#6B7280"];
+            const tag = h.cancel ? "배정취소" : h.via;
+            const [bg, fg] = kindColor[tag] || ["#F3F4F6", "#6B7280"];
             return (
               <div key={i} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom }}>
                 <span style={{ fontSize: 10.5, fontWeight: 800, padding: "4px 8px", borderRadius: 7, background: bg, color: fg, flex: "none" }}>
-                  {h.kind}
+                  {tag}
                 </span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: h.cancel ? "#9CA3AF" : "#111827", textDecoration: h.cancel ? "line-through" : "none" }}>
                     {h.who}
-                    {h.dia !== "-" && <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}> · {h.dia}다이아</span>}
+                    {h.dia !== "-" && <span style={{ fontSize: 12, color: h.cancel ? "#C4C7CC" : "#6B7280", fontWeight: 700 }}> · {h.dia}다이아</span>}
                   </div>
                   <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                    {h.date.slice(5).replace("-", "/")} · 확정 {h.by}
-                    {h.memo ? ` · ${h.memo}` : ""}
+                    {h.date.slice(5).replace("-", "/")} · {h.cancel ? "취소" : "확정"} {h.by}
+                    {h.cancel && h.via !== "-" ? ` · (${h.via}이었음)` : ""}
+                    {!h.cancel && h.memo ? ` · ${h.memo}` : ""}
                   </div>
                 </div>
               </div>
@@ -16786,7 +16856,8 @@ function OperatorHist() {
           padding: "12px 14px",
         }}
       >
-        기록은 지워지지 않습니다. 모든 배정은 누가 · 언제 확정했는지 남고, 담당자 전원이 같은 이력을 봅니다.
+        기록은 지워지지 않습니다. 취소한 배정도 회색 줄로 남고, 담당자 전원이 같은 이력을 봅니다.
+        달력에서 다른 달로 넘기면 그 달 기록을 불러옵니다.
       </div>
     </div>
   );
@@ -16833,7 +16904,8 @@ function OperatorDesignated({ opName }: { opName: string }) {
   }, []);
 
   // 지정근무 현황 자동 계산 (읽기 전용 집계 — 아무것도 쓰지 않음)
-  // 지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 work_adjust 충당 기록이 없는 날
+  // 지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)
+  //            + 휴51·휴71(조건 없이 무조건)인데 당일 work_adjust 충당 기록이 없는 날
   // 이행 = work_adjust의 지정(designated) 기록 수
   useEffect(() => {
     if (!baseLoaded || !baseDate) return;
@@ -16867,21 +16939,21 @@ function OperatorDesignated({ opName }: { opName: string }) {
         const adjSet = new Set(adj.map((r: any) => String(r.employee_number) + "|" + r.work_date));
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        // [속도] 미영업 다이아는 "휴일"에만 생김 → 휴일 날짜만 미리 뽑아 그 날만 계산.
-        //        계산 결과는 전과 100% 동일하고, 훑는 날짜만 1/3로 줄어듦.
-        const holDays: { date: Date; str: string; md: string; nextHol: boolean }[] = [];
+        // 휴51·휴71은 평일에도 지정 대상이 되므로 전체 날짜를 훑는다.
+        // (숫자 다이아의 휴일 조건은 각 날짜의 isHol 값으로 판정 — 결과는 전과 동일)
+        const allDays: { date: Date; str: string; md: string; isHol: boolean; nextHol: boolean }[] = [];
         {
           const cur = new Date(PERIOD_START + "T00:00:00");
           while (cur <= today) {
             const date = new Date(cur);
             cur.setDate(cur.getDate() + 1);
-            if (!isHol(date)) continue;
             const tm = new Date(date);
             tm.setDate(tm.getDate() + 1);
-            holDays.push({
+            allDays.push({
               date,
               str: fmt(date),
               md: `${date.getMonth() + 1}/${date.getDate()}`,
+              isHol: isHol(date),
               nextHol: isHol(tm),
             });
           }
@@ -16903,18 +16975,25 @@ function OperatorDesignated({ opName }: { opName: string }) {
               String(sw.a_employee_number) === emp || String(sw.b_employee_number) === emp
           );
           const owedList: { d: string; label: string }[] = [];
-          for (const hd of holDays) {
+          for (const hd of allDays) {
             const w: any = calcKyobunWork(m, hd.date, rotation, mSwaps, membersAll, hist);
             if (!w || !w.dia) continue;
             const ds = String(w.dia).replace(/\s+/g, "");
-            if (!/^\d+$/.test(ds)) continue;
-            const n = Number(ds);
             let noOp = false;
-            if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n)) noOp = true;
-            else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && hd.nextHol) noOp = true;
+            let label = "";
+            if (ds === "휴51" || ds === "휴71") {
+              // 휴51·휴71 = 평일·휴일 상관없이 무조건 지정 대상
+              noOp = true;
+              label = `${hd.md}${ds}`;
+            } else if (/^\d+$/.test(ds)) {
+              const n = Number(ds);
+              if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && hd.isHol) noOp = true;
+              else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && hd.isHol && hd.nextHol) noOp = true;
+              if (noOp) label = `${hd.md}${w.type === "야간" ? "야" : "주"}${ds}`;
+            }
             if (!noOp) continue;
             if (adjSet.has(emp + "|" + hd.str)) continue; // 당일 충당됨
-            owedList.push({ d: hd.str, label: `${hd.md}${w.type === "야간" ? "야" : "주"}${ds}` });
+            owedList.push({ d: hd.str, label });
           }
           const paidList = paidByEmp.get(emp) || [];
           if (owedList.length > 0 || paidList.length > 0) rows.push({ id: m.id, name: m.name, owedList, paidList });
@@ -16989,7 +17068,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
           lineHeight: 1.6,
         }}
       >
-        지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 충당이 없던 날. 이행 = 지정근무 기록. 지정은 해당 월 안 이행이 원칙 — 월 버튼으로 월별 확인, 예외는 "전체"에서 누적으로 보세요. 자동 집계라 입력할 것 없음.
+        지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴 / 휴51·휴71은 무조건)인데 당일 충당이 없던 날. 이행 = 지정근무 기록. 지정은 해당 월 안 이행이 원칙 — 월 버튼으로 월별 확인, 예외는 "전체"에서 누적으로 보세요. 자동 집계라 입력할 것 없음.
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
@@ -20542,7 +20621,14 @@ function GroupSmsScreen() {
             </button>
           ))}
         </div>
-        <input value={smsQuery} onChange={(e) => setSmsQuery(e.target.value)} placeholder="이름 검색" style={inputSt} />
+        <div style={{ position: "relative" }}>
+          <input value={smsQuery} onChange={(e) => setSmsQuery(e.target.value)} placeholder="이름 검색" style={{ ...inputSt, paddingRight: 38 }} />
+          {smsQuery && (
+            <button onClick={() => setSmsQuery("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 24, height: 24, borderRadius: 12, border: "none", background: "#E5E7EB", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1, padding: 0 }}>
+              ×
+            </button>
+          )}
+        </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "10px 0", fontSize: 13, color: "#374151" }}>
           <span>선택 <b style={{ color: "#2563EB" }}>{targets.length}명</b> / {smsMembers.length}명</span>
           <span>
@@ -24745,6 +24831,20 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
     loadLeave();
   }, [selectedMember, refreshSignal]);
 
+  // 운용기관사가 입력한 유고 (operator_absence · 표시 전용 · 본인 것만 달력에 보임)
+  const [opAbsRecords, setOpAbsRecords] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    if (!selectedMember?.employee_number) { setOpAbsRecords([]); return; }
+    const loadOpAbs = async () => {
+      const { data } = await supabase
+        .from("operator_absence")
+        .select("*")
+        .eq("employee_number", String(selectedMember.employee_number));
+      if (data) setOpAbsRecords(data);
+    };
+    loadOpAbs();
+  }, [selectedMember, refreshSignal]);
+
   // 근무조정 기록 불러오기 (선택된 사람 기준)
   React.useEffect(() => {
     if (!selectedMember?.employee_number) { setAdjustRecords([]); return; }
@@ -25150,6 +25250,9 @@ if (data) {
     if (ds.startsWith("대기") || /^대\d/.test(ds)) {
       return { kind: "대기", msg: work.type === "야간" ? "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요. 충당이 안 되면 야간수당 4시간만 인정돼요 (주행키로 없음)." : "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요." };
     }
+    if (ds === "휴51" || ds === "휴71") {
+      return { kind: "휴지정", msg: "지정근무 대상 휴무예요 (휴51·휴71). 평일·휴일 상관없이 이후 지정근무로 나와야 해요." };
+    }
     if (!/^\d+$/.test(ds)) return null;
     const n = Number(ds);
     if (work.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHolidayDate(date)) {
@@ -25552,6 +25655,20 @@ const getKyobunWork = (member: any, date: Date) => {
                             <div style={{ fontSize: 9, color: "#4F46E5", lineHeight: 1.3, textAlign: "center" }}>
                               {r.days}일
                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
+                    const abs = opAbsRecords.filter((r: any) => r.work_date <= key && (r.end_date || r.work_date) >= key);
+                    if (abs.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {abs.map((r: any, i: number) => (
+                          <div key={`ab${i}`} style={{ background: "#FFF7ED", borderRadius: 5, padding: "2px 3px" }}>
+                            <div style={{ fontSize: 9, color: "#C2410C", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{r.reason || "유고"}</div>
                           </div>
                         ))}
                       </div>
@@ -26194,6 +26311,15 @@ const getKyobunWork = (member: any, date: Date) => {
                         <div key={`lv${i}`} style={{ background: "#EEF0FF", borderRadius: 5, padding: "2px 3px" }}>
                           <div style={{ fontSize: 9, color: "#4F46E5", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{LVL[r.leave_type] || r.leave_type}</div>
                           <div style={{ fontSize: 9, color: "#4F46E5", lineHeight: 1.3, textAlign: "center" }}>{r.days}일</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isSelf && opAbsRecords.filter((r: any) => r.work_date <= dstr && (r.end_date || r.work_date) >= dstr).length > 0 && (
+                    <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {opAbsRecords.filter((r: any) => r.work_date <= dstr && (r.end_date || r.work_date) >= dstr).map((r: any, i: number) => (
+                        <div key={`ab${i}`} style={{ background: "#FFF7ED", borderRadius: 5, padding: "2px 3px" }}>
+                          <div style={{ fontSize: 9, color: "#C2410C", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{r.reason || "유고"}</div>
                         </div>
                       ))}
                     </div>
@@ -27328,6 +27454,21 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                       </div>
                     );
                   })()}  
+                {(() => {
+                    const dstr2 = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
+                    const abs = opAbsRecords.filter((r: any) => r.work_date <= dstr2 && (r.end_date || r.work_date) >= dstr2);
+                    if (abs.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {abs.map((r: any, i: number) => (
+                          <div key={`ab${i}`} style={{ background: "#FFF7ED", borderRadius: 5, padding: "2px 3px" }}>
+                            <div style={{ fontSize: 9, color: "#C2410C", fontWeight: 600, lineHeight: 1.3, textAlign: "center" }}>{r.reason || "유고"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                                 {dayMemos.length > 0 && String(selectedMember?.employee_number) === String(user?.employee_number) && (
                     <div style={{ marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
                       {dayMemos.slice(0, 2).map((m: any, i: number) => (
@@ -32231,6 +32372,19 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("로그인 정보가 없습니다.", "error");
       return;
     }
+    // 0. 같은 날 중복 · 운용기관사 유고 겹침 방지
+    const [dupRes, abRes] = await Promise.all([
+      supabase.from("leave_history").select("id").eq("employee_number", user.employee_number).eq("used_date", useDate).neq("status", "취소").limit(1),
+      supabase.from("operator_absence").select("reason").eq("employee_number", String(user.employee_number)).lte("work_date", useDate).gte("end_date", useDate).limit(1),
+    ]);
+    if (dupRes.data && dupRes.data.length > 0) {
+      showToast(`${String(useDate).slice(5).replace("-", "/")}에는 이미 사용한 휴가가 있습니다. 같은 날에 두 개를 입력할 수 없어요.`, "error");
+      return;
+    }
+    if (abRes.data && abRes.data.length > 0) {
+      showToast(`${String(useDate).slice(5).replace("-", "/")}에는 운용기관사가 입력한 「${abRes.data[0].reason}」이 있어요. 겹치는 날에는 휴가를 입력할 수 없습니다.`, "error");
+      return;
+    }
     // 1. 사용 이력 저장
     const { error: histError } = await supabase.from("leave_history").insert({
       employee_number: user.employee_number,
@@ -33973,6 +34127,27 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       ? (pickedDia ? pickedDia.name : `임시 ${tempStart}~${tempEnd}`)
       : formFillType === "다이아" ? `다이아 ${formDiaNum}번` : "취급실";
     const fullMemo = formMemo ? `${fillInfo} · ${formMemo}` : fillInfo;
+
+    // 같은 날 근무조정 중복 · 휴가 · 유고 겹침 방지
+    const [adjDup, lvDup2, abDup2] = await Promise.all([
+      supabase.from("work_adjust").select("id, adjust_type").eq("employee_number", user.employee_number).eq("work_date", formDate).limit(1),
+      supabase.from("leave_history").select("id").eq("employee_number", user.employee_number).eq("used_date", formDate).neq("status", "취소").limit(1),
+      supabase.from("operator_absence").select("reason").eq("employee_number", String(user.employee_number)).lte("work_date", formDate).gte("end_date", formDate).limit(1),
+    ]);
+    const mdTxt = String(formDate).slice(5).replace("-", "/");
+    if (adjDup.data && adjDup.data.length > 0) {
+      const ADJN: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무" };
+      showToast(`${mdTxt}에는 이미 「${ADJN[adjDup.data[0].adjust_type] || adjDup.data[0].adjust_type}」 기록이 있습니다. 같은 날에 두 개를 입력할 수 없어요.`, "error");
+      return;
+    }
+    if (lvDup2.data && lvDup2.data.length > 0) {
+      showToast(`${mdTxt}에는 휴가가 있습니다. 휴가 있는 날에는 근무를 입력할 수 없어요.`, "error");
+      return;
+    }
+    if (abDup2.data && abDup2.data.length > 0) {
+      showToast(`${mdTxt}에는 운용기관사가 입력한 「${abDup2.data[0].reason}」이 있어요. 근무를 입력할 수 없습니다.`, "error");
+      return;
+    }
 
     const { error } = await supabase.from("work_adjust").insert([
       {
