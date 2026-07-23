@@ -69,8 +69,18 @@ exports.handler = async function (event) {
       return ok(out);
     }
 
-    // ---------- campaignList ----------
+    // ---------- campaignList (조합원용: 숨긴 모금 제외) ----------
     if (action === "campaignList") {
+      const rows = await sb(
+        "fund_campaigns?select=*&hidden=not.is.true&order=created_at.desc"
+      );
+      return ok({ campaigns: rows || [] });
+    }
+
+    // ---------- campaignListAll (관리자용: 숨긴 것 포함 전체) ----------
+    if (action === "campaignListAll") {
+      const mgr = await isManager(qs.employee_number || body.employee_number);
+      if (!mgr) return fail(403, "manager only");
       const rows = await sb("fund_campaigns?select=*&order=created_at.desc");
       return ok({ campaigns: rows || [] });
     }
@@ -101,6 +111,49 @@ exports.handler = async function (event) {
         body: row,
       });
       return ok({ campaign: ins && ins[0] });
+    }
+
+    // ---------- campaignUpdate (관리자용: 모금 정보 수정 + 숨기기) ----------
+    if (action === "campaignUpdate") {
+      const mgr = await isManager(body.employee_number);
+      if (!mgr) return fail(403, "manager only");
+      const id = Number(body.campaign_id);
+      if (!id) return fail(400, "campaign_id required");
+
+      const patch = {};
+      if (body.title !== undefined) {
+        if (!String(body.title).trim()) return fail(400, "title required");
+        patch.title = String(body.title).slice(0, 200);
+      }
+      if (body.kind !== undefined) {
+        const kind = body.kind === "fixed" ? "fixed" : "free";
+        patch.kind = kind;
+        if (kind === "fixed") {
+          const fa = Number(body.fixed_amount);
+          if (!fa || fa <= 0) return fail(400, "fixed_amount required");
+          patch.fixed_amount = fa;
+        } else {
+          patch.fixed_amount = null;
+        }
+      } else if (body.fixed_amount !== undefined) {
+        const fa = Number(body.fixed_amount);
+        if (!fa || fa <= 0) return fail(400, "fixed_amount must be > 0");
+        patch.fixed_amount = fa;
+      }
+      if (body.start_date !== undefined) patch.start_date = body.start_date || null;
+      if (body.end_date !== undefined) patch.end_date = body.end_date || null;
+      if (body.account_info !== undefined) patch.account_info = body.account_info || null;
+      if (body.memo !== undefined) patch.memo = body.memo || null;
+      if (body.hidden !== undefined) patch.hidden = body.hidden === true;
+
+      if (Object.keys(patch).length === 0) return fail(400, "nothing to update");
+
+      const upd = await sb("fund_campaigns?id=eq." + id, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: patch,
+      });
+      return ok({ campaign: upd && upd[0] });
     }
 
     // ---------- campaignStatus (open <-> closed) ----------
