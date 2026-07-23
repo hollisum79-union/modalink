@@ -19704,9 +19704,15 @@ function openSmsApp(nums: any[], body: string) {
     /iPhone|iPad|iPod/.test(ua) ||
     (/Mac/.test(ua) && (navigator as any).maxTouchPoints > 1);
   const enc = encodeURIComponent(body);
-  window.location.href = isIOS
-    ? "sms://open?addresses=" + nums.join(",") + ";body=" + enc
-    : "sms:" + nums.join(",") + "?&body=" + enc;
+  if (isIOS) {
+    try {
+      navigator.clipboard.writeText(body);
+      showToast("문자 내용을 복사해뒀어요 — 내용 칸이 비면 붙여넣기 하세요");
+    } catch (e) {}
+    window.location.href = "sms://open?addresses=" + nums.join(",") + "&body=" + enc;
+  } else {
+    window.location.href = "sms:" + nums.join(",") + "?&body=" + enc;
+  }
 }
 
 // ── 모금 (조합원) ──
@@ -20360,11 +20366,17 @@ function GroupSmsScreen() {
   const [smsSel, setSmsSel] = useState<any>({});
   const [smsText, setSmsText] = useState("");
   const [sentChunks, setSentChunks] = useState<any>({});
+  const [smsUnionOnly, setSmsUnionOnly] = useState(true);
+  const [autoRun, setAutoRun] = useState(false);
+  const autoRunRef = React.useRef(false);
+  const chunksRef = React.useRef<any[]>([]);
+  const sentRef = React.useRef<any>({});
+  const textRef = React.useRef("");
 
   useEffect(() => {
     supabase
       .from("members")
-      .select("employee_number, name, phone, work_type, work_group")
+      .select("employee_number, name, phone, work_type, work_group, is_union")
       .then(({ data }) => {
         const list = (data || []).filter((m: any) => !String(m.name || "").startsWith("결원"));
         list.sort((a: any, b: any) => String(a.name || "").localeCompare(String(b.name || ""), "ko"));
@@ -20372,7 +20384,35 @@ function GroupSmsScreen() {
       });
   }, []);
 
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!autoRunRef.current) return;
+      const chs = chunksRef.current;
+      const sent = sentRef.current;
+      let next = -1;
+      for (let i = 0; i < chs.length; i++) {
+        if (!sent[i]) { next = i; break; }
+      }
+      if (next < 0) {
+        autoRunRef.current = false;
+        setAutoRun(false);
+        showToast("전체 발송 완료 — 수고하셨어요 🎉");
+        return;
+      }
+      setTimeout(() => {
+        if (!autoRunRef.current) return;
+        sentRef.current = { ...sentRef.current, [next]: true };
+        setSentChunks((prev: any) => ({ ...prev, [next]: true }));
+        openSmsApp(chs[next], textRef.current);
+      }, 900);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
   const visible = smsMembers.filter((m: any) => {
+    if (smsUnionOnly && m.is_union !== true) return false;
     if (smsTab !== "전체" && m.work_group !== smsTab) return false;
     if (smsQuery.trim() && !String(m.name || "").includes(smsQuery.trim())) return false;
     return true;
@@ -20385,20 +20425,49 @@ function GroupSmsScreen() {
   const noPhone = targets.length - nums.length;
   const chunks: any[] = [];
   for (let i = 0; i < nums.length; i += 20) chunks.push(nums.slice(i, i + 20));
+  chunksRef.current = chunks;
+  sentRef.current = sentChunks;
+  textRef.current = smsText.trim();
+
+  const resetSend = () => {
+    setSentChunks({});
+    sentRef.current = {};
+    autoRunRef.current = false;
+    setAutoRun(false);
+  };
+
+  const startAutoSend = () => {
+    if (!smsText.trim()) { showToast("문자 내용을 입력해주세요", "error"); return; }
+    if (chunks.length === 0) { showToast("받는 사람을 먼저 골라주세요", "error"); return; }
+    let next = -1;
+    for (let i = 0; i < chunks.length; i++) {
+      if (!sentChunks[i]) { next = i; break; }
+    }
+    if (next < 0) { showToast("이미 전부 보냈어요"); return; }
+    autoRunRef.current = true;
+    setAutoRun(true);
+    sentRef.current = { ...sentRef.current, [next]: true };
+    setSentChunks((prev: any) => ({ ...prev, [next]: true }));
+    openSmsApp(chunks[next], smsText.trim());
+  };
+  const stopAutoSend = () => {
+    autoRunRef.current = false;
+    setAutoRun(false);
+  };
 
   const toggleOne = (emp: string) => {
     setSmsSel({ ...smsSel, [emp]: !smsSel[emp] });
-    setSentChunks({});
+    resetSend();
   };
   const selectVisible = () => {
     const s: any = { ...smsSel };
     visible.forEach((m: any) => { s[String(m.employee_number)] = true; });
     setSmsSel(s);
-    setSentChunks({});
+    resetSend();
   };
   const clearAll = () => {
     setSmsSel({});
-    setSentChunks({});
+    resetSend();
   };
 
   const sendChunk = (i: number) => {
@@ -20425,6 +20494,13 @@ function GroupSmsScreen() {
           {["전체", "대공원", "도봉"].map((t) => (
             <button key={t} onClick={() => setSmsTab(t)} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 10, fontSize: 13, border: "1px solid " + (smsTab === t ? "#2563EB" : "#E5E7EB"), color: smsTab === t ? "#2563EB" : "#6B7280", fontWeight: smsTab === t ? 600 : 400, background: smsTab === t ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
               {t}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          {[[true, "조합원만"], [false, "명단 전체"]].map(([v, lb]: any) => (
+            <button key={String(v)} onClick={() => setSmsUnionOnly(v)} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 10, fontSize: 13, border: "1px solid " + (smsUnionOnly === v ? "#2563EB" : "#E5E7EB"), color: smsUnionOnly === v ? "#2563EB" : "#6B7280", fontWeight: smsUnionOnly === v ? 600 : 400, background: smsUnionOnly === v ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
+              {lb}
             </button>
           ))}
         </div>
@@ -20466,6 +20542,16 @@ function GroupSmsScreen() {
         <textarea value={smsText} onChange={(e) => setSmsText(e.target.value)} rows={4} placeholder="[대공원승무지회] 전달할 내용을 입력해주세요" style={{ ...inputSt, resize: "none", fontFamily: "inherit" }} />
         {targets.length === 0 && (
           <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", marginTop: 10 }}>위에서 받는 사람을 먼저 골라주세요</div>
+        )}
+        {chunks.length > 1 && (
+          <button onClick={autoRun ? stopAutoSend : startAutoSend} style={{ display: "block", width: "100%", textAlign: "center", padding: "13px 0", borderRadius: 12, fontSize: 15, fontWeight: 600, border: "none", background: autoRun ? "#FEF2F2" : "#2563EB", color: autoRun ? "#DC2626" : "#fff", marginTop: 12, cursor: "pointer" }}>
+            {autoRun ? "■ 연속 발송 멈춤" : "▶ 연속 발송 시작 (" + chunks.length + "묶음)"}
+          </button>
+        )}
+        {autoRun && (
+          <div style={{ fontSize: 12, color: "#6B7280", textAlign: "center", marginTop: 8, lineHeight: 1.6 }}>
+            문자 전송 후 이 화면으로 돌아오면<br />다음 묶음이 자동으로 열려요
+          </div>
         )}
         {chunks.map((ch: any, i: number) => (
           <button key={i} onClick={() => sendChunk(i)} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: sentChunks[i] ? "#F9FAFB" : "#fff", color: sentChunks[i] ? "#9CA3AF" : "#2563EB", marginTop: 10, cursor: "pointer" }}>
