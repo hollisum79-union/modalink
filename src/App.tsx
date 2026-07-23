@@ -19119,11 +19119,24 @@ function OperatorScreen({ onExit }: { onExit?: () => void }) {
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          marginBottom: 8,
+          position: "sticky",
+          top: "env(safe-area-inset-top, 0px)",
+          zIndex: 50,
+          padding: "8px 0 10px",
+          background: "rgba(238,240,250,0.92)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+        }}
+      >
         {tabs.map((t) => (
           <div
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => { setTab(t.id); window.scrollTo({ top: 0 }); }}
             style={{
               flex: 1,
               textAlign: "center",
