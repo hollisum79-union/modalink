@@ -20107,12 +20107,47 @@ function FundScreen({ onBack, user }) {
               <span>{summary ? "참여 " + summary.participants + "명 / " + summary.member_count + "명" : "불러오는 중"}</span>
               <span>{p}%</span>
             </div>
-            {selected.account_info && (
-              <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, fontSize: 13, color: "#374151", marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <span style={{ wordBreak: "break-all" }}>{selected.account_info}</span>
-                <button onClick={() => copyAccount(selected.account_info)} style={{ fontSize: 12, color: "#2563EB", fontWeight: 600, background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>복사</button>
-              </div>
-            )}
+            {selected.account_info && (() => {
+              const info = String(selected.account_info);
+              // "농협 000-0000-0000-00 (지회)" 형식에서 은행명·계좌번호 추출
+              const acctNo = (info.match(/\d[\d-]{5,}\d/) || [""])[0].replace(/-/g, "");
+              const bank = (info.trim().split(/\s+/)[0] || "").replace(/[^가-힣A-Za-z]/g, "");
+              const canSend = acctNo.length >= 8 && bank.length > 0;
+              const amt = selected.kind === "fixed" && selected.fixed_amount ? Number(selected.fixed_amount) : 0;
+              const sendToss = () => {
+                copyAccount(info); // 토스 미설치 대비 — 계좌 먼저 복사
+                window.location.href =
+                  "supertoss://send?bank=" + encodeURIComponent(bank) + "&accountNo=" + acctNo + (amt ? "&amount=" + amt : "");
+              };
+              return (
+                <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, marginTop: 12 }}>
+                  <div onClick={() => copyAccount(info)} style={{ fontSize: 13, color: "#374151", wordBreak: "break-all", cursor: "pointer" }}>
+                    {info}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <button
+                      onClick={() => copyAccount(info)}
+                      style={{ flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 13, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", cursor: "pointer" }}
+                    >
+                      계좌 복사
+                    </button>
+                    {canSend && (
+                      <button
+                        onClick={sendToss}
+                        style={{ flex: 1.4, padding: "10px 0", borderRadius: 10, fontSize: 13, fontWeight: 700, border: "none", background: "#2563EB", color: "#fff", cursor: "pointer" }}
+                      >
+                        토스로 송금{amt ? " (" + won(amt) + "원)" : ""}
+                      </button>
+                    )}
+                  </div>
+                  {canSend && (
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, lineHeight: 1.5 }}>
+                      토스 앱이 설치돼 있어야 열립니다. 누르면 계좌번호가 자동 복사되니 다른 은행 앱에 붙여넣어도 돼요.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", margin: "18px 0 8px" }}>내 참여 내역</div>
@@ -37527,6 +37562,23 @@ function HomeCarousel({
   const homeTip = homeTips.length > 0 ? homeTips[tipIdx % homeTips.length] : null;
   const [condolences, setCondolences] = React.useState([]);
   const [recentJoins, setRecentJoins] = React.useState<any[]>([]);
+  // 진행 중 모금 — 있으면 가입인사 자리보다 우선 표시, 없으면 숨김
+  const [openFunds, setOpenFunds] = React.useState<any[]>([]);
+  const [fundSum, setFundSum] = React.useState<any>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/.netlify/functions/fund?action=campaignList");
+        const j = await res.json();
+        const opens = (j.campaigns || []).filter((c: any) => c.status === "open");
+        setOpenFunds(opens);
+        if (opens.length > 0) {
+          const s = await fetch("/.netlify/functions/fund?action=summary&campaign_id=" + opens[0].id).then((r) => r.json());
+          setFundSum(s);
+        }
+      } catch (e) { /* 모금 배너는 실패해도 홈에 영향 없음 */ }
+    })();
+  }, []);
   const [joinPopup, setJoinPopup] = React.useState(false);
   // 🎉 이달의 추첨 당첨 배너 (추첨 후 3일 표시)
   const [drawWinner, setDrawWinner] = React.useState<any>(null);
@@ -38047,7 +38099,29 @@ const [topUsers, setTopUsers] = React.useState<any[]>([]);
           <div style={{ fontSize: 11.5, opacity: 0.92 }}>{drawWinner.prize} · 다음 달에도 도전하세요!</div>
         </div>
       )}
-      {recentJoins.length > 0 && (
+      {openFunds.length > 0 && (
+        <div
+          onClick={() => onTipNavigate && onTipNavigate("fund")}
+          style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}
+        >
+          <span style={{ fontSize: 20 }}>💙</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: "#60A5FA", marginBottom: 3 }}>모금 진행 중</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#1E40AF", lineHeight: 1.45 }}>
+              {openFunds[0].title}
+              {openFunds.length > 1 ? ` 외 ${openFunds.length - 1}건` : ""}
+            </div>
+            <div style={{ fontSize: 12, color: "#3B82F6", marginTop: 2 }}>
+              {openFunds[0].kind === "fixed" && openFunds[0].fixed_amount
+                ? `1인 ${(Number(openFunds[0].fixed_amount) || 0).toLocaleString()}원`
+                : "자유 금액"}
+              {fundSum && fundSum.member_count > 0 ? ` · 참여 ${fundSum.participants}/${fundSum.member_count}명` : ""}
+            </div>
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 800, color: "#2563EB", flexShrink: 0, alignSelf: "center" }}>참여하기 ›</span>
+        </div>
+      )}
+      {openFunds.length === 0 && recentJoins.length > 0 && (
         <div onClick={() => setJoinPopup(true)} style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 12, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
           <span style={{ fontSize: 20 }}>👋</span>
           <div style={{ minWidth: 0 }}>
