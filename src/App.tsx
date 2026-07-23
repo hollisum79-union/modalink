@@ -14709,7 +14709,7 @@ function OperatorHome({ opName }: { opName: string }) {
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("kyobun_start_history").select("*"),
         supabase.from("kyobun_swap").select("*").eq("status", "수락"),
-        supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team"),
+        supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team, tongsang_base_date, tongsang_base_dia"),
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
@@ -14987,12 +14987,20 @@ function OperatorHome({ opName }: { opName: string }) {
     opAbsences.forEach((ab) =>
       reasonByEmp.set(String(ab.employee_number), ab.reason || "유고")
     );
+    // 교번 + 통상 근무자 (통상은 51~54 순환 — calcTongsangWork)
     const byEmp = new Map(opMembers.map((m) => [String(m.employee_number), m]));
+    opAllMembers.forEach((m: any) => {
+      if (m.work_type === "통상" && !byEmp.has(String(m.employee_number))) byEmp.set(String(m.employee_number), m);
+    });
+    const workOf = (m: any) =>
+      m.work_type === "통상"
+        ? calcTongsangWork(m, target, opHolidays || [])
+        : calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
     const list: any[] = [];
     reasonByEmp.forEach((reason, emp) => {
       const m = byEmp.get(emp);
       if (!m) return;
-      const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
+      const w: any = workOf(m);
       if (!w) return;
       // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
       if (String(w.dia).startsWith("대기")) return;
@@ -15005,6 +15013,14 @@ function OperatorHome({ opName }: { opName: string }) {
       const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
       if (!w) return;
       if (String(w.dia).startsWith("대기")) return; // 대기 결원은 대기 뱃지에서 처리
+      if (w.type !== "주간" && w.type !== "야간") return;
+      list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
+    });
+    // ②-1 통상 결원 — 통상 51~54 자리의 결원도 운전 다이아면 빈 자리
+    opAllMembers.forEach((m: any) => {
+      if (m.work_type !== "통상" || !String(m.name).includes("결원")) return;
+      const w: any = calcTongsangWork(m, target, opHolidays || []);
+      if (!w) return;
       if (w.type !== "주간" && w.type !== "야간") return;
       list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
     });
@@ -15025,7 +15041,7 @@ function OperatorHome({ opName }: { opName: string }) {
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
     );
     return list;
-  }, [opMembers, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills]);
+  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -15622,12 +15638,22 @@ function OperatorHome({ opName }: { opName: string }) {
             </div>
           ) : (
             opAbsences.map((ab, i) => {
-              const m = opMembers.find((x) => String(x.employee_number) === String(ab.employee_number));
-              const w = m ? calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist) : null;
+              const m =
+                opMembers.find((x) => String(x.employee_number) === String(ab.employee_number)) ||
+                opAllMembers.find((x) => String(x.employee_number) === String(ab.employee_number));
+              const w = m
+                ? m.work_type === "통상"
+                  ? calcTongsangWork(m, target, opHolidays || [])
+                  : m.work_type === "교번"
+                    ? calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist)
+                    : null
+                : null;
               const diaTxt =
                 w && !String(w.dia).startsWith("대기") && (w.type === "주간" || w.type === "야간")
                   ? `운전 다이아 ${w.dia}`
-                  : "그날 운전 근무 아님 (빈자리 미반영)";
+                  : m && m.work_type === "교대"
+                    ? "교대 근무자 (다이아 빈자리 대상 아님)"
+                    : "그날 운전 근무 아님 (빈자리 미반영)";
               const md = (s: string) => {
                 const p = String(s).split("-");
                 return p.length === 3 ? `${Number(p[1])}/${Number(p[2])}` : s;
