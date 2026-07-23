@@ -16561,7 +16561,7 @@ function OperatorHome({ opName }: { opName: string }) {
 }
 
 // ── 지원근무: 2개월 1기, 각 기 1회 의무. 대상자는 교대 근무자 중 지정 ──
-// ── 이력: 종류 구분 + 달력 팝업 (아직 예시 데이터) ──
+// ── 이력: 종류 구분 + 달력 팝업 (operator_assign 실데이터) ──
 const HIST_KINDS = ["전체", "대기충당", "휴무충당", "지정근무", "지원근무"] as const;
 
 function OperatorHist() {
@@ -16570,19 +16570,48 @@ function OperatorHist() {
   const [calOpen, setCalOpen] = useState(false);
   const [calYm, setCalYm] = useState<[number, number]>([now.getFullYear(), now.getMonth()]);
   const [pickDate, setPickDate] = useState<string>("");
+  const [hist, setHist] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 예시 이력 (3단계에서 실제 기록으로 교체)
-  const hist = [
-    { date: "2026-07-12", kind: "대기충당", who: "정하늘", dia: "32", by: "하경수", memo: "김철수 연차" },
-    { date: "2026-07-12", kind: "휴무충당", who: "박민수", dia: "47", by: "하경수", memo: "이영희 육아휴직" },
-    { date: "2026-07-11", kind: "지정근무", who: "김영상", dia: "11", by: "이운용", memo: "안진모 대체휴가" },
-    { date: "2026-07-08", kind: "휴무충당", who: "김철수", dia: "71", by: "이운용", memo: "" },
-    { date: "2026-07-06", kind: "대기충당", who: "구민재", dia: "15", by: "하경수", memo: "" },
-    { date: "2026-07-02", kind: "지원근무", who: "노하람", dia: "-", by: "박운용", memo: "7-8월분" },
-  ];
+  const [cy, cm] = calYm;
+
+  // 보고 있는 달의 배정 기록만 불러온다 (기록이 몇 년 쌓여도 느려지지 않음)
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    (async () => {
+      const mm = String(cm + 1).padStart(2, "0");
+      const first = `${cy}-${mm}-01`;
+      const lastDay = new Date(cy, cm + 1, 0).getDate();
+      const last = `${cy}-${mm}-${String(lastDay).padStart(2, "0")}`;
+      const { data } = await supabase
+        .from("operator_assign")
+        .select("work_date, dia_no, filled_name, via, action, created_by, memo, created_at")
+        .gte("work_date", first)
+        .lte("work_date", last)
+        .order("work_date", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (!alive) return;
+      setHist(
+        (data || []).map((r: any) => ({
+          date: String(r.work_date),
+          cancel: r.action === "cancel",
+          via: r.via || "-",
+          who: r.filled_name || "-",
+          dia: r.dia_no != null ? String(r.dia_no) : "-",
+          by: r.created_by || "-",
+          memo: r.memo || "",
+        }))
+      );
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [cy, cm]);
 
   const filtered = hist.filter(
-    (h) => (kindF === "전체" || h.kind === kindF) && (!pickDate || h.date === pickDate)
+    (h) => (kindF === "전체" || h.via === kindF) && (!pickDate || h.date === pickDate)
   );
 
   const kindColor: Record<string, [string, string]> = {
@@ -16590,6 +16619,7 @@ function OperatorHist() {
     휴무충당: ["#DBEAFE", "#1D4ED8"],
     지정근무: ["#FCE7F3", "#BE185D"],
     지원근무: ["#EDE9FE", "#6D28D9"],
+    배정취소: ["#F3F4F6", "#9CA3AF"],
   };
 
   const card: React.CSSProperties = {
@@ -16617,7 +16647,6 @@ function OperatorHist() {
   };
 
   // ── 미니 달력 ──
-  const [cy, cm] = calYm;
   const firstDow = new Date(cy, cm, 1).getDay();
   const daysIn = new Date(cy, cm + 1, 0).getDate();
   const cells: (number | null)[] = [
@@ -16630,21 +16659,6 @@ function OperatorHist() {
 
   return (
     <div>
-      <div
-        style={{
-          background: "#FEF3C7",
-          color: "#92400E",
-          borderRadius: 12,
-          padding: "10px 12px",
-          fontSize: 11.5,
-          fontWeight: 700,
-          marginBottom: 12,
-          lineHeight: 1.6,
-        }}
-      >
-        아래 이력은 예시입니다. 확정 기능이 생기면 실제 기록으로 바뀝니다.
-      </div>
-
       {/* 종류 필터 + 달력 버튼 */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
         {HIST_KINDS.map((k) => (
@@ -16692,19 +16706,19 @@ function OperatorHist() {
         )}
       </div>
 
-      {/* 달력 팝업 */}
+      {/* 달력 팝업 (달을 넘기면 그 달 기록을 새로 불러옴) */}
       {calOpen && (
         <div style={{ ...card, padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <button
-              onClick={() => setCalYm(cm === 0 ? [cy - 1, 11] : [cy, cm - 1])}
+              onClick={() => { setPickDate(""); setCalYm(cm === 0 ? [cy - 1, 11] : [cy, cm - 1]); }}
               style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
             >
               ‹
             </button>
             <div style={{ fontSize: 14.5, fontWeight: 800 }}>{cy}년 {cm + 1}월</div>
             <button
-              onClick={() => setCalYm(cm === 11 ? [cy + 1, 0] : [cy, cm + 1])}
+              onClick={() => { setPickDate(""); setCalYm(cm === 11 ? [cy + 1, 0] : [cy, cm + 1]); }}
               style={{ border: 0, background: "#F3F4F6", borderRadius: 9, width: 30, height: 30, fontSize: 14, color: "#6B7280", fontFamily: "inherit", cursor: "pointer" }}
             >
               ›
@@ -16752,31 +16766,37 @@ function OperatorHist() {
       {/* 이력 목록 */}
       <div style={card}>
         <div style={ttl}>
-          {pickDate ? `${pickDate.slice(5).replace("-", "/")} 이력` : "확정 이력"}
+          {pickDate ? `${pickDate.slice(5).replace("-", "/")} 이력` : `${cy}년 ${cm + 1}월 이력`}
           <span style={{ fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", padding: "3px 9px", borderRadius: 20 }}>
             {filtered.length}건
           </span>
         </div>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "28px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            불러오는 중…
+          </div>
+        ) : filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "28px 0", color: "#C4C7CC", fontSize: 12.5 }}>
             해당 기록이 없습니다.
           </div>
         ) : (
           filtered.map((h, i) => {
-            const [bg, fg] = kindColor[h.kind] || ["#F3F4F6", "#6B7280"];
+            const tag = h.cancel ? "배정취소" : h.via;
+            const [bg, fg] = kindColor[tag] || ["#F3F4F6", "#6B7280"];
             return (
               <div key={i} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom }}>
                 <span style={{ fontSize: 10.5, fontWeight: 800, padding: "4px 8px", borderRadius: 7, background: bg, color: fg, flex: "none" }}>
-                  {h.kind}
+                  {tag}
                 </span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: h.cancel ? "#9CA3AF" : "#111827", textDecoration: h.cancel ? "line-through" : "none" }}>
                     {h.who}
-                    {h.dia !== "-" && <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}> · {h.dia}다이아</span>}
+                    {h.dia !== "-" && <span style={{ fontSize: 12, color: h.cancel ? "#C4C7CC" : "#6B7280", fontWeight: 700 }}> · {h.dia}다이아</span>}
                   </div>
                   <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                    {h.date.slice(5).replace("-", "/")} · 확정 {h.by}
-                    {h.memo ? ` · ${h.memo}` : ""}
+                    {h.date.slice(5).replace("-", "/")} · {h.cancel ? "취소" : "확정"} {h.by}
+                    {h.cancel && h.via !== "-" ? ` · (${h.via}이었음)` : ""}
+                    {!h.cancel && h.memo ? ` · ${h.memo}` : ""}
                   </div>
                 </div>
               </div>
@@ -16795,7 +16815,8 @@ function OperatorHist() {
           padding: "12px 14px",
         }}
       >
-        기록은 지워지지 않습니다. 모든 배정은 누가 · 언제 확정했는지 남고, 담당자 전원이 같은 이력을 봅니다.
+        기록은 지워지지 않습니다. 취소한 배정도 회색 줄로 남고, 담당자 전원이 같은 이력을 봅니다.
+        달력에서 다른 달로 넘기면 그 달 기록을 불러옵니다.
       </div>
     </div>
   );
@@ -16842,7 +16863,8 @@ function OperatorDesignated({ opName }: { opName: string }) {
   }, []);
 
   // 지정근무 현황 자동 계산 (읽기 전용 집계 — 아무것도 쓰지 않음)
-  // 지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 work_adjust 충당 기록이 없는 날
+  // 지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)
+  //            + 휴51·휴71(조건 없이 무조건)인데 당일 work_adjust 충당 기록이 없는 날
   // 이행 = work_adjust의 지정(designated) 기록 수
   useEffect(() => {
     if (!baseLoaded || !baseDate) return;
@@ -16876,21 +16898,21 @@ function OperatorDesignated({ opName }: { opName: string }) {
         const adjSet = new Set(adj.map((r: any) => String(r.employee_number) + "|" + r.work_date));
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        // [속도] 미영업 다이아는 "휴일"에만 생김 → 휴일 날짜만 미리 뽑아 그 날만 계산.
-        //        계산 결과는 전과 100% 동일하고, 훑는 날짜만 1/3로 줄어듦.
-        const holDays: { date: Date; str: string; md: string; nextHol: boolean }[] = [];
+        // 휴51·휴71은 평일에도 지정 대상이 되므로 전체 날짜를 훑는다.
+        // (숫자 다이아의 휴일 조건은 각 날짜의 isHol 값으로 판정 — 결과는 전과 동일)
+        const allDays: { date: Date; str: string; md: string; isHol: boolean; nextHol: boolean }[] = [];
         {
           const cur = new Date(PERIOD_START + "T00:00:00");
           while (cur <= today) {
             const date = new Date(cur);
             cur.setDate(cur.getDate() + 1);
-            if (!isHol(date)) continue;
             const tm = new Date(date);
             tm.setDate(tm.getDate() + 1);
-            holDays.push({
+            allDays.push({
               date,
               str: fmt(date),
               md: `${date.getMonth() + 1}/${date.getDate()}`,
+              isHol: isHol(date),
               nextHol: isHol(tm),
             });
           }
@@ -16912,18 +16934,25 @@ function OperatorDesignated({ opName }: { opName: string }) {
               String(sw.a_employee_number) === emp || String(sw.b_employee_number) === emp
           );
           const owedList: { d: string; label: string }[] = [];
-          for (const hd of holDays) {
+          for (const hd of allDays) {
             const w: any = calcKyobunWork(m, hd.date, rotation, mSwaps, membersAll, hist);
             if (!w || !w.dia) continue;
             const ds = String(w.dia).replace(/\s+/g, "");
-            if (!/^\d+$/.test(ds)) continue;
-            const n = Number(ds);
             let noOp = false;
-            if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n)) noOp = true;
-            else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && hd.nextHol) noOp = true;
+            let label = "";
+            if (ds === "휴51" || ds === "휴71") {
+              // 휴51·휴71 = 평일·휴일 상관없이 무조건 지정 대상
+              noOp = true;
+              label = `${hd.md}${ds}`;
+            } else if (/^\d+$/.test(ds)) {
+              const n = Number(ds);
+              if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && hd.isHol) noOp = true;
+              else if (w.type === "야간" && [61, 62, 63, 64].includes(n) && hd.isHol && hd.nextHol) noOp = true;
+              if (noOp) label = `${hd.md}${w.type === "야간" ? "야" : "주"}${ds}`;
+            }
             if (!noOp) continue;
             if (adjSet.has(emp + "|" + hd.str)) continue; // 당일 충당됨
-            owedList.push({ d: hd.str, label: `${hd.md}${w.type === "야간" ? "야" : "주"}${ds}` });
+            owedList.push({ d: hd.str, label });
           }
           const paidList = paidByEmp.get(emp) || [];
           if (owedList.length > 0 || paidList.length > 0) rows.push({ id: m.id, name: m.name, owedList, paidList });
@@ -16998,7 +17027,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
           lineHeight: 1.6,
         }}
       >
-        지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)인데 당일 충당이 없던 날. 이행 = 지정근무 기록. 지정은 해당 월 안 이행이 원칙 — 월 버튼으로 월별 확인, 예외는 "전체"에서 누적으로 보세요. 자동 집계라 입력할 것 없음.
+        지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴 / 휴51·휴71은 무조건)인데 당일 충당이 없던 날. 이행 = 지정근무 기록. 지정은 해당 월 안 이행이 원칙 — 월 버튼으로 월별 확인, 예외는 "전체"에서 누적으로 보세요. 자동 집계라 입력할 것 없음.
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
@@ -25165,6 +25194,9 @@ if (data) {
     if (ds.endsWith("~")) return null; // 비번 제외
     if (ds.startsWith("대기") || /^대\d/.test(ds)) {
       return { kind: "대기", msg: work.type === "야간" ? "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요. 충당이 안 되면 야간수당 4시간만 인정돼요 (주행키로 없음)." : "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요." };
+    }
+    if (ds === "휴51" || ds === "휴71") {
+      return { kind: "휴지정", msg: "지정근무 대상 휴무예요 (휴51·휴71). 평일·휴일 상관없이 이후 지정근무로 나와야 해요." };
     }
     if (!/^\d+$/.test(ds)) return null;
     const n = Number(ds);
