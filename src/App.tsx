@@ -19704,9 +19704,15 @@ function openSmsApp(nums: any[], body: string) {
     /iPhone|iPad|iPod/.test(ua) ||
     (/Mac/.test(ua) && (navigator as any).maxTouchPoints > 1);
   const enc = encodeURIComponent(body);
-  window.location.href = isIOS
-    ? "sms://open?addresses=" + nums.join(",") + ";body=" + enc
-    : "sms:" + nums.join(",") + "?&body=" + enc;
+  if (isIOS) {
+    try {
+      navigator.clipboard.writeText(body);
+      showToast("문자 내용을 복사해뒀어요 — 내용 칸이 비면 붙여넣기 하세요");
+    } catch (e) {}
+    window.location.href = "sms://open?addresses=" + nums.join(",") + "&body=" + enc;
+  } else {
+    window.location.href = "sms:" + nums.join(",") + "?&body=" + enc;
+  }
 }
 
 // ── 모금 (조합원) ──
