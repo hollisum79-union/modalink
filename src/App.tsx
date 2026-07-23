@@ -15817,12 +15817,23 @@ function OperatorHome({ opName }: { opName: string }) {
         };
       })
       .filter(Boolean) as any[];
+    // 그날 지정근무·지원근무 신청자는 휴무가 그 근무로 소모되므로 휴무충당 후보에서 제외
+    const desigNames = new Set(desigApplies.map((d: any) => d.member_name));
+    const supportTodayNames = new Set(
+      supportTodo.filter((c: any) => c.appliedToday).map((c: any) => c.name)
+    );
     const restCands = [...restKyobun, ...restShift]
       .sort((a: any, b: any) => {
         if (a.cnt !== b.cnt) return a.cnt - b.cnt;
         return a.isKyobun === b.isKyobun ? 0 : a.isKyobun ? -1 : 1; // 같으면 기관사 먼저
       })
-      .filter((c: any) => !usedNames.includes(c.name) && c.name !== slot.name);
+      .filter(
+        (c: any) =>
+          !usedNames.includes(c.name) &&
+          c.name !== slot.name &&
+          !desigNames.has(c.name) &&
+          !supportTodayNames.has(c.name)
+      );
 
     const pick = async (name: string, via: string, emp?: string) => {
       if (isLocked) return showToast("🔒 22시 잠금 — 이 날짜는 더 이상 수정할 수 없어요", "error");
