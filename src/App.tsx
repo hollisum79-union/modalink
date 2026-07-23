@@ -10779,22 +10779,31 @@ function MemberManageScreen({ user }: any) {
       
       </div>
 
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="이름 또는 사번으로 검색"
-        style={{
-          width: "100%",
-          padding: "11px 14px",
-          borderRadius: 10,
-          border: "1.5px solid #E5E7EB",
-          fontSize: 14,
-          outline: "none",
-          boxSizing: "border-box",
-          fontFamily: "inherit",
-          marginBottom: 12,
-        }}
-      />
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="이름 또는 사번으로 검색"
+          style={{
+            width: "100%",
+            padding: "11px 38px 11px 14px",
+            borderRadius: 10,
+            border: "1.5px solid #E5E7EB",
+            fontSize: 14,
+            outline: "none",
+            boxSizing: "border-box",
+            fontFamily: "inherit",
+          }}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 24, height: 24, borderRadius: 12, border: "none", background: "#E5E7EB", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1, padding: 0 }}
+          >
+            ×
+          </button>
+        )}
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
   {(() => {
@@ -10804,21 +10813,21 @@ function MemberManageScreen({ user }: any) {
     const outU = sm.filter((m) => m.is_union !== true).length;
     return (
       <>
-  <div onClick={() => setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원")} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : q && inU > 0 ? "2px solid #A5B4FC" : "2px solid transparent" }}>
+  <div onClick={() => { setUnionFilter(unionFilter === "조합원" ? "전체" : "조합원"); setPhoneFilter(false); }} style={{ flex: 1, background: "#EEF0FF", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "조합원" ? "2px solid #4F46E5" : q && inU > 0 ? "2px solid #A5B4FC" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#4F46E5" }}>
       {members.filter((m) => m.is_union === true && !(m.name || "").includes("결원")).length}명
     </div>
     {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: inU > 0 ? "#4F46E5" : "#C7CBD1", marginTop: 2 }}>{inU > 0 ? `🔍 여기 ${inU}명` : "일치 없음"}</div>}
   </div>
-  <div onClick={() => setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원")} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : q && outU > 0 ? "2px solid #C7CBD1" : "2px solid transparent" }}>
+  <div onClick={() => { setUnionFilter(unionFilter === "비조합원" ? "전체" : "비조합원"); setPhoneFilter(false); }} style={{ flex: 1, background: "#F3F4F6", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: unionFilter === "비조합원" ? "2px solid #9CA3AF" : q && outU > 0 ? "2px solid #C7CBD1" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>비조합원</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#9CA3AF" }}>
             {members.filter((m) => m.is_union !== true && !(m.name || "").includes("결원")).length}명
     </div>
     {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: outU > 0 ? "#6B7280" : "#C7CBD1", marginTop: 2 }}>{outU > 0 ? `🔍 여기 ${outU}명` : "일치 없음"}</div>}
   </div>
-  <div onClick={() => setPhoneFilter(!phoneFilter)} style={{ flex: 1, background: "#FEF2F2", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: phoneFilter ? "2px solid #DC2626" : "2px solid transparent" }}>
+  <div onClick={() => { setPhoneFilter(!phoneFilter); setUnionFilter("전체"); }} style={{ flex: 1, background: "#FEF2F2", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: phoneFilter ? "2px solid #DC2626" : "2px solid transparent" }}>
     <div style={{ fontSize: 11, color: "#6B7280" }}>번호 없음</div>
     <div style={{ fontSize: 18, fontWeight: 800, color: "#DC2626" }}>
       {members.filter((m: any) => !(m.name || "").includes("결원") && String(m.phone || "").replace(/[^0-9]/g, "").length < 10).length}명
@@ -20542,7 +20551,14 @@ function GroupSmsScreen() {
             </button>
           ))}
         </div>
-        <input value={smsQuery} onChange={(e) => setSmsQuery(e.target.value)} placeholder="이름 검색" style={inputSt} />
+        <div style={{ position: "relative" }}>
+          <input value={smsQuery} onChange={(e) => setSmsQuery(e.target.value)} placeholder="이름 검색" style={{ ...inputSt, paddingRight: 38 }} />
+          {smsQuery && (
+            <button onClick={() => setSmsQuery("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 24, height: 24, borderRadius: 12, border: "none", background: "#E5E7EB", color: "#6B7280", fontSize: 14, fontWeight: 700, cursor: "pointer", lineHeight: 1, padding: 0 }}>
+              ×
+            </button>
+          )}
+        </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "10px 0", fontSize: 13, color: "#374151" }}>
           <span>선택 <b style={{ color: "#2563EB" }}>{targets.length}명</b> / {smsMembers.length}명</span>
           <span>
