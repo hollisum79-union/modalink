@@ -16904,9 +16904,10 @@ function OperatorDesignated({ opName }: { opName: string }) {
   }, []);
 
   // 지정근무 현황 자동 계산 (읽기 전용 집계 — 아무것도 쓰지 않음)
-  // 지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)
+  // 지정 대상 = 기준일부터 "다음 달 말일"까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴)
   //            + 휴51·휴71(조건 없이 무조건)인데 당일 work_adjust 충당 기록이 없는 날
-  // 이행 = work_adjust의 지정(designated) 기록 수
+  // 아직 안 온 날짜 = 예정(future) — 사업소가 다음 달 지정근무를 미리 배치하는 실무 방식 반영
+  // 이행 = work_adjust의 지정(designated) 기록 수. 당월 이행 원칙 — 지나간 달 미소화분은 「미이행」으로 누적
   useEffect(() => {
     if (!baseLoaded || !baseDate) return;
     setLedgerLoading(true);
@@ -16914,22 +16915,33 @@ function OperatorDesignated({ opName }: { opName: string }) {
       try {
         const PERIOD_START = baseDate;
         const tStr = todayLocalStr();
-        const year = new Date().getFullYear();
-        const [mRes, rRes, hRes, aRes, sRes, holRes] = await Promise.all([
+        // 다음 달 말일까지 미리 계산
+        const _now = new Date();
+        const scanEnd = new Date(_now.getFullYear(), _now.getMonth() + 2, 0);
+        scanEnd.setHours(0, 0, 0, 0);
+        const endStr = `${scanEnd.getFullYear()}-${String(scanEnd.getMonth() + 1).padStart(2, "0")}-${String(scanEnd.getDate()).padStart(2, "0")}`;
+        // 조회 기간이 걸치는 모든 연도의 공휴일 (12월이면 다음 해 1/1까지 필요)
+        const holYears: number[] = [];
+        {
+          const sy = new Date(PERIOD_START + "T00:00:00").getFullYear();
+          const ey = scanEnd.getFullYear() + (scanEnd.getMonth() === 11 ? 1 : 0);
+          for (let y = sy; y <= ey; y++) holYears.push(y);
+        }
+        const [mRes, rRes, hRes, aRes, sRes, ...holResList] = (await Promise.all([
           supabase.from("members").select("id, name, employee_number, work_group, start_position, schedule_total, work_type").eq("work_type", "교번"),
           supabase.from("schedule_rotation").select("*"),
           supabase.from("kyobun_start_history").select("*"),
-          supabase.from("work_adjust").select("employee_number, work_date, adjust_type").gte("work_date", PERIOD_START).lte("work_date", tStr),
+          supabase.from("work_adjust").select("employee_number, work_date, adjust_type").gte("work_date", PERIOD_START).lte("work_date", endStr),
           supabase.from("kyobun_swap").select("*").eq("status", "수락"),
-          fetchHolidays(year),
-        ]);
+          ...holYears.map((y) => fetchHolidays(y)),
+        ] as any[])) as any[];
         const membersAll = (mRes.data || []).filter((m: any) => m.start_position != null && m.schedule_total);
         const people = membersAll.filter((m: any) => !(m.name || "").includes("결원"));
         const rotation = rRes.data || [];
         const hist = hRes.data || [];
         const adj = aRes.data || [];
         const swaps = sRes.data || [];
-        const hols: string[] = holRes || [];
+        const hols: string[] = ([] as string[]).concat(...holResList.map((h: any) => h || []));
         const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         const isHol = (d: Date) => {
           const dw = d.getDay();
@@ -16940,11 +16952,11 @@ function OperatorDesignated({ opName }: { opName: string }) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         // 휴51·휴71은 평일에도 지정 대상이 되므로 전체 날짜를 훑는다.
-        // (숫자 다이아의 휴일 조건은 각 날짜의 isHol 값으로 판정 — 결과는 전과 동일)
-        const allDays: { date: Date; str: string; md: string; isHol: boolean; nextHol: boolean }[] = [];
+        // 오늘 이후 다음 달 말일까지는 future=true (예정)로 함께 계산
+        const allDays: { date: Date; str: string; md: string; isHol: boolean; nextHol: boolean; future: boolean }[] = [];
         {
           const cur = new Date(PERIOD_START + "T00:00:00");
-          while (cur <= today) {
+          while (cur <= scanEnd) {
             const date = new Date(cur);
             cur.setDate(cur.getDate() + 1);
             const tm = new Date(date);
@@ -16955,6 +16967,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
               md: `${date.getMonth() + 1}/${date.getDate()}`,
               isHol: isHol(date),
               nextHol: isHol(tm),
+              future: date.getTime() > today.getTime(),
             });
           }
         }
@@ -16974,7 +16987,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
             (sw: any) =>
               String(sw.a_employee_number) === emp || String(sw.b_employee_number) === emp
           );
-          const owedList: { d: string; label: string }[] = [];
+          const owedList: { d: string; label: string; future: boolean }[] = [];
           for (const hd of allDays) {
             const w: any = calcKyobunWork(m, hd.date, rotation, mSwaps, membersAll, hist);
             if (!w || !w.dia) continue;
@@ -16993,7 +17006,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
             }
             if (!noOp) continue;
             if (adjSet.has(emp + "|" + hd.str)) continue; // 당일 충당됨
-            owedList.push({ d: hd.str, label });
+            owedList.push({ d: hd.str, label, future: hd.future });
           }
           const paidList = paidByEmp.get(emp) || [];
           if (owedList.length > 0 || paidList.length > 0) rows.push({ id: m.id, name: m.name, owedList, paidList });
@@ -17037,22 +17050,44 @@ function OperatorDesignated({ opName }: { opName: string }) {
     const s = new Date(baseDate + "T00:00:00");
     const now = new Date();
     const cur = new Date(s.getFullYear(), s.getMonth(), 1);
-    while (cur <= now) {
+    const lastM = new Date(now.getFullYear(), now.getMonth() + 1, 1); // 다음 달까지
+    while (cur <= lastM) {
       out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`);
       cur.setMonth(cur.getMonth() + 1);
     }
     return out;
   })();
+  const nowYm = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`; })();
   const viewLedger = ledger
     .map((l: any) => {
-      const owedIn = monthSel === "전체" ? l.owedList : l.owedList.filter((o: any) => o.d.startsWith(monthSel));
-      const paidIn = monthSel === "전체" ? l.paidList : l.paidList.filter((d: string) => String(d).startsWith(monthSel));
-      return { ...l, owed: owedIn.length, paid: paidIn.length, dates: owedIn.map((o: any) => o.label), paidDates: paidIn.map((d: string) => `${Number(String(d).slice(5, 7))}/${Number(String(d).slice(8, 10))}`) };
+      const inMon = (d: string) => monthSel === "전체" || String(d).startsWith(monthSel);
+      const occList = l.owedList.filter((o: any) => !o.future && inMon(o.d));   // 이미 발생
+      const planList = l.owedList.filter((o: any) => o.future && inMon(o.d));   // 예정 (아직 안 온 날)
+      const paidIn = l.paidList.filter((d: string) => inMon(d));
+      // 미이행 = 지나간 달의 (발생 - 이행), 달끼리만 짝 맞춤 (당월 이행 원칙 · 누적 관리)
+      let unfulfilled = 0;
+      {
+        const oByM: Record<string, number> = {};
+        l.owedList.forEach((o: any) => { const m = String(o.d).slice(0, 7); if (!o.future && m < nowYm && inMon(o.d)) oByM[m] = (oByM[m] || 0) + 1; });
+        const pByM: Record<string, number> = {};
+        l.paidList.forEach((d: string) => { const m = String(d).slice(0, 7); if (m < nowYm && inMon(d)) pByM[m] = (pByM[m] || 0) + 1; });
+        Object.keys(oByM).forEach((m) => { unfulfilled += Math.max(0, oByM[m] - (pByM[m] || 0)); });
+      }
+      return {
+        ...l,
+        owed: occList.length,
+        planned: planList.length,
+        paid: paidIn.length,
+        unfulfilled,
+        dates: occList.map((o: any) => o.label),
+        planDates: planList.map((o: any) => o.label),
+        paidDates: paidIn.map((d: string) => `${Number(String(d).slice(5, 7))}/${Number(String(d).slice(8, 10))}`),
+      };
     })
-    .filter((l: any) => l.owed > 0 || l.paid > 0)
+    .filter((l: any) => l.owed > 0 || l.paid > 0 || l.planned > 0)
     .filter((l: any) => !searchName.trim() || String(l.name).includes(searchName.trim()))
-    .sort((a: any, b: any) => (b.owed - b.paid) - (a.owed - a.paid) || b.owed - a.owed);
-  const remainTotal = viewLedger.reduce((s: number, l: any) => s + Math.max(0, l.owed - l.paid), 0);
+    .sort((a: any, b: any) => (b.owed + b.planned - b.paid) - (a.owed + a.planned - a.paid) || b.owed - a.owed);
+  const remainTotal = viewLedger.reduce((s: number, l: any) => s + Math.max(0, l.owed + l.planned - l.paid), 0);
 
   return (
     <div>
@@ -17068,12 +17103,12 @@ function OperatorDesignated({ opName }: { opName: string }) {
           lineHeight: 1.6,
         }}
       >
-        지정 대상 = 기준일부터 오늘까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴 / 휴51·휴71은 무조건)인데 당일 충당이 없던 날. 이행 = 지정근무 기록. 지정은 해당 월 안 이행이 원칙 — 월 버튼으로 월별 확인, 예외는 "전체"에서 누적으로 보세요. 자동 집계라 입력할 것 없음.
+        지정 대상 = 기준일부터 다음 달 말일까지, 미영업 다이아(주간 26·27·28·29·40 휴일 / 야간 61~64 휴+휴 / 휴51·휴71은 무조건)인데 당일 충당이 없는 날. 아직 안 온 날짜는 「예정」으로 미리 표시 — 다음 달 지정근무 미리 배치에 쓰세요. 지정은 발생한 달 안에 이행이 원칙, 지나간 달 미소화분은 빨간 「미이행」으로 계속 남습니다. 자동 집계라 입력할 것 없음.
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
         {[
-          [ledgerLoading ? "–" : String(viewLedger.filter((l: any) => l.owed - l.paid > 0).length), "지정 대상자"],
+          [ledgerLoading ? "–" : String(viewLedger.filter((l: any) => l.owed + l.planned - l.paid > 0).length), "지정 대상자"],
           [ledgerLoading ? "–" : String(remainTotal), "지정 예정"],
           [String(applies.length), "신청됨"],
         ].map(([n, l]) => (
@@ -17100,7 +17135,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           {["전체", ...monthsList].map((mo) => {
             const on = monthSel === mo;
-            const lb = mo === "전체" ? "전체" : `${Number(mo.slice(5, 7))}월`;
+            const lb = mo === "전체" ? "전체" : `${mo.slice(2, 4)}.${Number(mo.slice(5, 7))}`;
             return (
               <button
                 key={mo}
@@ -17126,17 +17161,24 @@ function OperatorDesignated({ opName }: { opName: string }) {
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>계산 중…</div>
         ) : viewLedger.length === 0 ? (
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
-            {searchName.trim() ? "검색 결과가 없습니다." : `${monthSel === "전체" ? "기준일 이후" : monthSel.slice(5, 7) + "월"} 강제 휴무 발생이 없습니다. 🎉`}
+            {searchName.trim() ? "검색 결과가 없습니다." : `${monthSel === "전체" ? "기준일 이후" : `${monthSel.slice(2, 4)}.${Number(monthSel.slice(5, 7))}`} 강제 휴무 발생·예정이 없습니다. 🎉`}
           </div>
         ) : (
         viewLedger.map((l, i) => {
-          const remain = l.owed - l.paid;
+          const remain = l.owed + l.planned - l.paid;
+          const pastMonth = monthSel !== "전체" && monthSel < nowYm;
           return (
             <div key={l.name} style={{ ...row, borderBottom: i === viewLedger.length - 1 ? 0 : row.borderBottom }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: remain > 0 ? "#111827" : "#C4C7CC" }}>{l.name}</div>
                 <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
-                  강제 휴무 {l.owed}회{l.dates && l.dates.length > 0 ? ` (${l.dates.slice(0, 3).join(" · ")}${l.dates.length > 3 ? ` 외 ${l.dates.length - 3}` : ""})` : ""} · 이행 {l.paid}회{l.paidDates && l.paidDates.length > 0 ? ` (지정 ${l.paidDates.slice(0, 3).join(" · ")}${l.paidDates.length > 3 ? ` 외 ${l.paidDates.length - 3}` : ""})` : ""}
+                  강제 휴무 {l.owed}회{l.dates && l.dates.length > 0 ? ` (${l.dates.slice(0, 3).join(" · ")}${l.dates.length > 3 ? ` 외 ${l.dates.length - 3}` : ""})` : ""}
+                  {l.planned > 0 ? (
+                    <span style={{ color: "#C2410C", fontWeight: 700 }}> · 예정 {l.planned}회 ({l.planDates.slice(0, 3).join(" · ")}{l.planDates.length > 3 ? ` 외 ${l.planDates.length - 3}` : ""})</span>
+                  ) : null} · 이행 {l.paid}회{l.paidDates && l.paidDates.length > 0 ? ` (지정 ${l.paidDates.slice(0, 3).join(" · ")}${l.paidDates.length > 3 ? ` 외 ${l.paidDates.length - 3}` : ""})` : ""}
+                  {l.unfulfilled > 0 ? (
+                    <span style={{ color: "#DC2626", fontWeight: 800 }}> · 미이행 {l.unfulfilled}회</span>
+                  ) : null}
                 </div>
               </div>
               <span
@@ -17149,7 +17191,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
                   color: remain > 0 ? "#991B1B" : "#065F46",
                 }}
               >
-                {remain > 0 ? `지정 ${remain}회 예정` : "✓ 완료"}
+                {remain > 0 ? (pastMonth ? `미이행 ${remain}회` : `지정 ${remain}회 예정`) : "✓ 완료"}
               </span>
               {remain > 0 && l.id != null && (
                 <button
