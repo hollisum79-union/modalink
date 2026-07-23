@@ -20269,6 +20269,13 @@ function FundAdminScreen({ user }) {
   const [endDate, setEndDate] = useState("");
   const [account, setAccount] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [eTitle, setETitle] = useState("");
+  const [eKind, setEKind] = useState("free");
+  const [eFixedAmount, setEFixedAmount] = useState("");
+  const [eStartDate, setEStartDate] = useState("");
+  const [eEndDate, setEEndDate] = useState("");
+  const [eAccount, setEAccount] = useState("");
   const [members, setMembers] = useState<any[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
@@ -20304,12 +20311,13 @@ function FundAdminScreen({ user }) {
 
   const loadCampaigns = async () => {
     try {
-      const res = await fetch(fundApi + "?action=campaignList");
+      const res = await fetch(fundApi + "?action=campaignListAll&employee_number=" + encodeURIComponent(myEmp));
       const j = await res.json();
       const raw = j.campaigns || [];
       const list = [
-        ...raw.filter((c: any) => c.status === "open"),
-        ...raw.filter((c: any) => c.status !== "open"),
+        ...raw.filter((c: any) => c.status === "open" && !c.hidden),
+        ...raw.filter((c: any) => c.status !== "open" && !c.hidden),
+        ...raw.filter((c: any) => !!c.hidden),
       ];
       setCampaigns(list);
       if (list.length > 0 && curId == null) setCurId(list[0].id);
@@ -20398,6 +20406,75 @@ function FundAdminScreen({ user }) {
     }
   };
 
+  const openEdit = () => {
+    if (!cur) return;
+    setETitle(cur.title || "");
+    setEKind(cur.kind === "fixed" ? "fixed" : "free");
+    setEFixedAmount(cur.fixed_amount ? String(cur.fixed_amount) : "");
+    setEStartDate(cur.start_date ? String(cur.start_date).slice(0, 10) : "");
+    setEEndDate(cur.end_date ? String(cur.end_date).slice(0, 10) : "");
+    setEAccount(cur.account_info || "");
+    setEditOpen(true);
+  };
+
+  const updateCampaign = async () => {
+    if (!cur) return;
+    if (!eTitle.trim()) { showToast("제목을 입력해주세요", "error"); return; }
+    if (eKind === "fixed" && (!Number(eFixedAmount) || Number(eFixedAmount) <= 0)) {
+      showToast("정액 금액을 입력해주세요", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(fundApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "campaignUpdate",
+          employee_number: myEmp,
+          campaign_id: cur.id,
+          title: eTitle.trim(),
+          kind: eKind,
+          fixed_amount: eKind === "fixed" ? Number(eFixedAmount) : null,
+          start_date: eStartDate || null,
+          end_date: eEndDate || null,
+          account_info: eAccount.trim() || null,
+        }),
+      });
+      const j = await res.json();
+      if (j.error) { showToast("수정 실패: " + j.error, "error"); setSaving(false); return; }
+      showToast("수정했습니다");
+      setEditOpen(false);
+      await loadCampaigns();
+    } catch (e) {
+      showToast("수정 실패 — 인터넷 연결을 확인해주세요", "error");
+    }
+    setSaving(false);
+  };
+
+  const toggleHidden = async () => {
+    if (!cur) return;
+    const next = !cur.hidden;
+    const msg = next
+      ? "이 모금을 조합원 목록에서 숨길까요? (납부 기록은 전부 보존됩니다)"
+      : "이 모금을 조합원 목록에 다시 표시할까요?";
+    if (!window.confirm(msg)) return;
+    try {
+      const res = await fetch(fundApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "campaignUpdate", employee_number: myEmp, campaign_id: cur.id, hidden: next }),
+      });
+      const j = await res.json();
+      if (j.error) { showToast("변경 실패: " + j.error, "error"); return; }
+      showToast(next ? "숨겼습니다" : "다시 표시합니다");
+      setEditOpen(false);
+      loadCampaigns();
+    } catch (e) {
+      showToast("변경 실패 — 인터넷 연결을 확인해주세요", "error");
+    }
+  };
+
   const addRecord = async () => {
     if (!cur) return;
     if (!pick) { showToast("조합원을 선택해주세요", "error"); return; }
@@ -20474,11 +20551,11 @@ function FundAdminScreen({ user }) {
       {/* 모금 선택 + 마감 */}
       <div style={cardSt}>
         <label style={{ ...labelSt, marginTop: 0 }}>모금 선택</label>
-        <select value={curId == null ? "" : String(curId)} onChange={(e) => setCurId(e.target.value)} style={inputSt}>
+        <select value={curId == null ? "" : String(curId)} onChange={(e) => { setCurId(e.target.value); setEditOpen(false); }} style={inputSt}>
           {campaigns.length === 0 && <option value="">아직 만든 모금이 없어요</option>}
           {campaigns.map((c: any) => (
             <option key={c.id} value={String(c.id)}>
-              {(c.status === "open" ? "" : "[마감] ") + c.title}
+              {(c.hidden ? "[숨김] " : c.status === "open" ? "" : "[마감] ") + c.title}
             </option>
           ))}
         </select>
@@ -20487,8 +20564,77 @@ function FundAdminScreen({ user }) {
             <div style={{ fontSize: 13, color: "#6B7280" }}>
               합계 <b style={{ color: "#111827", fontVariantNumeric: "tabular-nums" }}>{won(recTotal)}원</b> · 참여 <b style={{ color: "#2563EB" }}>{recPeople}명</b> · 기록 {records.length}건
             </div>
-            <button onClick={toggleStatus} style={{ fontSize: 12, fontWeight: 600, color: cur.status === "open" ? "#DC2626" : "#2563EB", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
-              {cur.status === "open" ? "마감하기" : "다시 열기"}
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => (editOpen ? setEditOpen(false) : openEdit())} style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+                ✏️ 수정
+              </button>
+              {!cur.hidden && (
+                <button onClick={toggleStatus} style={{ fontSize: 12, fontWeight: 600, color: cur.status === "open" ? "#DC2626" : "#2563EB", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+                  {cur.status === "open" ? "마감하기" : "다시 열기"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {cur && !!cur.hidden && !editOpen && (
+          <div>
+            <button onClick={toggleHidden} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, border: "1px solid #BFDBFE", background: "#EFF6FF", color: "#2563EB", marginTop: 10, cursor: "pointer" }}>
+              👀 조합원 목록에 다시 표시
+            </button>
+            <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>
+              숨긴 모금은 마감 상태로 유지돼요. 다시 표시하면 [마감]으로 보입니다.
+            </div>
+          </div>
+        )}
+        {cur && editOpen && (
+          <div>
+            <label style={labelSt}>제목</label>
+            <input value={eTitle} onChange={(e) => setETitle(e.target.value)} style={inputSt} />
+            <label style={labelSt}>방식</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[["free", "자유 금액"], ["fixed", "정액"]].map(([k, lb]) => (
+                <button key={k} onClick={() => setEKind(k)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, fontSize: 14, border: "1px solid " + (eKind === k ? "#2563EB" : "#E5E7EB"), color: eKind === k ? "#2563EB" : "#6B7280", fontWeight: eKind === k ? 600 : 400, background: eKind === k ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
+                  {lb}
+                </button>
+              ))}
+            </div>
+            {eKind === "fixed" && (
+              <div>
+                <label style={labelSt}>1인 금액 (원)</label>
+                <input value={eFixedAmount} onChange={(e) => setEFixedAmount(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="10000" style={inputSt} />
+              </div>
+            )}
+            <label style={labelSt}>시작일</label>
+            <input type="date" value={eStartDate} onChange={(e) => setEStartDate(e.target.value)} style={inputSt} />
+            <label style={labelSt}>종료일</label>
+            <input type="date" value={eEndDate} onChange={(e) => setEEndDate(e.target.value)} style={inputSt} />
+            <label style={labelSt}>입금 계좌</label>
+            <input value={eAccount} onChange={(e) => setEAccount(e.target.value)} placeholder="예: 농협 000-0000-0000-00 (대공원승무지회)" style={inputSt} />
+            {records.length > 0 && (
+              <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 12px", fontSize: 12, color: "#92400E", lineHeight: 1.6, marginTop: 14 }}>
+                ⚠️ 이 모금에는 납부 기록 {records.length}건이 있어요. 금액·방식을 바꿔도 이미 저장된 기록은 그대로 유지됩니다.
+              </div>
+            )}
+            <button onClick={updateCampaign} disabled={saving} style={{ display: "block", width: "100%", textAlign: "center", padding: "13px 0", borderRadius: 12, fontSize: 15, fontWeight: 600, border: "none", background: "#2563EB", color: "#fff", marginTop: 14, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+              {saving ? "저장 중..." : "수정 저장"}
+            </button>
+            {cur.status !== "open" && !cur.hidden && (
+              <div>
+                <button onClick={toggleHidden} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, border: "1px solid #FECACA", background: "#FEF2F2", color: "#DC2626", marginTop: 10, cursor: "pointer" }}>
+                  🙈 조합원 목록에서 숨기기
+                </button>
+                <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>
+                  숨겨도 납부 기록은 전부 보존되고, 관리자 화면에서는 계속 보여요. 진행중 모금은 먼저 마감해야 숨길 수 있어요.
+                </div>
+              </div>
+            )}
+            {!!cur.hidden && (
+              <button onClick={toggleHidden} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, border: "1px solid #BFDBFE", background: "#EFF6FF", color: "#2563EB", marginTop: 10, cursor: "pointer" }}>
+                👀 조합원 목록에 다시 표시
+              </button>
+            )}
+            <button onClick={() => setEditOpen(false)} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", marginTop: 12, cursor: "pointer" }}>
+              수정 접기
             </button>
           </div>
         )}
