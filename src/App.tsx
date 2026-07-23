@@ -20582,7 +20582,7 @@ function FundAdminScreen({ user }) {
               👀 조합원 목록에 다시 표시
             </button>
             <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>
-              숨긴 모금은 마감 상태로 유지돼요. 다시 표시하면 [마감]으로 보입니다.
+              다시 표시하면 조합원 목록에 원래 상태(진행중/마감)로 보입니다.
             </div>
           </div>
         )}
@@ -20618,13 +20618,13 @@ function FundAdminScreen({ user }) {
             <button onClick={updateCampaign} disabled={saving} style={{ display: "block", width: "100%", textAlign: "center", padding: "13px 0", borderRadius: 12, fontSize: 15, fontWeight: 600, border: "none", background: "#2563EB", color: "#fff", marginTop: 14, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
               {saving ? "저장 중..." : "수정 저장"}
             </button>
-            {cur.status !== "open" && !cur.hidden && (
+            {!cur.hidden && (
               <div>
                 <button onClick={toggleHidden} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, border: "1px solid #FECACA", background: "#FEF2F2", color: "#DC2626", marginTop: 10, cursor: "pointer" }}>
                   🙈 조합원 목록에서 숨기기
                 </button>
                 <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>
-                  숨겨도 납부 기록은 전부 보존되고, 관리자 화면에서는 계속 보여요. 진행중 모금은 먼저 마감해야 숨길 수 있어요.
+                  숨겨도 납부 기록은 전부 보존되고, 관리자 화면에서는 계속 보여요.
                 </div>
               </div>
             )}
