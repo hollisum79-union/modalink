@@ -19061,7 +19061,20 @@ function OperatorScreen({ onExit }: { onExit?: () => void }) {
   ];
 
   return (
-    <div style={{ paddingBottom: 8, paddingTop: "calc(env(safe-area-inset-top, 0px) + 10px)", paddingLeft: 12, paddingRight: 12 }}>
+    <div style={{ paddingBottom: 8, paddingLeft: 12, paddingRight: 12 }}>
+      {/* 상단 고정 영역: 헤더 + 탭 (스크롤해도 항상 보임) */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          background: "rgba(238,240,250,0.96)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 10px)",
+          marginBottom: 8,
+        }}
+      >
       <div
         style={{
           background: "linear-gradient(135deg,#0F766E,#0D9488,#14B8A6)",
@@ -19119,20 +19132,7 @@ function OperatorScreen({ onExit }: { onExit?: () => void }) {
         </button>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 6,
-          marginBottom: 8,
-          position: "sticky",
-          top: "env(safe-area-inset-top, 0px)",
-          zIndex: 50,
-          padding: "8px 0 10px",
-          background: "rgba(238,240,250,0.92)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-        }}
-      >
+      <div style={{ display: "flex", gap: 6, paddingBottom: 10 }}>
         {tabs.map((t) => (
           <div
             key={t.id}
@@ -19160,6 +19160,7 @@ function OperatorScreen({ onExit }: { onExit?: () => void }) {
             </div>
           </div>
         ))}
+      </div>
       </div>
 
       <OperatorMockPanel tab={tab} opName={me.name} />
