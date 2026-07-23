@@ -17060,25 +17060,24 @@ function OperatorDesignated({ opName }: { opName: string }) {
           paidByEmp.get(k)!.push(String(r.work_date));
           paidKey.add(k + "|" + String(r.work_date));
         });
-        // 신청 유지 + 그날 휴가·유고 = 이행 처리 (실근무 기록과 중복 방지)
-        {
-          const empById = new Map<any, string>();
-          membersAll.forEach((m: any) => empById.set(m.id, String(m.employee_number)));
-          const lvSet = new Set((lvRes3.data || []).map((l: any) => String(l.employee_number) + "|" + String(l.used_date)));
-          const absList = abRes3.data || [];
-          const absCover = (emp: string, d: string) =>
-            absList.some((ab: any) => String(ab.employee_number) === emp && String(ab.work_date) <= d && String(ab.end_date || ab.work_date) >= d);
-          (dApRes.data || []).forEach((a: any) => {
-            const emp = empById.get(a.member_id);
-            if (!emp) return;
-            const d = String(a.work_date);
-            if (!(lvSet.has(emp + "|" + d) || absCover(emp, d))) return;
-            if (paidKey.has(emp + "|" + d)) return;
-            paidKey.add(emp + "|" + d);
-            if (!paidByEmp.has(emp)) paidByEmp.set(emp, []);
-            paidByEmp.get(emp)!.push(d);
-          });
-        }
+        // 휴가·유고 판정 재료 — ⓐ 신청+휴가=이행 처리 ⓑ 휴가·유고 기간엔 강제휴무 발생 자체가 없음
+        const empById = new Map<any, string>();
+        membersAll.forEach((m: any) => empById.set(m.id, String(m.employee_number)));
+        const lvSet = new Set((lvRes3.data || []).map((l: any) => String(l.employee_number) + "|" + String(l.used_date)));
+        const absList = abRes3.data || [];
+        const absCover = (emp: string, d: string) =>
+          absList.some((ab: any) => String(ab.employee_number) === emp && String(ab.work_date) <= d && String(ab.end_date || ab.work_date) >= d);
+        // ⓐ 신청 유지 + 그날 휴가·유고 = 이행 처리 (실근무 기록과 중복 방지)
+        (dApRes.data || []).forEach((a: any) => {
+          const emp = empById.get(a.member_id);
+          if (!emp) return;
+          const d = String(a.work_date);
+          if (!(lvSet.has(emp + "|" + d) || absCover(emp, d))) return;
+          if (paidKey.has(emp + "|" + d)) return;
+          paidKey.add(emp + "|" + d);
+          if (!paidByEmp.has(emp)) paidByEmp.set(emp, []);
+          paidByEmp.get(emp)!.push(d);
+        });
         const rows: any[] = [];
         for (const m of people) {
           // [속도] 이 사람이 낀 교체만 넘김 (calcKyobunWork가 어차피 사번으로 걸러 씀 → 결과 동일)
@@ -17106,6 +17105,8 @@ function OperatorDesignated({ opName }: { opName: string }) {
             }
             if (!noOp) continue;
             if (adjSet.has(emp + "|" + hd.str)) continue; // 당일 충당됨
+            // ⓑ 그날 휴가·유고(병가·휴직 기간 포함)면 강제휴무가 아니라 휴가·유고 → 발생 제외
+            if (lvSet.has(emp + "|" + hd.str) || absCover(emp, hd.str)) continue;
             owedList.push({ d: hd.str, label, future: hd.future });
           }
           const paidList = paidByEmp.get(emp) || [];
