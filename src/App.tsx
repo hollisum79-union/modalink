@@ -10376,6 +10376,7 @@ function MemberManageScreen({ user }: any) {
   const [members, setMembers] = useState([]);
   const [search, setSearch] = useState("");
   const [unionFilter, setUnionFilter] = useState("전체");
+  const [phoneFilter, setPhoneFilter] = useState(false);
   const [form, setForm] = useState(null);
   const [vacInfo, setVacInfo] = useState<any>(null); // 결원 수정 시 최근 사유 표시
   useEffect(() => {
@@ -10418,6 +10419,10 @@ function MemberManageScreen({ user }: any) {
       : unionFilter === "조합원"
       ? m.is_union === true && !(m.name || "").includes("결원")
       : m.is_union !== true && !(m.name || "").includes("결원")
+  ).filter((m: any) =>
+    !phoneFilter ||
+    (!(m.name || "").includes("결원") &&
+      String(m.phone || "").replace(/[^0-9]/g, "").length < 10)
   );
 
   const handleSave = () => {
@@ -10812,6 +10817,13 @@ function MemberManageScreen({ user }: any) {
             {members.filter((m) => m.is_union !== true && !(m.name || "").includes("결원")).length}명
     </div>
     {q && <div style={{ fontSize: 10.5, fontWeight: 800, color: outU > 0 ? "#6B7280" : "#C7CBD1", marginTop: 2 }}>{outU > 0 ? `🔍 여기 ${outU}명` : "일치 없음"}</div>}
+  </div>
+  <div onClick={() => setPhoneFilter(!phoneFilter)} style={{ flex: 1, background: "#FEF2F2", borderRadius: 10, padding: "10px 12px", textAlign: "center", cursor: "pointer", border: phoneFilter ? "2px solid #DC2626" : "2px solid transparent" }}>
+    <div style={{ fontSize: 11, color: "#6B7280" }}>번호 없음</div>
+    <div style={{ fontSize: 18, fontWeight: 800, color: "#DC2626" }}>
+      {members.filter((m: any) => !(m.name || "").includes("결원") && String(m.phone || "").replace(/[^0-9]/g, "").length < 10).length}명
+    </div>
+    {phoneFilter && <div style={{ fontSize: 10.5, fontWeight: 800, color: "#DC2626", marginTop: 2 }}>필터 적용중</div>}
   </div>
       </>
     );
@@ -20372,6 +20384,8 @@ function GroupSmsScreen() {
   const chunksRef = React.useRef<any[]>([]);
   const sentRef = React.useRef<any>({});
   const textRef = React.useRef("");
+  const [noPhoneOpen, setNoPhoneOpen] = useState(false);
+  const [phoneEdits, setPhoneEdits] = useState<any>({});
 
   useEffect(() => {
     supabase
@@ -20455,6 +20469,30 @@ function GroupSmsScreen() {
     setAutoRun(false);
   };
 
+  const savePhone = async (emp: string) => {
+    const raw = String(phoneEdits[emp] || "").replace(/[^0-9]/g, "");
+    if (raw.length < 10 || raw.length > 11) {
+      showToast("번호를 확인해주세요 (10~11자리 숫자)", "error");
+      return;
+    }
+    const formatted = raw.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+    const { error } = await supabase
+      .from("members")
+      .update({ phone: formatted })
+      .eq("employee_number", emp);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast("전화번호를 저장했습니다");
+    setSmsMembers(smsMembers.map((m: any) =>
+      String(m.employee_number) === emp ? { ...m, phone: formatted } : m
+    ));
+    const next = { ...phoneEdits };
+    delete next[emp];
+    setPhoneEdits(next);
+  };
+
   const toggleOne = (emp: string) => {
     setSmsSel({ ...smsSel, [emp]: !smsSel[emp] });
     resetSend();
@@ -20536,6 +20574,46 @@ function GroupSmsScreen() {
           )}
         </div>
       </div>
+
+      {(() => {
+        const noPhoneList = smsMembers.filter((m: any) => {
+          if (smsUnionOnly && m.is_union !== true) return false;
+          const n = String(m.phone || "").replace(/[^0-9]/g, "");
+          return n.length < 10;
+        });
+        if (noPhoneList.length === 0) return null;
+        return (
+          <div style={cardSt}>
+            <div
+              onClick={() => setNoPhoneOpen(!noPhoneOpen)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280" }}>
+                전화번호 없음 <b style={{ color: "#DC2626" }}>{noPhoneList.length}명</b>
+              </div>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>{noPhoneOpen ? "접기" : "펼쳐서 입력"}</span>
+            </div>
+            {noPhoneOpen && noPhoneList.map((m: any) => {
+              const emp = String(m.employee_number);
+              return (
+                <div key={emp} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <span style={{ fontSize: 14, color: "#111827", width: 72, flexShrink: 0 }}>{m.name}</span>
+                  <input
+                    value={phoneEdits[emp] || ""}
+                    onChange={(e) => setPhoneEdits({ ...phoneEdits, [emp]: e.target.value })}
+                    inputMode="numeric"
+                    placeholder="01012345678"
+                    style={{ ...inputSt, flex: 1 }}
+                  />
+                  <button onClick={() => savePhone(emp)} style={{ fontSize: 13, fontWeight: 600, color: "#2563EB", background: "#EFF6FF", border: "1px solid #2563EB", borderRadius: 10, padding: "10px 14px", cursor: "pointer", flexShrink: 0 }}>
+                    저장
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       <div style={cardSt}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "#6B7280", marginBottom: 8 }}>문자 내용</div>
