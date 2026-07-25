@@ -42135,10 +42135,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
         <div style={{ display: "flex", alignItems: "stretch", gap: 6, marginTop: 8 }}>
           <div
             onClick={() => { setAboutInitialTab("members"); setScreen("about"); }}
-            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            <div style={{ fontSize: 12, lineHeight: 1 }}>👥</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginTop: 2 }}>{memberCount}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", lineHeight: 1.2 }}>👥 {memberCount}</div>
             <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>조합원</div>
           </div>
           <div
@@ -42154,18 +42153,16 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   setShowAppUserModal(true);
                 });
             }}
-            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            <div style={{ fontSize: 12, lineHeight: 1 }}>📲</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#C4B5FD", marginTop: 2 }}>{appUserCount}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#C4B5FD", lineHeight: 1.2 }}>📲 {appUserCount}</div>
             <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>앱이용</div>
           </div>
           <div
             onClick={() => setShowOnlineModal(true)}
-            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            <div style={{ fontSize: 12, lineHeight: 1 }}>🟢</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#4ADE80", marginTop: 2 }}>{onlineCount}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#4ADE80", lineHeight: 1.2 }}>🟢 {onlineCount}</div>
             <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>접속중</div>
           </div>
           <div
@@ -42180,10 +42177,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 }
               } catch (e) {}
             }}
-            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            <div style={{ fontSize: 12, lineHeight: 1 }}>✉️</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", marginTop: 2 }}>초대</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", lineHeight: 1.2 }}>✉️ 초대</div>
             <div style={{ fontSize: 8.5, color: "#8B5CF6", marginTop: 1 }}>공유</div>
           </div>
           <div
@@ -42196,10 +42192,9 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               }
               setShowLinkSheet(true);
             }}
-            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            <div style={{ fontSize: 12, lineHeight: 1 }}>🔗</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", marginTop: 2 }}>링크</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", lineHeight: 1.2 }}>🔗 링크</div>
             <div style={{ fontSize: 8.5, color: "#8B5CF6", marginTop: 1 }}>바로가기</div>
           </div>
         </div>
