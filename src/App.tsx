@@ -31297,6 +31297,23 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     return cnt;
   })();
   const dutyNightCountScreen = isKyobun ? 0 : (dutyRecords || []).filter((rec: any) => rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/))).length;
+  const dutyNightList = (dutyRecords || [])
+    .filter((rec: any) => rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/)))
+    .map((rec: any) => {
+      const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
+      const hours = rec.is_temp_dia
+        ? (Number(rec.temp_night_hours) || 0)
+        : calcHolidayFillHours(dm[1], "야간", rec.work_date, diaTable, holidays).nightHours;
+      const kindLabel = rec.adjust_type === "designated" ? "지정근무" : rec.adjust_type === "standby" ? "대기충당" : rec.adjust_type === "support" ? "지원근무" : "근무조정";
+      const dt = new Date(rec.work_date);
+      return {
+        dateLabel: `${dt.getMonth() + 1}/${dt.getDate()}`,
+        diaLabel: rec.is_temp_dia ? "임시다이아" : `다이아 ${dm[1]}`,
+        kindLabel,
+        hours,
+      };
+    })
+    .sort((a: any, b: any) => a.dateLabel.localeCompare(b.dateLabel));
   const nightTotalCount = (isKyobun ? kyobunNightCount : nightCount) + dutyNightCountScreen;
   const nightPay = Math.round(hourlyWage * 0.5 * nightTotalHours);
   const overtimeTotalHours = overtimeHour + overtimeMin / 60;
@@ -32147,6 +32164,11 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                     <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 4 }}>
                       📅 전달 야간 다이아 근무 (다이아별 실제 시간 합산)
                     </div>
+                    {dutyNightList.map((x: any, i: number) => (
+                      <div key={i} style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
+                        + 근무조정 야간: {x.dateLabel} {x.diaLabel} ({x.kindLabel}) · {x.hours.toFixed(2)}시간
+                      </div>
+                    ))}
                     <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>
                       = 이번 달 야간 {nightTotalCount}회 · {Math.round(nightTotalHours)}시간 (자동)
                     </div>
@@ -32172,8 +32194,13 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                             − 야간에 쓴 휴가 {lastMonthNight.count - (finalNight ?? 0)}일 차감
                           </div>
                         )}
+                        {dutyNightList.map((x: any, i: number) => (
+                          <div key={i} style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
+                            + 근무조정 야간: {x.dateLabel} {x.diaLabel} ({x.kindLabel}) · {x.hours.toFixed(2)}시간
+                          </div>
+                        ))}
                         <div style={{ fontSize: 16, fontWeight: 800, color: "#7C3AED" }}>
-                          = 이번 달 야간 {finalNight}회 (자동)
+                          = 이번 달 야간 {nightTotalCount}회{dutyNightList.length > 0 ? ` · ${nightTotalHours.toFixed(2)}시간` : ""} (자동)
                         </div>
                       </div>
                     ) : (
