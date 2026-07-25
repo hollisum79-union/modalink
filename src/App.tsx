@@ -26587,6 +26587,40 @@ const getKyobunWork = (member: any, date: Date) => {
     const kLabel = kInfo ? (LABEL_MAP[kInfo.short] || kInfo.short) : "-";
     const kColor = kInfo ? (COLOR_MAP[kInfo.short] || "#7C3AED") : "#7C3AED";
     const kWorkForm = (kWork && kDayType) ? workForms[String(kWork.dia) + "|" + kDayType] : null;
+
+    // ── 이 날 "실제로 근무한 다이아"를 한 곳에서만 정한다 ──
+    //   근무조정(대기충당·지정근무·지원근무·휴무충당)이 있으면 그 다이아가 실제 근무.
+    //   없으면 본인 교번·통상 다이아. 대기·비번·휴무는 행로가 없으므로 제외.
+    //   ※ 안내문 · 운행시각표 버튼 · 아래 접이식이 모두 이 값을 본다 (셋이 어긋나지 않게).
+    const popAdj = isOtherKyobun ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
+    const popWork: any = (() => {
+      if (popAdj) {
+        const m = popAdj.is_temp_dia ? null : String(popAdj.memo || "").match(/다이아\s*(\d+)/);
+        return { dia: m ? m[1] : null, shift: popAdj.work_shift || "주간", temp: popAdj.is_temp_dia ? popAdj : null };
+      }
+      if (isKyobun && kWork && !isStandbyDia(kWork.dia) && (kWork.type === "주간" || kWork.type === "야간")) {
+        return { dia: kWork.dia, shift: kWork.type, temp: null };
+      }
+      if (isTongsang && tWork) return { dia: tWork.dia, shift: tWork.type, temp: null };
+      return null;
+    })();
+    // 근무조정이 이미 잡혔으면 "배정될 수 있어요"(예고) 대신 확정 안내를 보여준다.
+    const ADJ_ATT: Record<string, { ko: string; verb: string }> = {
+      standby: { ko: "대기충당", verb: "배정됐어요" },
+      holiday_fill: { ko: "휴무충당", verb: "잡혔어요" },
+      designated: { ko: "지정근무", verb: "잡혔어요" },
+      support: { ko: "지원근무", verb: "잡혔어요" },
+    };
+    const adjAttMsg = popAdj
+      ? (() => {
+          const a = ADJ_ATT[popAdj.adjust_type] || { ko: popAdj.adjust_type, verb: "잡혔어요" };
+          const dn = popWork?.temp ? "임시 다이아" : (popWork?.dia ? `다이아 ${popWork.dia}번` : "");
+          const sh = popAdj.work_shift ? ` (${popAdj.work_shift})` : "";
+          return dn
+            ? `${dn}에 ${a.ko} ${a.verb}${sh}. 아래에서 행로·시간을 확인하세요.`
+            : `${a.ko} ${a.verb}${sh}.`;
+        })()
+      : "";
     return (
       <>
         <div
@@ -26699,11 +26733,15 @@ const getKyobunWork = (member: any, date: Date) => {
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 16px" }}>
-            {kAtt && (
+            {popAdj ? (
+              <div style={{ background: "#ECFDF5", border: "1.5px solid #6EE7B7", borderRadius: 12, padding: "10px 12px", marginBottom: 14, fontSize: 12.5, color: "#065F46", lineHeight: 1.7, fontWeight: 600 }}>
+                ✅ {adjAttMsg}
+              </div>
+            ) : kAtt ? (
               <div style={{ background: "#FFF7ED", border: "1.5px solid #FDBA74", borderRadius: 12, padding: "10px 12px", marginBottom: 14, fontSize: 12.5, color: "#9A3412", lineHeight: 1.7, fontWeight: 600 }}>
                 ⚠️ {kAtt.msg}
               </div>
-            )}
+            ) : null}
             {!isOtherKyobun && (
             <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
               <button onClick={() => onGoAdjust && onGoAdjust(dateStr)} style={{ flex: 1, padding: "13px", borderRadius: 14, border: "1.5px solid #E5E1F8", background: "#F8F7FE", color: "#4F46E5", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
@@ -26721,8 +26759,9 @@ const getKyobunWork = (member: any, date: Date) => {
                 📋 전체근무
               </button>
               <button onClick={() => {
-                const d = String((kWork as any)?.dia || "");
-                const shift = String((kWork as any)?.type || "주간");
+                // 충당·지정 등이 잡힌 날은 그 다이아의 시각표를 연다 (대기64 같은 자리표시로 조회하지 않게)
+                const d = String(popWork?.dia || "");
+                const shift = String(popWork?.shift || (kWork as any)?.type || "주간");
                 const isHolD = (dt: Date) => { const gg = dt.getDay(); if (gg === 0 || gg === 6) return true; const yy = dt.getFullYear(), mm = String(dt.getMonth() + 1).padStart(2, "0"), dd2 = String(dt.getDate()).padStart(2, "0"); return (holidays || []).includes(`${yy}-${mm}-${dd2}`); };
                 let dtp = "평일";
                 if (shift === "야간") { const tm = new Date(dateObj); tm.setDate(tm.getDate() + 1); const th2 = isHolD(dateObj), mh2 = isHolD(tm); dtp = (!th2 && !mh2) ? "평평" : (!th2 && mh2) ? "평휴" : (th2 && mh2) ? "휴휴" : "휴평"; }
@@ -26791,32 +26830,14 @@ const getKyobunWork = (member: any, date: Date) => {
                 designated: { bg: "#E1F5EE", fg: "#0F6E56" },
                 support: { bg: "#E6F1FB", fg: "#185FA5" },
               };
-              // 근무조정은 본인 것만 — 다른 조합원 근무표를 볼 때는 그 사람 교번 다이아만 보여준다.
-              // (달력 배지도 같은 규칙: 27,219줄 isSelf / 28,343줄 다른 사람이면 표시 안 함)
-              const adj = isOtherKyobun ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
-              let diaNo: any = null;
-              let dayType: string | null = null;
-              let shiftTxt = "";
-              let badge = "";
-              let badgeColor: any = null;
-              let tempRec: any = null;
-              if (adj) {
-                badge = ADJ_KO[adj.adjust_type] || adj.adjust_type;
-                badgeColor = ADJ_COLOR[adj.adjust_type] || { bg: "#F3F4F6", fg: "#374151" };
-                shiftTxt = adj.work_shift || "";
-                if (adj.is_temp_dia) {
-                  tempRec = adj;
-                } else {
-                  const m = String(adj.memo || "").match(/다이아\s*(\d+)/);
-                  if (m) { diaNo = m[1]; dayType = getDiaDayType(String(adj.work_shift || "주간"), dateObj); }
-                }
-              } else if (isKyobun && kWork && !isStandbyDia(kWork.dia) && (kWork.type === "주간" || kWork.type === "야간")) {
-                // 비번(71~)·휴무(휴1)는 다이아 번호가 아니라 자리 표시라 행로가 없다 → 줄 자체를 내지 않는다.
-                // 비번은 전날 야간의 연장이기도 해서 어제 팝업에서 이미 본 행로가 된다.
-                diaNo = kWork.dia; dayType = kDayType; shiftTxt = kWork.type;
-              } else if (isTongsang && tWork) {
-                diaNo = tWork.dia; dayType = tDayType; shiftTxt = tWork.type;
-              }
+              // 다이아는 위에서 이미 정했다 (popWork) — 안내문·운행시각표와 같은 값을 쓴다.
+              const adj = popAdj;
+              const diaNo: any = popWork?.dia || null;
+              const tempRec: any = popWork?.temp || null;
+              const shiftTxt = popWork?.shift || "";
+              const dayType: string | null = diaNo ? getDiaDayType(String(shiftTxt || "주간"), dateObj) : null;
+              const badge = adj ? (ADJ_KO[adj.adjust_type] || adj.adjust_type) : "";
+              const badgeColor = adj ? (ADJ_COLOR[adj.adjust_type] || { bg: "#F3F4F6", fg: "#374151" }) : null;
               if (!diaNo && !tempRec) return null;
               const info = diaNo ? getDiaInfo(diaNo, dayType) : null;
               const hasVal = (v: any) => v !== null && v !== undefined && v !== "" && Number(v) !== 0;
