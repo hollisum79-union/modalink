@@ -31140,6 +31140,25 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     return Math.max(0, c);
   })();
 
+  const nightLeaveList = (() => {
+    if (!lastMonthNight) return [] as any[];
+    const LB: Record<string, string> = {
+      annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차",
+      substitute: "대체휴가", study: "학습휴가", longService: "장기재직휴가", petition: "청원휴가",
+    };
+    return (lastMonthLeaves || [])
+      .filter((lv: any) => lv.status !== "취소" && calcShift(user.work_group, new Date(lv.used_date)) === "야간")
+      .map((lv: any) => {
+        const d = new Date(lv.used_date);
+        return {
+          dateLabel: `${d.getMonth() + 1}/${d.getDate()}`,
+          typeLabel: LB[lv.leave_type] || lv.leave_type || "휴가",
+          days: Number(lv.days) || 0,
+        };
+      })
+      .sort((a: any, b: any) => a.dateLabel.localeCompare(b.dateLabel));
+  })();
+
   React.useEffect(() => {
     if (finalNight !== null) setNightCount(finalNight);
   }, [finalNight]);
@@ -31323,6 +31342,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     hourlyWage * 1.5 * overtimeBase8 + hourlyWage * 2.0 * overtimeOver8
   );
 
+  const hfList: any[] = [];
   let hfTotalWork = 0;
   let hfTotalNight = 0;
   let hfAutoCount = 0;
@@ -31347,8 +31367,17 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     hfTotalWork += workHours;
     hfTotalNight += nightHours;
     hfAutoCount += 1;
+    const hd = new Date(rec.work_date);
+    hfList.push({
+      dateLabel: `${hd.getMonth() + 1}/${hd.getDate()}`,
+      diaLabel: rec.is_temp_dia ? "임시다이아" : `다이아 ${((rec.memo || "").match(/다이아\s*(\d+)/) || [])[1] || ""}`,
+      shift: rec.work_shift || "",
+      workHours,
+      nightHours,
+    });
   });
   const holidayFillPay = Math.round(hfPaySum);
+  const supportList: any[] = [];
 
   let supportOtHours = 0;
   dutyRecords.forEach((rec: any) => {
@@ -31362,11 +31391,16 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       if (s < START) ot += START - s;
       if (e > END) ot += e - END;
       supportOtHours += ot;
+      const sd1 = new Date(rec.work_date);
+      supportList.push({ dateLabel: `${sd1.getMonth() + 1}/${sd1.getDate()}`, diaLabel: "임시다이아", ot });
       return;
     }
     const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!sm) return;
-    supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
+    const otH = calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
+    supportOtHours += otH;
+    const sd2 = new Date(rec.work_date);
+    supportList.push({ dateLabel: `${sd2.getMonth() + 1}/${sd2.getDate()}`, diaLabel: `다이아 ${sm[1]}`, ot: otH });
   });
    const supportPay = Math.round(hourlyWage * supportOtHours * 1.5);
 
@@ -32189,7 +32223,12 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                         <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 4 }}>
                           📅 전달({lastMonthNight.month}월) 근무표 야간 {lastMonthNight.count}일
                         </div>
-                        {lastMonthNight.count - (finalNight ?? 0) > 0 && (
+                        {nightLeaveList.map((x: any, i: number) => (
+                          <div key={i} style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
+                            − 야간 휴가 차감: {x.dateLabel} {x.typeLabel} · {x.days}일
+                          </div>
+                        ))}
+                        {nightLeaveList.length === 0 && lastMonthNight.count - (finalNight ?? 0) > 0 && (
                           <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
                             − 야간에 쓴 휴가 {lastMonthNight.count - (finalNight ?? 0)}일 차감
                           </div>
@@ -32235,6 +32274,11 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 {supportOtHours > 0 ? (
                   <>
                     <div style={{ background: "#ECFEFF", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
+                      {supportList.map((x: any, i: number) => (
+                        <div key={i} style={{ fontSize: 12, color: "#9CA3AF" }}>
+                          {x.dateLabel} {x.diaLabel} (지원근무) · 연장 {x.ot.toFixed(2)}시간
+                        </div>
+                      ))}
                       이번 달 지원근무 연장 {supportOtHours.toFixed(2)}시간 (1.5배 적용)
                     </div>
                     <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#0891B2", textAlign: "right" }}>
@@ -32261,6 +32305,11 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                 {hfAutoCount > 0 ? (
                   <>
                     <div style={{ background: "#FEF2F2", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#6B7280", lineHeight: 1.7 }}>
+                      {hfList.map((x: any, i: number) => (
+                        <div key={i} style={{ fontSize: 12, color: "#9CA3AF" }}>
+                          {x.dateLabel} {x.diaLabel} ({x.shift} 휴무충당) · {x.workHours.toFixed(2)}시간 (야간 {x.nightHours.toFixed(2)} 포함)
+                        </div>
+                      ))}
                       이번 달 휴무충당 {hfAutoCount}회 · 인정 {hfTotalWork.toFixed(2)}시간 (야간 {hfTotalNight.toFixed(2)}시간 포함)
                     </div>
                     <div style={{ marginTop: 8, fontSize: 15, fontWeight: 700, color: "#DC2626", textAlign: "right" }}>
