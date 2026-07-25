@@ -49,6 +49,10 @@ exports.handler = async (event) => {
     if (member.status === "차단") {
       return { statusCode: 200, headers, body: JSON.stringify({ result: "blocked" }) };
     }
+    // 조합원 전용 — 비조합원 로그인 차단 (단, 관리자·운용기관사는 예외)
+    if (member.is_union !== true && member.is_admin !== true) {
+      return { statusCode: 200, headers, body: JSON.stringify({ result: "not_union" }) };
+    }
 
     const authResp = await fetch(
       proj + "/member_auth?employee_number=eq." + emp + "&select=*",
