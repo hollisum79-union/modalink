@@ -26925,11 +26925,23 @@ const getKyobunWork = (member: any, date: Date) => {
       {allWorkOpen && (() => {
           const kyobuns = members.filter((m: any) => ["대공원", "도봉"].includes(String(m.work_group)));
           const groups: Record<string, any[]> = { 주간: [], 야간: [], 비번: [], 휴무: [] };
+          // 대기는 그동안 담을 칸이 없어 버려지고 있었다. 번호 60 미만=주간 / 60 이상=야간으로 나눠
+          // 각 열 맨 아래에 붙인다 (배열 비율 통계와 같은 기준).
+          const standby: Record<string, any[]> = { 주간: [], 야간: [] };
           kyobuns.forEach((m: any) => {
             const w = getKyobunWork(m, dateObj);
-            if (!w || !groups[w.type]) return;
-            groups[w.type].push({ name: m.name, emp: String(m.employee_number), dia: w.dia });
+            if (!w) return;
+            const row = { name: m.name, emp: String(m.employee_number), dia: w.dia };
+            if (isStandbyDia(w.dia)) {
+              const n = Number(String(w.dia).replace(/[^0-9]/g, "")) || 0;
+              standby[n >= 60 ? "야간" : "주간"].push({ ...row, no: n });
+              return;
+            }
+            if (!groups[w.type]) return;
+            groups[w.type].push(row);
           });
+          standby["주간"].sort((a: any, b: any) => a.no - b.no);
+          standby["야간"].sort((a: any, b: any) => a.no - b.no);
           groups["주간"].sort((a: any, b: any) => Number(a.dia) - Number(b.dia));
           groups["야간"].sort((a: any, b: any) => Number(a.dia) - Number(b.dia));
           groups["비번"].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "ko"));
@@ -26957,7 +26969,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
                     {cols.map((c) => (
                       <div key={c.key} style={{ borderRight: c.key === "휴무" ? "none" : "1px solid #F0F0F4" }}>
-                        {groups[c.key].length === 0 ? (
+                        {groups[c.key].length === 0 && (standby[c.key] || []).length === 0 ? (
                           <div style={{ fontSize: 12, color: "#C1C5CC", textAlign: "center", padding: "12px 4px" }}>없음</div>
                         ) : groups[c.key].map((p: any, i: number) => {
                           const isMe = p.emp === meEmp;
@@ -26968,6 +26980,22 @@ const getKyobunWork = (member: any, date: Date) => {
                             </div>
                           );
                         })}
+                        {(standby[c.key] || []).length > 0 && (
+                          <>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px 0 4px", background: "#F3F0FF", borderTop: "2px solid #DDD6FE", borderBottom: "1px solid #EAE6FB", fontSize: 10.5, fontWeight: 800, color: "#6D28D9" }}>
+                              🕐 대기
+                            </div>
+                            {standby[c.key].map((p: any, i: number) => {
+                              const isMe = p.emp === meEmp;
+                              return (
+                                <div key={"sb" + i} style={{ display: "flex", gap: 5, alignItems: "baseline", padding: "8px 7px", fontSize: 13, borderBottom: "1px solid #F3F4F6", background: isMe ? "#FFF7E6" : "#FBFAFF", boxShadow: isMe ? "inset 3px 0 0 #FBBF24" : "none" }}>
+                                  <span style={{ color: isMe ? "#9CA3AF" : "#A78BFA", fontWeight: 700, fontSize: 11, minWidth: 20, textAlign: "right" }}>{p.no || ""}</span>
+                                  <span style={{ fontWeight: 700, color: isMe ? "#B45309" : (String(p.name).startsWith("결원") ? "#C1C5CC" : "#1F2937") }}>{p.name}</span>
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
