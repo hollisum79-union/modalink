@@ -286,6 +286,15 @@ function calcShiftWork(team: any, date: Date, shiftBase: any): string {
   return cycle[(((start + diff) % 4) + 4) % 4];
 }
 
+// ── 대기 다이아 판정 (공용) ──
+// 교번 배열에는 "대기1"로도 "대1"로도 적힐 수 있다 (둘 다 대기를 뜻함).
+// 판정을 이 함수 한 곳에만 두어 화면·급여·주행키로·운용 배정이 절대 어긋나지 않게 한다.
+// ※ 대기는 행로·주행키로가 없고, 야간이면 충당이 없을 때 4시간만 인정된다.
+function isStandbyDia(dia: any): boolean {
+  const s = String(dia ?? "").replace(/\s+/g, "");
+  return s.startsWith("대기") || /^대\d/.test(s);
+}
+
 function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
   if (!member || rotationData.length === 0) return null;
 
@@ -614,7 +623,7 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
       const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
-      if (String(w.dia).startsWith("대기")) {
+      if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) kyobunNightHours += 4;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
         kyobunNightHours += calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays).nightHours;
@@ -15158,7 +15167,7 @@ function OperatorHome({ opName }: { opName: string }) {
       .map((m) => {
         if (!String(m.name).includes("결원")) return null;
         const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
-        if (!w || !String(w.dia).startsWith("대기")) return null;
+        if (!w || !isStandbyDia(w.dia)) return null;
         if (String(w.dia).includes("~") || w.type === "비번") return null;
         return { slot: String(w.dia), name: m.name, region: m.work_group };
       })
@@ -15276,7 +15285,7 @@ function OperatorHome({ opName }: { opName: string }) {
         // 결원은 사람이 아님 → 대기에서 제외
         if (String(m.name).includes("결원")) return null;
         const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
-        if (!w || !String(w.dia).startsWith("대기")) return null;
+        if (!w || !isStandbyDia(w.dia)) return null;
         // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
         if (String(w.dia).includes("~") || w.type === "비번") return null;
         const off = offByEmp.get(String(m.employee_number)) || (isBibeon(m) ? "충당비번" : "");
@@ -15424,7 +15433,7 @@ function OperatorHome({ opName }: { opName: string }) {
       const w: any = workOf(m);
       if (!w) return;
       // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
-      if (String(w.dia).startsWith("대기")) return;
+      if (isStandbyDia(w.dia)) return;
       if (w.type !== "주간" && w.type !== "야간") return;
       list.push({ dia: String(w.dia), name: m.name, reason, region: m.work_group });
     });
@@ -15433,7 +15442,7 @@ function OperatorHome({ opName }: { opName: string }) {
       if (!String(m.name).includes("결원")) return;
       const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
       if (!w) return;
-      if (String(w.dia).startsWith("대기")) return; // 대기 결원은 대기 뱃지에서 처리
+      if (isStandbyDia(w.dia)) return; // 대기 결원은 대기 뱃지에서 처리
       if (w.type !== "주간" && w.type !== "야간") return;
       list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
     });
@@ -15452,7 +15461,7 @@ function OperatorHome({ opName }: { opName: string }) {
       if (reasonByEmp.has(String(m.employee_number))) return; // 이미 휴가·유고로 잡힘
       const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
       if (!w) return;
-      if (String(w.dia).startsWith("대기")) return; // 대기는 대기 카드에서 회색 처리
+      if (isStandbyDia(w.dia)) return; // 대기는 대기 카드에서 회색 처리
       if (w.type !== "주간" && w.type !== "야간") return;
       if (list.some((x) => x.dia === String(w.dia))) return;
       list.push({ dia: String(w.dia), name: m.name, reason: "충당비번", region: m.work_group });
@@ -16070,7 +16079,7 @@ function OperatorHome({ opName }: { opName: string }) {
                     : null
                 : null;
               const diaTxt =
-                w && !String(w.dia).startsWith("대기") && (w.type === "주간" || w.type === "야간")
+                w && !isStandbyDia(w.dia) && (w.type === "주간" || w.type === "야간")
                   ? `운전 다이아 ${w.dia}`
                   : m && m.work_type === "교대"
                     ? "교대 근무자 (다이아 빈자리 대상 아님)"
@@ -16210,7 +16219,7 @@ function OperatorHome({ opName }: { opName: string }) {
           if (
             w2 &&
             (w2.type === "주간" || w2.type === "야간") &&
-            !String(w2.dia).startsWith("대기")
+            !isStandbyDia(w2.dia)
           )
             warn = `내일 ${w2.type} ${w2.dia} — 뽑으면 ${w2.dia}가 빕니다 (충당비번)`;
         }
@@ -19678,7 +19687,7 @@ function RotationEditScreen() {
       rows.forEach((r) => {
         const dv = String(r.dia_value);
         const wt = String(r.work_type);
-        if (dv.startsWith("대기")) {
+        if (isStandbyDia(dv)) {
           const n = Number(dv.replace(/[^0-9]/g, ""));
           if (n >= 60) sbNight++;
           else sbDay++;
@@ -26074,7 +26083,7 @@ if (data) {
     if (!work || !work.dia) return null;
     const ds = String(work.dia).replace(/\s+/g, "");
     if (ds.endsWith("~")) return null; // 비번 제외
-    if (ds.startsWith("대기") || /^대\d/.test(ds)) {
+    if (isStandbyDia(ds)) {
       return { kind: "대기", msg: work.type === "야간" ? "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요. 충당이 안 되면 야간수당 4시간만 인정돼요 (주행키로 없음)." : "대기 근무예요 — 당일 공석 다이아에 충당 배정될 수 있어요." };
     }
     if (ds === "휴51" || ds === "휴71") {
@@ -26216,7 +26225,9 @@ const getKyobunWork = (member: any, date: Date) => {
     const d = new Date(editingDate);
     let diaNo: string | null = null;
     let dayType: string | null = null;
-    const adj = (adjustRecords || []).find((r: any) => r.work_date === editingDate);
+    // 근무조정은 본인 것만 (다른 조합원 근무표를 볼 때는 그 사람 교번 다이아만)
+    const _isOther = !!(selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number));
+    const adj = _isOther ? null : (adjustRecords || []).find((r: any) => r.work_date === editingDate);
     if (adj) {
       if (!adj.is_temp_dia) {
         const m = String(adj.memo || "").match(/다이아\s*(\d+)/);
@@ -26224,7 +26235,7 @@ const getKyobunWork = (member: any, date: Date) => {
       }
     } else if (activeTab === "교번" && selectedMember) {
       const w = getKyobunWork(selectedMember, d);
-      if (w && !String(w.dia).startsWith("대기") && (w.type === "주간" || w.type === "야간")) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
+      if (w && !isStandbyDia(w.dia) && (w.type === "주간" || w.type === "야간")) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
     } else if (activeTab === "통상" && user) {
       const w = getTongsangWork(user, d);
       if (w) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
@@ -26780,7 +26791,9 @@ const getKyobunWork = (member: any, date: Date) => {
                 designated: { bg: "#E1F5EE", fg: "#0F6E56" },
                 support: { bg: "#E6F1FB", fg: "#185FA5" },
               };
-              const adj = (adjustRecords || []).find((r: any) => r.work_date === dateStr);
+              // 근무조정은 본인 것만 — 다른 조합원 근무표를 볼 때는 그 사람 교번 다이아만 보여준다.
+              // (달력 배지도 같은 규칙: 27,219줄 isSelf / 28,343줄 다른 사람이면 표시 안 함)
+              const adj = isOtherKyobun ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
               let diaNo: any = null;
               let dayType: string | null = null;
               let shiftTxt = "";
@@ -26797,7 +26810,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   const m = String(adj.memo || "").match(/다이아\s*(\d+)/);
                   if (m) { diaNo = m[1]; dayType = getDiaDayType(String(adj.work_shift || "주간"), dateObj); }
                 }
-              } else if (isKyobun && kWork && !String(kWork.dia).startsWith("대기") && (kWork.type === "주간" || kWork.type === "야간")) {
+              } else if (isKyobun && kWork && !isStandbyDia(kWork.dia) && (kWork.type === "주간" || kWork.type === "야간")) {
                 // 비번(71~)·휴무(휴1)는 다이아 번호가 아니라 자리 표시라 행로가 없다 → 줄 자체를 내지 않는다.
                 // 비번은 전날 야간의 연장이기도 해서 어제 팝업에서 이미 본 행로가 된다.
                 diaNo = kWork.dia; dayType = kDayType; shiftTxt = kWork.type;
@@ -31869,7 +31882,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
-      if (String(w.dia).startsWith("대기")) {
+      if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) sum += 4;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
         const { nightHours } = calcHolidayFillHours(w.dia, "야간", ds, diaTable, holidays);
@@ -31912,7 +31925,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
-      if (String(w.dia).startsWith("대기")) {
+      if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) cnt += 1;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
         cnt += 1;
@@ -34282,7 +34295,7 @@ function DistanceScreen({ onBack, user }) {
           diaNo = adjustByDate[ds];
         } else if (me.work_type === "교번") {
         const w = calcKyobunWork(member, new Date(d), rotationData, swapData, allMembers, shRes.data || []);
-          if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
+          if (w && !isStandbyDia(w.dia) && Number(w.dia) >= 1) diaNo = w.dia;
         } else if (me.work_type === "통상") {
           const w = calcTongsangWork(member, new Date(d), tsHolidays);
           if (w && Number(w.dia) >= 1) diaNo = w.dia;
@@ -35952,7 +35965,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
                 };
 
                if (swapMode === "oneday") {
-                  const isStandby = (w: any) => !!(w && String(w.dia).startsWith("대기"));
+                  const isStandby = (w: any) => !!(w && isStandbyDia(w.dia));
                   const myW = calcKyobunWork(me, new Date(s), swapRotation, [], [], swapStartHistory);
                   const myKind = workKind(myW);
                   if (myKind !== "주" && myKind !== "야") {
@@ -40625,7 +40638,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
             diaNo = adjustByDate[ds];
           } else if (me.work_type === "교번") {
            const w = calcKyobunWork(member, new Date(d), homeRotation, swapData || [], allMembers || [], shData || []);
-            if (w && !String(w.dia).startsWith("대기") && Number(w.dia) >= 1) diaNo = w.dia;
+            if (w && !isStandbyDia(w.dia) && Number(w.dia) >= 1) diaNo = w.dia;
           } else if (me.work_type === "통상") {
             const w = calcTongsangWork(member, new Date(d), tsHolidays);
             if (w && Number(w.dia) >= 1) diaNo = w.dia;
@@ -42707,7 +42720,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             }
             const dr = info?.diaRow;
             const isWork = type === "주간" || type === "야간";
-            const isStandby = info?.dia != null && String(info.dia).startsWith("대기");
+            const isStandby = info?.dia != null && isStandbyDia(info.dia);
             const bigText =
   (info?.dia != null && !String(info.dia).endsWith("~"))
                 ? (isStandby ? String(info.dia) : `다이아 ${info.dia}`)
