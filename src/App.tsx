@@ -31140,6 +31140,25 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     return Math.max(0, c);
   })();
 
+  const nightLeaveList = (() => {
+    if (!lastMonthNight) return [] as any[];
+    const LB: Record<string, string> = {
+      annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차",
+      substitute: "대체휴가", study: "학습휴가", longService: "장기재직휴가", petition: "청원휴가",
+    };
+    return (lastMonthLeaves || [])
+      .filter((lv: any) => lv.status !== "취소" && calcShift(user.work_group, new Date(lv.used_date)) === "야간")
+      .map((lv: any) => {
+        const d = new Date(lv.used_date);
+        return {
+          dateLabel: `${d.getMonth() + 1}/${d.getDate()}`,
+          typeLabel: LB[lv.leave_type] || lv.leave_type || "휴가",
+          days: Number(lv.days) || 0,
+        };
+      })
+      .sort((a: any, b: any) => a.dateLabel.localeCompare(b.dateLabel));
+  })();
+
   React.useEffect(() => {
     if (finalNight !== null) setNightCount(finalNight);
   }, [finalNight]);
@@ -32204,7 +32223,12 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
                         <div style={{ fontSize: 12, color: "#6D28D9", marginBottom: 4 }}>
                           📅 전달({lastMonthNight.month}월) 근무표 야간 {lastMonthNight.count}일
                         </div>
-                        {lastMonthNight.count - (finalNight ?? 0) > 0 && (
+                        {nightLeaveList.map((x: any, i: number) => (
+                          <div key={i} style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
+                            − 야간 휴가 차감: {x.dateLabel} {x.typeLabel} · {x.days}일
+                          </div>
+                        ))}
+                        {nightLeaveList.length === 0 && lastMonthNight.count - (finalNight ?? 0) > 0 && (
                           <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 4 }}>
                             − 야간에 쓴 휴가 {lastMonthNight.count - (finalNight ?? 0)}일 차감
                           </div>
