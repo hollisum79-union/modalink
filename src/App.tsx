@@ -10601,7 +10601,9 @@ function MemberManageScreen({ user }: any) {
             loadMembers();
           };
           if (!nowUnion) {
-            // 비조합원: 로그인 계정 삭제 (앱 차단)
+            // 비조합원: 로그인 계정 삭제 (앱 차단) + 기기·알림 개인정보 삭제 (근무·급여 이력은 보존)
+            supabase.from("push_subscriptions").delete().eq("employee_number", String(payload.employee_number)).then(() => {});
+            supabase.from("device_sessions").delete().eq("employee_number", String(payload.employee_number)).then(() => {});
             fetch("/.netlify/functions/delete-credential", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -29204,6 +29206,7 @@ function MySettingsScreen({
                 onClick={async () => {
                   try {
                     if (user?.employee_number) {
+                      // 인증 정보 삭제 (비밀번호)
                       await fetch("/.netlify/functions/delete-credential", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -29211,6 +29214,15 @@ function MySettingsScreen({
                           employee_number: user.employee_number,
                         }),
                       });
+                      // 기기·알림 개인정보 삭제 — 재접근·알림 차단 (근무·급여 이력은 보존)
+                      await supabase
+                        .from("push_subscriptions")
+                        .delete()
+                        .eq("employee_number", String(user.employee_number));
+                      await supabase
+                        .from("device_sessions")
+                        .delete()
+                        .eq("employee_number", String(user.employee_number));
                       await supabase
                         .from("members")
                         .update({ is_app_user: false })
