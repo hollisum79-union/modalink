@@ -31253,13 +31253,27 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     }
     (dutyRecords || []).forEach((rec: any) => {
       if (rec.work_shift !== "야간") return;
+      if (rec.is_temp_dia) { sum += Number(rec.temp_night_hours) || 0; return; }
       const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!dm) return;
       sum += calcHolidayFillHours(dm[1], "야간", rec.work_date, diaTable, holidays).nightHours;
     });
     return sum;
   })();
-  const nightTotalHours = isKyobun ? kyobunNightHours : nightHoursPerShift * nightCount;
+  // 교대 등 비교번: 근무조정(대기충당·지정근무) 야간을 홈(computeNetPay)과 동일하게 합산 — 미러링
+  const dutyNightHoursScreen = (() => {
+    if (isKyobun) return 0;
+    let s = 0;
+    (dutyRecords || []).forEach((rec: any) => {
+      if (rec.work_shift !== "야간") return;
+      if (rec.is_temp_dia) { s += Number(rec.temp_night_hours) || 0; return; }
+      const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
+      if (!dm) return;
+      s += calcHolidayFillHours(dm[1], "야간", rec.work_date, diaTable, holidays).nightHours;
+    });
+    return s;
+  })();
+  const nightTotalHours = (isKyobun ? kyobunNightHours : nightHoursPerShift * nightCount) + dutyNightHoursScreen;
   const kyobunNightCount = (() => {
     if (!isKyobun || rotationData.length === 0 || diaTable.length === 0) return 0;
     const n = new Date();
@@ -31279,10 +31293,11 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         cnt += 1;
       }
     }
-    (dutyRecords || []).forEach((rec: any) => { if (rec.work_shift === "야간" && (rec.memo || "").match(/다이아\s*(\d+)/)) cnt += 1; });
+    (dutyRecords || []).forEach((rec: any) => { if (rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/))) cnt += 1; });
     return cnt;
   })();
-  const nightTotalCount = isKyobun ? kyobunNightCount : nightCount;
+  const dutyNightCountScreen = isKyobun ? 0 : (dutyRecords || []).filter((rec: any) => rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/))).length;
+  const nightTotalCount = (isKyobun ? kyobunNightCount : nightCount) + dutyNightCountScreen;
   const nightPay = Math.round(hourlyWage * 0.5 * nightTotalHours);
   const overtimeTotalHours = overtimeHour + overtimeMin / 60;
   const overtimeBase8 = Math.min(overtimeTotalHours, 8);
