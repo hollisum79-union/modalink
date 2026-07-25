@@ -10377,6 +10377,7 @@ function MemberManageScreen({ user }: any) {
   const [search, setSearch] = useState("");
   const [rosterReport, setRosterReport] = useState<any>(null);
   const [rosterBusy, setRosterBusy] = useState(false);
+  const [rosterFilter, setRosterFilter] = useState<any>(null);
   const rosterInputRef = React.useRef<HTMLInputElement>(null);
 
   const compareRoster = (file: File) => {
@@ -10417,26 +10418,37 @@ function MemberManageScreen({ user }: any) {
           if (!/^\d{5,}$/.test(emp)) continue;
           excelMap.set(emp, nm);
         }
-        const appList = (members as any[]).filter(
+        // 명부 = 조합비 납부(조합원) 명단 → 앱의 "조합원"과 대조해 미신고 가입·탈퇴를 찾음
+        const allApp = (members as any[]).filter(
           (m: any) => m.employee_number && !String(m.name || "").includes("결원") && /^\d{5,}$/.test(String(m.employee_number).trim())
         );
-        const appMap = new Map<string, any>();
-        appList.forEach((m: any) => appMap.set(String(m.employee_number).trim(), m));
+        const unionMap = new Map<string, any>();
+        const nonUnionMap = new Map<string, any>();
+        allApp.forEach((m: any) => {
+          const k = String(m.employee_number).trim();
+          if (m.is_union) unionMap.set(k, m);
+          else nonUnionMap.set(k, m);
+        });
         const onlyExcel: any[] = [];
         const nameDiff: any[] = [];
         let matchCount = 0;
         excelMap.forEach((nm, emp) => {
-          const a = appMap.get(emp);
-          if (!a) onlyExcel.push({ emp, name: nm });
-          else if (String(a.name || "").trim() !== nm) nameDiff.push({ emp, appName: a.name, excelName: nm });
-          else matchCount += 1;
+          const u = unionMap.get(emp);
+          if (u) {
+            if (String(u.name || "").trim() !== nm) nameDiff.push({ emp, appName: u.name, excelName: nm });
+            else matchCount += 1;
+            return;
+          }
+          const nu = nonUnionMap.get(emp);
+          onlyExcel.push({ emp, name: nm, inAppAsNonUnion: !!nu, appName: nu ? nu.name : null });
         });
-        const onlyApp = appList
+        const onlyApp = Array.from(unionMap.values())
           .filter((m: any) => !excelMap.has(String(m.employee_number).trim()))
           .map((m: any) => ({ emp: String(m.employee_number), name: m.name }));
         onlyExcel.sort((a, b) => a.name.localeCompare(b.name));
         onlyApp.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-        setRosterReport({ excelCount: excelMap.size, appCount: appList.length, onlyExcel, onlyApp, nameDiff, matchCount });
+        setRosterReport({ excelCount: excelMap.size, appCount: unionMap.size, onlyExcel, onlyApp, nameDiff, matchCount });
+        setRosterFilter(null);
         setRosterBusy(false);
       })
       .catch((e: any) => {
@@ -10885,45 +10897,58 @@ function MemberManageScreen({ user }: any) {
             <div style={{ fontSize: 15, fontWeight: 800 }}>
               📋 명부 대조 결과{" "}
               <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 400 }}>
-                명부 {rosterReport.excelCount}명 ↔ 앱 {rosterReport.appCount}명 · 사번 기준
+                명부(조합비) {rosterReport.excelCount}명 ↔ 앱 조합원 {rosterReport.appCount}명 · 사번 기준
               </span>
             </div>
             <div style={{ display: "flex", gap: 6, margin: "12px 0 4px" }}>
               {[
-                ["명부에만", rosterReport.onlyExcel.length, "#EFF6FF", "#2563EB"],
-                ["앱에만", rosterReport.onlyApp.length, "#FEF2F2", "#DC2626"],
-                ["이름 다름", rosterReport.nameDiff.length, "#FFFBEB", "#B45309"],
-                ["일치", rosterReport.matchCount, "#F0FDF4", "#15803D"],
-              ].map(([l, n, bg, col]: any) => (
-                <div key={l} style={{ flex: 1, borderRadius: 11, padding: "9px 0", textAlign: "center", background: bg, color: col }}>
+                ["excel", "가입 반영", rosterReport.onlyExcel.length, "#EFF6FF", "#2563EB"],
+                ["app", "탈퇴 의심", rosterReport.onlyApp.length, "#FEF2F2", "#DC2626"],
+                ["diff", "이름 다름", rosterReport.nameDiff.length, "#FFFBEB", "#B45309"],
+                ["match", "일치", rosterReport.matchCount, "#F0FDF4", "#15803D"],
+              ].map(([key, l, n, bg, col]: any) => (
+                <div
+                  key={key}
+                  onClick={() => setRosterFilter(rosterFilter === key ? null : key)}
+                  style={{ flex: 1, borderRadius: 11, padding: "9px 0", textAlign: "center", background: bg, color: col, cursor: "pointer", border: rosterFilter === key ? `2px solid ${col}` : "2px solid transparent" }}
+                >
                   <div style={{ fontSize: 16, fontWeight: 800 }}>{n}</div>
                   <div style={{ fontSize: 10, marginTop: 1 }}>{l}</div>
                 </div>
               ))}
             </div>
-            {rosterReport.onlyExcel.length > 0 && (
+            {rosterFilter && (
+              <div style={{ fontSize: 11, color: "#9CA3AF", textAlign: "center", marginTop: 4 }}>
+                선택한 항목만 표시 중 — 다시 누르면 전체 보기
+              </div>
+            )}
+            {(!rosterFilter || rosterFilter === "excel") && rosterReport.onlyExcel.length > 0 && (
               <div>
-                <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🔵 명부에만 있음 — 신규 전입 가능성 ({rosterReport.onlyExcel.length}명)</div>
+                <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🔵 명부에만 있음 — 가입 반영 필요 ({rosterReport.onlyExcel.length}명)</div>
                 {rosterReport.onlyExcel.map((x: any) => (
                   <div key={x.emp} style={{ border: "1px solid #F3F4F6", borderRadius: 12, padding: "10px 13px", marginBottom: 7 }}>
                     <span style={{ fontSize: 14, fontWeight: 700 }}>{x.name}</span>
-                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>사번 {x.emp} · 앱에 없음 → 결원 자리 이름표 교체 검토</div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>
+                      {x.inAppAsNonUnion
+                        ? `사번 ${x.emp} · 앱에 비조합원으로 등록됨 → [수정]에서 조합원으로 변경`
+                        : `사번 ${x.emp} · 앱에 미등록 → 결원 이름표 교체 또는 인원추가`}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-            {rosterReport.onlyApp.length > 0 && (
+            {(!rosterFilter || rosterFilter === "app") && rosterReport.onlyApp.length > 0 && (
               <div>
-                <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🔴 앱에만 있음 — 퇴직·전출 가능성 ({rosterReport.onlyApp.length}명)</div>
+                <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🔴 앱은 조합원인데 명부에 없음 — 탈퇴·퇴직 가능성 ({rosterReport.onlyApp.length}명)</div>
                 {rosterReport.onlyApp.map((x: any) => (
                   <div key={x.emp} style={{ border: "1px solid #F3F4F6", borderRadius: 12, padding: "10px 13px", marginBottom: 7 }}>
                     <span style={{ fontSize: 14, fontWeight: 700 }}>{x.name}</span>
-                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>사번 {x.emp} · 명부에 없음 → [정리]로 결원 처리 검토</div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>사번 {x.emp} · 조합비 명부에 없음 → 탈퇴면 [수정]에서 비조합원 전환, 퇴직·전출이면 [정리]</div>
                   </div>
                 ))}
               </div>
             )}
-            {rosterReport.nameDiff.length > 0 && (
+            {(!rosterFilter || rosterFilter === "diff") && rosterReport.nameDiff.length > 0 && (
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🟡 이름 다름 ({rosterReport.nameDiff.length}명)</div>
                 {rosterReport.nameDiff.map((x: any) => (
@@ -10937,11 +10962,15 @@ function MemberManageScreen({ user }: any) {
                 ))}
               </div>
             )}
-            {rosterReport.onlyExcel.length === 0 && rosterReport.onlyApp.length === 0 && rosterReport.nameDiff.length === 0 && (
+            {rosterFilter === "match" && (
+              <div style={{ fontSize: 13, color: "#15803D", textAlign: "center", padding: "16px 0" }}>✅ 일치 {rosterReport.matchCount}명 — 이상 없는 인원이라 목록은 생략해요.</div>
+            )}
+            {!rosterFilter && rosterReport.onlyExcel.length === 0 && rosterReport.onlyApp.length === 0 && rosterReport.nameDiff.length === 0 && (
               <div style={{ fontSize: 13, color: "#15803D", textAlign: "center", padding: "16px 0" }}>✅ 명부와 앱이 완전히 일치합니다!</div>
             )}
+
             <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.6, marginTop: 10 }}>
-              ⓘ 결원○○ 줄과 사번 없는 인원은 대조에서 제외됩니다. 이 결과는 저장되지 않으며, 변경은 각 조합원의 [수정]·[정리] 버튼으로 직접 해주세요.
+              ⓘ 앱의 조합원(154명 그룹)만 조합비 명부와 대조합니다. 비조합원·결원·사번 없는 인원은 제외돼요. 결과는 저장되지 않으며, 변경은 각자의 [수정]·[정리] 버튼으로 직접 해주세요.
             </div>
             <button onClick={() => setRosterReport(null)} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", marginTop: 12, cursor: "pointer" }}>
               닫기
