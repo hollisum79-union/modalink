@@ -26224,7 +26224,7 @@ const getKyobunWork = (member: any, date: Date) => {
       }
     } else if (activeTab === "교번" && selectedMember) {
       const w = getKyobunWork(selectedMember, d);
-      if (w && !String(w.dia).startsWith("대기")) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
+      if (w && !String(w.dia).startsWith("대기") && (w.type === "주간" || w.type === "야간")) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
     } else if (activeTab === "통상" && user) {
       const w = getTongsangWork(user, d);
       if (w) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
@@ -26797,7 +26797,9 @@ const getKyobunWork = (member: any, date: Date) => {
                   const m = String(adj.memo || "").match(/다이아\s*(\d+)/);
                   if (m) { diaNo = m[1]; dayType = getDiaDayType(String(adj.work_shift || "주간"), dateObj); }
                 }
-              } else if (isKyobun && kWork && !String(kWork.dia).startsWith("대기")) {
+              } else if (isKyobun && kWork && !String(kWork.dia).startsWith("대기") && (kWork.type === "주간" || kWork.type === "야간")) {
+                // 비번(71~)·휴무(휴1)는 다이아 번호가 아니라 자리 표시라 행로가 없다 → 줄 자체를 내지 않는다.
+                // 비번은 전날 야간의 연장이기도 해서 어제 팝업에서 이미 본 행로가 된다.
                 diaNo = kWork.dia; dayType = kDayType; shiftTxt = kWork.type;
               } else if (isTongsang && tWork) {
                 diaNo = tWork.dia; dayType = tDayType; shiftTxt = tWork.type;
