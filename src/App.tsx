@@ -25467,6 +25467,8 @@ const [holidays, setHolidays] = React.useState<string[]>([]);
   const [diaTable, setDiaTable] = React.useState<any[]>([]);
   const [workForms, setWorkForms] = React.useState<any>({});
   const [popupDiaImg, setPopupDiaImg] = React.useState<string>("");
+  // 날짜 팝업 아래 "이 날 근무한 다이아" 접이식 — 팝업을 새로 열면 항상 접힌 상태로 시작
+  const [diaFoldOpen, setDiaFoldOpen] = React.useState<boolean>(false);
   const [zoomImg, setZoomImg] = React.useState<string>("");
  const [adjustRecords, setAdjustRecords] = React.useState<any[]>([]);
   const [leaveRecords, setLeaveRecords] = React.useState<any[]>([]);
@@ -26204,19 +26206,36 @@ const getKyobunWork = (member: any, date: Date) => {
     return mine;
   };
 
-  // 근무표 상세 팝업: 그 날 교번 다이아의 근무행로 불러오기
+  // 근무표 상세 팝업: 그 날 근무행로 사진 불러오기
+  //   ① 근무조정(대기충당·지정근무·지원근무·휴무충당)이 있으면 그 다이아
+  //   ② 없으면 본인 교번·통상 다이아
+  //   대기 다이아는 행로가 없으므로 제외한다.
   React.useEffect(() => {
-    if (!editingDate || activeTab !== "교번" || !selectedMember) { setPopupDiaImg(""); return; }
-    const w = getKyobunWork(selectedMember, new Date(editingDate));
-    if (!w) { setPopupDiaImg(""); return; }
-    const dt = getDiaDayType(w.type, new Date(editingDate));
-    if (!dt) { setPopupDiaImg(""); return; }
+    setDiaFoldOpen(false); // 팝업을 새로 열면 항상 접힌 상태
+    if (!editingDate) { setPopupDiaImg(""); return; }
+    const d = new Date(editingDate);
+    let diaNo: string | null = null;
+    let dayType: string | null = null;
+    const adj = (adjustRecords || []).find((r: any) => r.work_date === editingDate);
+    if (adj) {
+      if (!adj.is_temp_dia) {
+        const m = String(adj.memo || "").match(/다이아\s*(\d+)/);
+        if (m) { diaNo = m[1]; dayType = getDiaDayType(String(adj.work_shift || "주간"), d); }
+      }
+    } else if (activeTab === "교번" && selectedMember) {
+      const w = getKyobunWork(selectedMember, d);
+      if (w && !String(w.dia).startsWith("대기")) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
+    } else if (activeTab === "통상" && user) {
+      const w = getTongsangWork(user, d);
+      if (w) { diaNo = String(w.dia); dayType = getDiaDayType(w.type, d); }
+    }
+    if (!diaNo || !dayType) { setPopupDiaImg(""); return; }
     let cancel = false;
-    supabase.from("dia_image").select("image").eq("dia_no", String(w.dia)).eq("category", dt).maybeSingle().then(({ data }: any) => {
+    supabase.from("dia_image").select("image").eq("dia_no", String(diaNo)).eq("category", dayType).maybeSingle().then(({ data }: any) => {
       if (!cancel) setPopupDiaImg(data && data.image ? data.image : "");
     });
     return () => { cancel = true; };
-  }, [editingDate, selectedMember, activeTab]);
+  }, [editingDate, selectedMember, activeTab, adjustRecords]);
 
   const isToday = (y: number, m: number, d: number) =>
     d === today.getDate() &&
@@ -26750,16 +26769,120 @@ const getKyobunWork = (member: any, date: Date) => {
             )}
             </>)}
 
-            {isKyobun && kWork && (
-              <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a1a", marginBottom: 10 }}>🚉 근무행로</div>
-                {popupDiaImg ? (
-                  <img src={popupDiaImg} alt="근무행로" onClick={() => setZoomImg(popupDiaImg)} style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block", cursor: "zoom-in" }} />
-                ) : (
-                  <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 사진이 아직 없어요</div>
-                )}
-              </div>
-            )}
+            {(() => {
+              // ── 이 날 근무한 다이아 (접이식) ──
+              //   근무조정이 있으면 그 다이아를, 없으면 본인 교번·통상 다이아를 보여준다.
+              //   대기·휴무처럼 행로가 없는 날은 줄 자체가 나오지 않는다.
+              const ADJ_KO: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무" };
+              const ADJ_COLOR: Record<string, any> = {
+                standby: { bg: "#EDE9FE", fg: "#6D28D9" },
+                holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" },
+                designated: { bg: "#E1F5EE", fg: "#0F6E56" },
+                support: { bg: "#E6F1FB", fg: "#185FA5" },
+              };
+              const adj = (adjustRecords || []).find((r: any) => r.work_date === dateStr);
+              let diaNo: any = null;
+              let dayType: string | null = null;
+              let shiftTxt = "";
+              let badge = "";
+              let badgeColor: any = null;
+              let tempRec: any = null;
+              if (adj) {
+                badge = ADJ_KO[adj.adjust_type] || adj.adjust_type;
+                badgeColor = ADJ_COLOR[adj.adjust_type] || { bg: "#F3F4F6", fg: "#374151" };
+                shiftTxt = adj.work_shift || "";
+                if (adj.is_temp_dia) {
+                  tempRec = adj;
+                } else {
+                  const m = String(adj.memo || "").match(/다이아\s*(\d+)/);
+                  if (m) { diaNo = m[1]; dayType = getDiaDayType(String(adj.work_shift || "주간"), dateObj); }
+                }
+              } else if (isKyobun && kWork && !String(kWork.dia).startsWith("대기")) {
+                diaNo = kWork.dia; dayType = kDayType; shiftTxt = kWork.type;
+              } else if (isTongsang && tWork) {
+                diaNo = tWork.dia; dayType = tDayType; shiftTxt = tWork.type;
+              }
+              if (!diaNo && !tempRec) return null;
+              const info = diaNo ? getDiaInfo(diaNo, dayType) : null;
+              const hasVal = (v: any) => v !== null && v !== undefined && v !== "" && Number(v) !== 0;
+              const fields: any[] = [];
+              if (tempRec) {
+                if (hasVal(tempRec.temp_distance_km)) fields.push({ k: "주행키로", v: `${tempRec.temp_distance_km} km` });
+                if (hasVal(tempRec.temp_work_hours)) fields.push({ k: "인정근무", v: fmtHours(tempRec.temp_work_hours) });
+                if (tempRec.temp_start_time) fields.push({ k: "출근", v: String(tempRec.temp_start_time).slice(0, 5), c: "#1D4ED8" });
+                if (tempRec.temp_end_time) fields.push({ k: "퇴근", v: String(tempRec.temp_end_time).slice(0, 5), c: "#BE185D" });
+                if (hasVal(tempRec.temp_night_hours)) fields.push({ k: "심야", v: fmtHours(tempRec.temp_night_hours) });
+              } else if (info) {
+                if (hasVal(info.distance_km)) fields.push({ k: "주행키로", v: `${info.distance_km} km` });
+                if (hasVal(info.work_hours)) fields.push({ k: "인정근무", v: fmtHours(info.work_hours) });
+                if (info.start_time) fields.push({ k: "출근", v: info.start_time, c: "#1D4ED8" });
+                if (info.end_time) fields.push({ k: "퇴근", v: info.end_time, c: "#BE185D" });
+                if (hasVal(info.drive_hours)) fields.push({ k: "운전", v: fmtHours(info.drive_hours) });
+                if (hasVal(info.wait_hours)) fields.push({ k: "대기", v: fmtHours(info.wait_hours) });
+                if (hasVal(info.ride_hours)) fields.push({ k: "편승", v: fmtHours(info.ride_hours) });
+                if (hasVal(info.watch_hours)) fields.push({ k: "감시", v: fmtHours(info.watch_hours) });
+                if (hasVal(info.edu_hours)) fields.push({ k: "교육", v: fmtHours(info.edu_hours) });
+                if (hasVal(info.prep_hours)) fields.push({ k: "준비", v: fmtHours(info.prep_hours) });
+                if (hasVal(info.clean_hours)) fields.push({ k: "정리", v: fmtHours(info.clean_hours) });
+                if (hasVal(info.night_hours)) fields.push({ k: "심야", v: fmtHours(info.night_hours) });
+              }
+              const title = tempRec ? `${shiftTxt} · 임시 다이아` : `${shiftTxt} · 다이아 ${diaNo}`;
+              return (
+                <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F3F4F6" }}>
+                  <div
+                    onClick={() => setDiaFoldOpen(!diaFoldOpen)}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#F7F7FB", borderRadius: 12, padding: "13px 14px", cursor: "pointer" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                      <span style={{ fontSize: 17 }}>🚉</span>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a1a" }}>
+                          {title}
+                          {badge && (
+                            <span style={{ display: "inline-block", fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: badgeColor.bg, color: badgeColor.fg }}>
+                              {badge}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>행로 · 시간 · 거리 보기</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 700 }}>{diaFoldOpen ? "▴" : "▾"}</span>
+                  </div>
+                  {diaFoldOpen && (
+                    <div style={{ padding: "14px 2px 0" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 8 }}>근무행로</div>
+                      {popupDiaImg ? (
+                        <>
+                          <img
+                            src={popupDiaImg}
+                            alt="근무행로"
+                            onClick={() => setZoomImg(popupDiaImg)}
+                            style={{ width: "100%", borderRadius: 10, border: "1px solid #E5E7EB", display: "block", cursor: "zoom-in" }}
+                          />
+                          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 5, textAlign: "center" }}>사진을 누르면 크게 볼 수 있어요</div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>행로 사진이 아직 없어요</div>
+                      )}
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", margin: "16px 0 8px" }}>시간 · 거리 정보</div>
+                      {fields.length > 0 ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          {fields.map((f, i) => (
+                            <div key={i} style={{ background: "#F7F7FB", borderRadius: 10, padding: "10px 12px" }}>
+                              <div style={{ fontSize: 11, color: "#9CA3AF" }}>{f.k}</div>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: f.c || "#111827", marginTop: 1 }}>{f.v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 2px" }}>시간 정보 없음</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
                 </div>
       {zoomImg ? <ImageZoomViewer src={zoomImg} onClose={() => setZoomImg("")} /> : null}
@@ -40604,29 +40727,14 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
 
       const t1 = performance.now();
       const hYear = new Date().getFullYear();
-      const cacheKey = "holidays_" + hYear;
-      const cachedHoli = localStorage.getItem(cacheKey);
-      const cachedArr = (() => {
-        try {
-          const j = cachedHoli ? JSON.parse(cachedHoli) : null;
-          if (Array.isArray(j)) return j;
-          if (j && Array.isArray(j.list)) return j.list;
-        } catch (e) {}
-        return null;
-      })();
-      if (cachedArr) {
-        setHomeHolidays(cachedArr);
-      } else {
-        fetch("/.netlify/functions/read-holidays?year=" + hYear)
-          .then((r) => r.json())
-          .then((json) => {
-            if (json.holidays) {
-              setHomeHolidays(json.holidays);
-              localStorage.setItem(cacheKey, JSON.stringify(json.holidays));
-            }
-          })
-          .catch(() => {});
-      }
+      // 공휴일은 fetchHolidays 한 곳에서만 읽는다.
+      // 홈이 따로 API를 부르고 저장하면 holiday_exceptions 보정이 빠진 값이
+      // "holidays_연도" 칸에 남아 근무표·급여가 그걸 읽는다 (노동절 등 예외 무효화).
+      fetchHolidays(hYear)
+        .then((list) => {
+          if (Array.isArray(list) && list.length > 0) setHomeHolidays(list);
+        })
+        .catch(() => {});
       const emp = user?.employee_number;
       const t2 = performance.now();
       const now = new Date();
