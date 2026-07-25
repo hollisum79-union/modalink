@@ -10375,6 +10375,75 @@ const dummyPendingMembers = [
 function MemberManageScreen({ user }: any) {
   const [members, setMembers] = useState([]);
   const [search, setSearch] = useState("");
+  const [rosterReport, setRosterReport] = useState<any>(null);
+  const [rosterBusy, setRosterBusy] = useState(false);
+  const rosterInputRef = React.useRef<HTMLInputElement>(null);
+
+  const compareRoster = (file: File) => {
+    setRosterBusy(true);
+    const ensureXLSX = () => new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = () => reject(new Error("엑셀 라이브러리 로드 실패"));
+      document.head.appendChild(s);
+    });
+    ensureXLSX()
+      .then(async (XLSX: any) => {
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, { type: "array" });
+        // 사번+성명(이름) 헤더가 있는 시트/행 자동 감지
+        let empCol = -1, nameCol = -1, headerRow = -1, rows: any[][] = [];
+        for (const sn of wb.SheetNames) {
+          const grid: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" });
+          for (let r = 0; r < Math.min(grid.length, 6); r++) {
+            const cells = (grid[r] || []).map((c: any) => String(c || "").trim());
+            const e = cells.findIndex((c: string) => c === "사번");
+            const nIdx = cells.findIndex((c: string) => c === "성명" || c === "이름");
+            if (e >= 0 && nIdx >= 0) { empCol = e; nameCol = nIdx; headerRow = r; rows = grid; break; }
+          }
+          if (headerRow >= 0) break;
+        }
+        if (headerRow < 0) {
+          showToast("사번·성명(이름) 열을 찾지 못했어요. 명부 형식을 확인해주세요.", "error");
+          setRosterBusy(false);
+          return;
+        }
+        const excelMap = new Map<string, string>();
+        for (let r = headerRow + 1; r < rows.length; r++) {
+          const emp = String((rows[r] || [])[empCol] ?? "").trim();
+          const nm = String((rows[r] || [])[nameCol] ?? "").trim();
+          if (!/^\d{5,}$/.test(emp)) continue;
+          excelMap.set(emp, nm);
+        }
+        const appList = (members as any[]).filter(
+          (m: any) => m.employee_number && !String(m.name || "").includes("결원") && /^\d{5,}$/.test(String(m.employee_number).trim())
+        );
+        const appMap = new Map<string, any>();
+        appList.forEach((m: any) => appMap.set(String(m.employee_number).trim(), m));
+        const onlyExcel: any[] = [];
+        const nameDiff: any[] = [];
+        let matchCount = 0;
+        excelMap.forEach((nm, emp) => {
+          const a = appMap.get(emp);
+          if (!a) onlyExcel.push({ emp, name: nm });
+          else if (String(a.name || "").trim() !== nm) nameDiff.push({ emp, appName: a.name, excelName: nm });
+          else matchCount += 1;
+        });
+        const onlyApp = appList
+          .filter((m: any) => !excelMap.has(String(m.employee_number).trim()))
+          .map((m: any) => ({ emp: String(m.employee_number), name: m.name }));
+        onlyExcel.sort((a, b) => a.name.localeCompare(b.name));
+        onlyApp.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        setRosterReport({ excelCount: excelMap.size, appCount: appList.length, onlyExcel, onlyApp, nameDiff, matchCount });
+        setRosterBusy(false);
+      })
+      .catch((e: any) => {
+        showToast("명부 읽기 실패: " + (e?.message || e), "error");
+        setRosterBusy(false);
+      });
+  };
   const [unionFilter, setUnionFilter] = useState("전체");
   const [phoneFilter, setPhoneFilter] = useState(false);
   const [form, setForm] = useState(null);
@@ -10750,7 +10819,37 @@ function MemberManageScreen({ user }: any) {
         <div style={{ fontSize: 15, fontWeight: 800, color: "#1F2937" }}>
           사업소인원 — 총 {members.length}명 · 현원 {members.filter((m) => !(m.name || "").includes("결원")).length}명 · 결원 {members.filter((m) => (m.name || "").includes("결원")).length}명
         </div>
-               <button
+               <div style={{ display: "flex", gap: 6 }}>
+        <input
+          ref={rosterInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files && e.target.files[0];
+            if (f) compareRoster(f);
+            e.target.value = "";
+          }}
+        />
+        <button
+          onClick={() => rosterInputRef.current && rosterInputRef.current.click()}
+          disabled={rosterBusy}
+          style={{
+            background: "#EEF2FF",
+            color: "#4F46E5",
+            border: "1px solid #C7D2FE",
+            borderRadius: 8,
+            padding: "6px 12px",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            opacity: rosterBusy ? 0.6 : 1,
+          }}
+        >
+          {rosterBusy ? "대조 중..." : "📋 명부 대조"}
+        </button>
+        <button
           onClick={() =>
             setForm({
               name: "",
@@ -10775,9 +10874,81 @@ function MemberManageScreen({ user }: any) {
         >
           + 사업소 인원추가
         </button>
+        </div>
 
       
       </div>
+
+      {rosterReport && (
+        <div onClick={() => setRosterReport(null)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 440, maxHeight: "82vh", overflowY: "auto", padding: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>
+              📋 명부 대조 결과{" "}
+              <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 400 }}>
+                명부 {rosterReport.excelCount}명 ↔ 앱 {rosterReport.appCount}명 · 사번 기준
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 6, margin: "12px 0 4px" }}>
+              {[
+                ["명부에만", rosterReport.onlyExcel.length, "#EFF6FF", "#2563EB"],
+                ["앱에만", rosterReport.onlyApp.length, "#FEF2F2", "#DC2626"],
+                ["이름 다름", rosterReport.nameDiff.length, "#FFFBEB", "#B45309"],
+                ["일치", rosterReport.matchCount, "#F0FDF4", "#15803D"],
+              ].map(([l, n, bg, col]: any) => (
+                <div key={l} style={{ flex: 1, borderRadius: 11, padding: "9px 0", textAlign: "center", background: bg, color: col }}>
+                  <div style={{ fontSize: 16, fontWeight: 800 }}>{n}</div>
+                  <div style={{ fontSize: 10, marginTop: 1 }}>{l}</div>
+                </div>
+              ))}
+            </div>
+            {rosterReport.onlyExcel.length > 0 && (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🔵 명부에만 있음 — 신규 전입 가능성 ({rosterReport.onlyExcel.length}명)</div>
+                {rosterReport.onlyExcel.map((x: any) => (
+                  <div key={x.emp} style={{ border: "1px solid #F3F4F6", borderRadius: 12, padding: "10px 13px", marginBottom: 7 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>{x.name}</span>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>사번 {x.emp} · 앱에 없음 → 결원 자리 이름표 교체 검토</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {rosterReport.onlyApp.length > 0 && (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🔴 앱에만 있음 — 퇴직·전출 가능성 ({rosterReport.onlyApp.length}명)</div>
+                {rosterReport.onlyApp.map((x: any) => (
+                  <div key={x.emp} style={{ border: "1px solid #F3F4F6", borderRadius: 12, padding: "10px 13px", marginBottom: 7 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>{x.name}</span>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>사번 {x.emp} · 명부에 없음 → [정리]로 결원 처리 검토</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {rosterReport.nameDiff.length > 0 && (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>🟡 이름 다름 ({rosterReport.nameDiff.length}명)</div>
+                {rosterReport.nameDiff.map((x: any) => (
+                  <div key={x.emp} style={{ border: "1px solid #F3F4F6", borderRadius: 12, padding: "10px 13px", marginBottom: 7 }}>
+                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>사번 {x.emp}</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 5, fontSize: 12 }}>
+                      <div style={{ flex: 1, background: "#F9FAFB", borderRadius: 8, padding: "7px 9px", color: "#6B7280" }}>앱: {x.appName}</div>
+                      <div style={{ flex: 1, background: "#FFFBEB", borderRadius: 8, padding: "7px 9px", color: "#B45309", fontWeight: 700 }}>명부: {x.excelName}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {rosterReport.onlyExcel.length === 0 && rosterReport.onlyApp.length === 0 && rosterReport.nameDiff.length === 0 && (
+              <div style={{ fontSize: 13, color: "#15803D", textAlign: "center", padding: "16px 0" }}>✅ 명부와 앱이 완전히 일치합니다!</div>
+            )}
+            <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.6, marginTop: 10 }}>
+              ⓘ 결원○○ 줄과 사번 없는 인원은 대조에서 제외됩니다. 이 결과는 저장되지 않으며, 변경은 각 조합원의 [수정]·[정리] 버튼으로 직접 해주세요.
+            </div>
+            <button onClick={() => setRosterReport(null)} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", marginTop: 12, cursor: "pointer" }}>
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ position: "relative", marginBottom: 12 }}>
         <input
