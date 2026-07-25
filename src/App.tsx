@@ -15288,7 +15288,7 @@ function OperatorHome({ opName }: { opName: string }) {
       setFillDiaImg(imgRow && imgRow.image ? imgRow.image : "");
     })();
   }, [fillDia, targetStr, opHolidays]);
-  const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
+  const [assigned, setAssigned] = useState<Record<string, { name: string; via: string; emp?: string }>>({});
 
   // ── 휴무충당 횟수 (operator_assign 기록 기반 · 다들 0부터 시작 · 기준점수 입력은 나중에) ──
   const [fillCounts, setFillCounts] = useState<Record<string, number>>({});
@@ -15311,7 +15311,7 @@ function OperatorHome({ opName }: { opName: string }) {
     (async () => {
       const { data, error } = await supabase
         .from("operator_assign")
-        .select("dia_no, filled_name, via, action, created_at")
+        .select("dia_no, filled_name, via, action, created_at, employee_number")
         .eq("work_date", targetStr)
         .order("created_at", { ascending: true })
         .order("id", { ascending: true });
@@ -15319,10 +15319,10 @@ function OperatorHome({ opName }: { opName: string }) {
         showToast("배정 기록 불러오기 실패: " + error.message, "error");
         return;
       }
-      const next: Record<string, { name: string; via: string }> = {};
+      const next: Record<string, { name: string; via: string; emp?: string }> = {};
       (data || []).forEach((r: any) => {
         if (r.action === "cancel") delete next[String(r.dia_no)];
-        else next[String(r.dia_no)] = { name: r.filled_name, via: r.via };
+        else next[String(r.dia_no)] = { name: r.filled_name, via: r.via, emp: r.employee_number ? String(r.employee_number) : "" };
       });
       setAssigned(next);
     })();
@@ -16063,9 +16063,57 @@ function OperatorHome({ opName }: { opName: string }) {
         showToast("저장 실패: " + error.message, "error");
         return;
       }
-      setAssigned({ ...assigned, [fillDia]: { name, via } });
+      // ── 조합원 근무조정(work_adjust) 연동 — 한 번 입력, 양쪽 반영 (선입력 우선) ──
+      let linkMsg = "";
+      const ADJ_MAP: Record<string, string> = { 대기충당: "standby", 지정근무: "designated", 지원근무: "support", 휴무충당: "holiday_fill" };
+      const adjType = ADJ_MAP[via];
+      if (emp && adjType) {
+        const { data: dup } = await supabase
+          .from("work_adjust")
+          .select("id")
+          .eq("employee_number", String(emp))
+          .eq("work_date", targetStr)
+          .limit(1);
+        if (dup && dup.length > 0) {
+          linkMsg = " · 본인 기록이 이미 있어 연동 생략(기존 우선)";
+        } else {
+          const shiftKind = Number(fillDia) >= 60 ? "야간" : "주간";
+          const { error: waErr } = await supabase.from("work_adjust").insert([
+            {
+              employee_number: String(emp),
+              adjust_type: adjType,
+              work_date: targetStr,
+              work_shift: shiftKind,
+              memo: `다이아 ${fillDia}번 (운용 배정)`,
+              is_night: shiftKind === "야간",
+              is_temp_dia: false,
+              source: "operator",
+              entered_by: opName,
+            },
+          ]);
+          if (waErr) {
+            linkMsg = " · ⚠️ 근무조정 연동 실패: " + waErr.message;
+          } else {
+            linkMsg = " · 근무조정 자동 기록됨";
+            fetch("/.netlify/functions/send-push", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: "📝 근무조정 자동 기록",
+                message: `운용기관사가 ${targetStr.slice(5).replace("-", "/")} ${via}(다이아 ${fillDia})를 기록했어요. 급여·주행키로에 자동 반영됩니다.`,
+                type: "workadjust",
+                url: "/",
+                to: String(emp),
+              }),
+            }).catch(() => {});
+          }
+        }
+      } else if (!emp) {
+        linkMsg = " · 사번 미확인 — 근무조정 연동 안 됨";
+      }
+      setAssigned({ ...assigned, [fillDia]: { name, via, emp: emp ? String(emp) : "" } });
       setFillDia("");
-      showToast(`${fillDia}다이아 → ${name} (${via}) · 저장됨`);
+      showToast(`${fillDia}다이아 → ${name} (${via}) · 저장됨${linkMsg}`);
     };
 
     const secTtl: React.CSSProperties = {
@@ -16187,7 +16235,7 @@ function OperatorHome({ opName }: { opName: string }) {
                       </div>
                     </div>
                     <button
-                      onClick={() => pick(d.member_name, "지정근무")}
+                      onClick={() => pick(d.member_name, "지정근무", d.member_id ? String(d.member_id) : undefined)}
                       style={{ border: 0, borderRadius: 10, background: "#BE185D", color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
                     >
                       배정
@@ -16523,10 +16571,20 @@ function OperatorHome({ opName }: { opName: string }) {
                     showToast("취소 저장 실패: " + error.message, "error");
                     return;
                   }
+                  const curEmp = cur && (cur as any).emp;
+                  if (curEmp) {
+                    await supabase
+                      .from("work_adjust")
+                      .delete()
+                      .eq("employee_number", String(curEmp))
+                      .eq("work_date", targetStr)
+                      .eq("source", "operator")
+                      .like("memo", `다이아 ${e.dia}번%`);
+                  }
                   const next = { ...assigned };
                   delete next[e.dia];
                   setAssigned(next);
-                  showToast("배정을 취소했습니다 (기록에 남음)");
+                  showToast("배정을 취소했습니다 (기록에 남음)" + (curEmp ? " · 근무조정 연동 기록도 삭제됨" : ""));
                 }}
                 style={{ border: 0, borderRadius: 11, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
               >
@@ -36397,6 +36455,11 @@ appearance: "none",
                             💰
                           </span>
                         )}
+                        {r.source === "operator" && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#F0FDFA", color: "#0F766E" }}>
+                            운용 입력
+                          </span>
+                        )}
                       </div>
                       {r.memo && (
                         <div style={{ fontSize: 12, color: "#6B7280" }}>
@@ -36405,7 +36468,13 @@ appearance: "none",
                       )}
                     </div>
                     <button
-                      onClick={() => handleDelete(r.id)}
+                      onClick={() => {
+                        if (r.source === "operator") {
+                          showToast("운용기관사가 입력한 기록이에요. 삭제·정정은 운용기관사에게 요청해주세요.", "error");
+                          return;
+                        }
+                        handleDelete(r.id);
+                      }}
                       style={{
                         background: "none",
                         border: "none",
