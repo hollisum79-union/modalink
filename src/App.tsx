@@ -14036,6 +14036,198 @@ const TIP_PRESETS: [string, string, string | null][] = [
   ["🎮 해방역 게임", "홈의 지회 엠블럼을 빠르게 두 번 탭해보세요. 해방역 레이스가 시작됩니다!", null],
 ];
 
+function AppLinksAdmin() {
+  const [links, setLinks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [nName, setNName] = useState("");
+  const [nSub, setNSub] = useState("");
+  const [nUrl, setNUrl] = useState("");
+  const [nGroup, setNGroup] = useState("밴드");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase.from("app_links").select("*").order("group_name", { ascending: true }).order("sort_order", { ascending: true });
+    setLinks(data || []);
+    setLoading(false);
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const addLink = async () => {
+    if (!nName.trim() || !nUrl.trim()) {
+      showToast("이름과 주소를 입력해주세요", "error");
+      return;
+    }
+    let url = nUrl.trim();
+    if (!/^https?:\/\//.test(url)) url = "https://" + url;
+    setSaving(true);
+    const maxSort = links.filter((l: any) => l.group_name === nGroup).reduce((m: number, l: any) => Math.max(m, Number(l.sort_order) || 0), 0);
+    const { error } = await supabase.from("app_links").insert({ name: nName.trim(), sub: nSub.trim() || null, url, group_name: nGroup, sort_order: maxSort + 1 });
+    setSaving(false);
+    if (error) {
+      showToast("추가 실패: " + error.message, "error");
+      return;
+    }
+    showToast("추가했어요");
+    setNName(""); setNSub(""); setNUrl("");
+    load();
+  };
+
+  const move = async (l: any, dir: number) => {
+    const group = links.filter((x: any) => x.group_name === l.group_name).sort((a: any, b: any) => a.sort_order - b.sort_order);
+    const idx = group.findIndex((x: any) => x.id === l.id);
+    const swap = group[idx + dir];
+    if (!swap) return;
+    await supabase.from("app_links").update({ sort_order: swap.sort_order }).eq("id", l.id);
+    await supabase.from("app_links").update({ sort_order: l.sort_order }).eq("id", swap.id);
+    load();
+  };
+
+  const toggleVisible = async (l: any) => {
+    const { error } = await supabase.from("app_links").update({ visible: !l.visible }).eq("id", l.id);
+    if (error) {
+      showToast("변경 실패: " + error.message, "error");
+      return;
+    }
+    load();
+  };
+
+  const [editId, setEditId] = useState<any>(null);
+  const [eName, setEName] = useState("");
+  const [eSub, setESub] = useState("");
+  const [eUrl, setEUrl] = useState("");
+  const [eGroup, setEGroup] = useState("밴드");
+
+  const openEdit = (l: any) => {
+    setEditId(l.id);
+    setEName(l.name || "");
+    setESub(l.sub || "");
+    setEUrl(l.url || "");
+    setEGroup(l.group_name || "밴드");
+  };
+
+  const saveEdit = async () => {
+    if (!eName.trim() || !eUrl.trim()) {
+      showToast("이름과 주소를 입력해주세요", "error");
+      return;
+    }
+    let url = eUrl.trim();
+    if (!/^https?:\/\//.test(url)) url = "https://" + url;
+    const { error } = await supabase.from("app_links").update({ name: eName.trim(), sub: eSub.trim() || null, url, group_name: eGroup }).eq("id", editId);
+    if (error) {
+      showToast("수정 실패: " + error.message, "error");
+      return;
+    }
+    showToast("수정했어요");
+    setEditId(null);
+    load();
+  };
+
+  const removeLink = async (l: any) => {
+    if (!window.confirm(`'${l.name}' 링크를 삭제할까요?`)) return;
+    const { error } = await supabase.from("app_links").delete().eq("id", l.id);
+    if (error) {
+      showToast("삭제 실패: " + error.message, "error");
+      return;
+    }
+    showToast("삭제했어요");
+    load();
+  };
+
+  const inpSt: any = { width: "100%", border: "1px solid #E5E7EB", borderRadius: 10, padding: "11px 12px", fontSize: 14, boxSizing: "border-box", WebkitAppearance: "none", appearance: "none", background: "#fff" };
+  const lbSt: any = { fontSize: 13, fontWeight: 600, color: "#374151", margin: "12px 0 6px", display: "block" };
+  const chipSt = (color: string): any => ({ fontSize: 12, fontWeight: 600, color, background: "none", border: "1px solid #E5E7EB", borderRadius: 8, padding: "5px 9px", cursor: "pointer" });
+
+  return (
+    <div style={{ padding: "16px 16px 28px" }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#1F2937", marginBottom: 6 }}>바로가기 관리</div>
+      <div style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 14 }}>홈 헤더 🔗 버튼에 표시되는 밴드·사이트 링크를 관리합니다.</div>
+
+      <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>➕ 새 링크 추가</div>
+        <label style={lbSt}>이름</label>
+        <input value={nName} onChange={(e) => setNName(e.target.value)} placeholder="예: 대공원승무지회" style={inpSt} />
+        <label style={lbSt}>설명 (선택)</label>
+        <input value={nSub} onChange={(e) => setNSub(e.target.value)} placeholder="예: 지회 밴드" style={inpSt} />
+        <label style={lbSt}>주소</label>
+        <input value={nUrl} onChange={(e) => setNUrl(e.target.value)} placeholder="https://band.us/..." style={inpSt} />
+        <label style={lbSt}>그룹</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          {["밴드", "사이트"].map((g) => (
+            <button key={g} onClick={() => setNGroup(g)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, fontSize: 14, border: "1px solid " + (nGroup === g ? "#2563EB" : "#E5E7EB"), color: nGroup === g ? "#2563EB" : "#6B7280", fontWeight: nGroup === g ? 600 : 400, background: nGroup === g ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
+              {g}
+            </button>
+          ))}
+        </div>
+        <button onClick={addLink} disabled={saving} style={{ display: "block", width: "100%", textAlign: "center", padding: "13px 0", borderRadius: 12, fontSize: 15, fontWeight: 600, border: "none", background: "#2563EB", color: "#fff", marginTop: 14, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+          {saving ? "추가 중..." : "추가하기"}
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: 20 }}>불러오는 중...</div>
+      ) : (
+        ["밴드", "사이트"].map((g) => {
+          const rows = links.filter((l: any) => l.group_name === g);
+          if (rows.length === 0) return null;
+          return (
+            <div key={g} style={{ background: "#fff", borderRadius: 16, padding: "8px 0", marginBottom: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
+              <div style={{ padding: "8px 16px 4px", fontSize: 12, fontWeight: 700, color: "#9CA3AF" }}>{g}</div>
+              {rows.map((l: any, i: number) => (
+                <div key={l.id} style={{ padding: "11px 16px", borderTop: "1px solid #F6F7F9", opacity: l.visible || editId === l.id ? 1 : 0.45 }}>
+                  {editId === l.id ? (
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+                        {l.name} <span style={{ fontSize: 11, color: "#2563EB" }}>수정 중</span>
+                      </div>
+                      <label style={lbSt}>이름</label>
+                      <input value={eName} onChange={(e) => setEName(e.target.value)} style={inpSt} />
+                      <label style={lbSt}>설명 (선택)</label>
+                      <input value={eSub} onChange={(e) => setESub(e.target.value)} style={inpSt} />
+                      <label style={lbSt}>주소</label>
+                      <input value={eUrl} onChange={(e) => setEUrl(e.target.value)} style={inpSt} />
+                      <label style={lbSt}>그룹</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {["밴드", "사이트"].map((g) => (
+                          <button key={g} onClick={() => setEGroup(g)} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 10, fontSize: 14, border: "1px solid " + (eGroup === g ? "#2563EB" : "#E5E7EB"), color: eGroup === g ? "#2563EB" : "#6B7280", fontWeight: eGroup === g ? 600 : 400, background: eGroup === g ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={saveEdit} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "none", background: "#2563EB", color: "#fff", marginTop: 12, cursor: "pointer" }}>
+                        수정 저장
+                      </button>
+                      <button onClick={() => setEditId(null)} style={{ display: "block", width: "100%", textAlign: "center", padding: "11px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", marginTop: 8, cursor: "pointer" }}>
+                        취소
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+                        {l.name} {!l.visible && <span style={{ fontSize: 11, color: "#DC2626" }}>(숨김)</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2, wordBreak: "break-all" }}>{l.url}</div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                        <button onClick={() => move(l, -1)} disabled={i === 0} style={chipSt("#6B7280")}>▲ 위로</button>
+                        <button onClick={() => move(l, 1)} disabled={i === rows.length - 1} style={chipSt("#6B7280")}>▼ 아래로</button>
+                        <button onClick={() => openEdit(l)} style={chipSt("#2563EB")}>✏️ 수정</button>
+                        <button onClick={() => toggleVisible(l)} style={chipSt(l.visible ? "#D97706" : "#2563EB")}>{l.visible ? "숨기기" : "표시"}</button>
+                        <button onClick={() => removeLink(l)} style={chipSt("#DC2626")}>삭제</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 function TipAdmin() {
   const [list, setList] = React.useState<any[]>([]);
   const [feat, setFeat] = React.useState("");
@@ -21096,7 +21288,7 @@ function AdminScreen({ onBack, user, onNavigate }) {
   const adminBackTarget = () => {
     if (["salarytable", "worktime", "deduction"].includes(activeMenu)) return "salarygroup";
     if (["workmanage", "diamgr"].includes(activeMenu)) return "workgroup";
-    if (["hometips", "unionschedule"].includes(activeMenu)) return "homecontent";
+    if (["hometips", "unionschedule", "applinks"].includes(activeMenu)) return "homecontent";
     return "home";
   };
   // ── 안드로이드 뒤로가기: 관리자 세부메뉴 → 한 단계 위 ──
@@ -21505,6 +21697,7 @@ useEffect(() => {
               { id: "eventsadmin", label: "경조사 관리", desc: "경조사 등록 · 홈 팝업" },
               { id: "hometips", label: "홈 팁 관리", desc: "홈 팁 카드 문구" },
               { id: "unionschedule", label: "지회·조합 일정", desc: "홈 D-Day 일정" },
+              { id: "applinks", label: "바로가기 관리", desc: "🔗 밴드·사이트 링크" },
             ].map((m) => (
               <div
                 key={m.id}
@@ -21521,6 +21714,7 @@ useEffect(() => {
           </div>
         )}
         {activeMenu === "unionschedule" && <UnionScheduleAdmin />}
+        {activeMenu === "applinks" && <AppLinksAdmin />}
         {activeMenu === "hometips" && <TipAdmin />}
         {activeMenu === "workmanage" && <WorkManageScreen />}
         {activeMenu === "diamgr" && (
@@ -39862,6 +40056,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [aboutInitialTab, setAboutInitialTab] = useState("intro");
   const [showOnlineModal, setShowOnlineModal] = useState(false);
+  const [showLinkSheet, setShowLinkSheet] = useState(false);
+  const [appLinks, setAppLinks] = useState<any[]>([]);
   const [showUsageModal, setShowUsageModal] = useState(false);
   const [adjustCount, setAdjustCount] = useState(0);
   const [adjustPayEst, setAdjustPayEst] = useState(0);
@@ -41936,16 +42132,15 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8 }}>
-        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "space-around", background: "rgba(255,255,255,0.15)", borderRadius: 11, padding: "7px 4px" }}>
-          <span
+        <div style={{ display: "flex", alignItems: "stretch", gap: 6, marginTop: 8 }}>
+          <div
             onClick={() => { setAboutInitialTab("members"); setScreen("about"); }}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            조합원 <b style={{ fontSize: 14, color: "#fff" }}>{memberCount}</b>명
-          </span>
-          <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
-          <span
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", lineHeight: 1.2 }}>👥 {memberCount}</div>
+            <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>조합원</div>
+          </div>
+          <div
             onClick={() => {
               supabase
                 .from("members")
@@ -41958,19 +42153,18 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   setShowAppUserModal(true);
                 });
             }}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            앱이용 <b style={{ fontSize: 14, color: "#C4B5FD" }}>{appUserCount}</b>명
-          </span>
-          <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
-          <span
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#C4B5FD", lineHeight: 1.2 }}>📲 {appUserCount}</div>
+            <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>앱이용</div>
+          </div>
+          <div
             onClick={() => setShowOnlineModal(true)}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ADE80", display: "inline-block" }} />
-            접속중 <b style={{ fontSize: 14, color: "#4ADE80" }}>{onlineCount}</b>명
-          </span>
-        </div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#4ADE80", lineHeight: 1.2 }}>🟢 {onlineCount}</div>
+            <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>접속중</div>
+          </div>
           <div
             onClick={async () => {
               const msg = "서울교통공사노동조합 대공원승무지회\n우리 지회 조합원 전용 앱 '모다링크'예요 📲\n내 근무표 · 예상 급여 · 공지 · 투표까지 한 곳에서.\n노동자의 내일을 연결하다\n👉 https://modalink.app";
@@ -41983,9 +42177,25 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 }
               } catch (e) {}
             }}
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.22)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 11, padding: "8px 11px", color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
           >
-            📨 초대
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", lineHeight: 1.2 }}>✉️ 초대</div>
+            <div style={{ fontSize: 8.5, color: "#8B5CF6", marginTop: 1 }}>공유</div>
+          </div>
+          <div
+            onClick={async () => {
+              try {
+                const { data } = await supabase.from("app_links").select("*").eq("visible", true).order("group_name", { ascending: true }).order("sort_order", { ascending: true });
+                setAppLinks(data || []);
+              } catch (e) {
+                setAppLinks([]);
+              }
+              setShowLinkSheet(true);
+            }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "6px 0", cursor: "pointer" }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", lineHeight: 1.2 }}>🔗 링크</div>
+            <div style={{ fontSize: 8.5, color: "#8B5CF6", marginTop: 1 }}>바로가기</div>
           </div>
         </div>
       </div>
@@ -42354,6 +42564,37 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     </>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {showLinkSheet && (
+          <div onClick={() => setShowLinkSheet(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-end" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 500, margin: "0 auto", background: "#fff", borderRadius: "18px 18px 0 0", padding: "6px 0 18px", maxHeight: "70vh", overflowY: "auto" }}>
+              <div style={{ width: 38, height: 4, borderRadius: 2, background: "#E5E7EB", margin: "8px auto 4px" }} />
+              <div style={{ padding: "8px 18px 4px", fontSize: 15, fontWeight: 800, color: "#111827" }}>🔗 바로가기</div>
+              {appLinks.length === 0 && (
+                <div style={{ padding: 18, fontSize: 13, color: "#9CA3AF" }}>등록된 링크가 없어요.</div>
+              )}
+              {Array.from(new Set(appLinks.map((l: any) => l.group_name))).map((g: any) => (
+                <div key={g}>
+                  <div style={{ padding: "12px 18px 2px", fontSize: 11, fontWeight: 700, color: "#9CA3AF" }}>{g}</div>
+                  {appLinks.filter((l: any) => l.group_name === g).map((l: any) => (
+                    <div key={l.id} onClick={() => window.open(l.url, "_blank")} style={{ display: "flex", alignItems: "center", padding: "12px 18px", borderTop: "1px solid #F6F7F9", cursor: "pointer" }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 8, background: g === "밴드" ? "#E9F9EE" : "#EEF2FF", color: g === "밴드" ? "#00A32F" : "#4F46E5", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, marginRight: 11, flexShrink: 0 }}>
+                        {g === "밴드" ? "b" : "🌐"}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{l.name}</div>
+                        {l.sub && <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>{l.sub}</div>}
+                      </div>
+                      <div style={{ color: "#D1D5DB", fontSize: 15 }}>›</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div onClick={() => setShowLinkSheet(false)} style={{ textAlign: "center", padding: "12px 0 2px", fontSize: 13, color: "#6B7280", borderTop: "1px solid #F3F4F6", marginTop: 6, cursor: "pointer" }}>
+                닫기
               </div>
             </div>
           </div>
