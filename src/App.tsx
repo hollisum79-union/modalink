@@ -3130,6 +3130,12 @@ function LoginScreen({ onLogin, onGoRegister }) {
       );
       return;
     }
+    if (json.result === "not_union") {
+      setError(
+        "이 앱은 대공원승무지회 조합원 전용입니다.\n가입 문의는 지회로 연락해주세요."
+      );
+      return;
+    }
     if (json.result === "blocked") {
       localStorage.removeItem("union_user");
       setError("계정이 차단되었습니다. 지회로 문의해주세요.");
@@ -10812,6 +10818,17 @@ function MemberManageScreen({ user }: any) {
           showToast(
             `${m.name} 조합원의 비밀번호가 union0000으로 초기화되었습니다.`
           );
+          fetch("/.netlify/functions/send-push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: "🔑 비밀번호가 초기화되었어요",
+              message: "지회에서 비밀번호를 초기화했어요. 앱 하단의 임시 비밀번호로 로그인한 뒤 새 비밀번호로 변경해주세요.",
+              type: "password_reset",
+              url: "/",
+              to: String(m.employee_number),
+            }),
+          }).catch(() => {});
           loadMembers();
         }
       });
