@@ -14094,6 +14094,37 @@ function AppLinksAdmin() {
     load();
   };
 
+  const [editId, setEditId] = useState<any>(null);
+  const [eName, setEName] = useState("");
+  const [eSub, setESub] = useState("");
+  const [eUrl, setEUrl] = useState("");
+  const [eGroup, setEGroup] = useState("밴드");
+
+  const openEdit = (l: any) => {
+    setEditId(l.id);
+    setEName(l.name || "");
+    setESub(l.sub || "");
+    setEUrl(l.url || "");
+    setEGroup(l.group_name || "밴드");
+  };
+
+  const saveEdit = async () => {
+    if (!eName.trim() || !eUrl.trim()) {
+      showToast("이름과 주소를 입력해주세요", "error");
+      return;
+    }
+    let url = eUrl.trim();
+    if (!/^https?:\/\//.test(url)) url = "https://" + url;
+    const { error } = await supabase.from("app_links").update({ name: eName.trim(), sub: eSub.trim() || null, url, group_name: eGroup }).eq("id", editId);
+    if (error) {
+      showToast("수정 실패: " + error.message, "error");
+      return;
+    }
+    showToast("수정했어요");
+    setEditId(null);
+    load();
+  };
+
   const removeLink = async (l: any) => {
     if (!window.confirm(`'${l.name}' 링크를 삭제할까요?`)) return;
     const { error } = await supabase.from("app_links").delete().eq("id", l.id);
@@ -14145,17 +14176,48 @@ function AppLinksAdmin() {
             <div key={g} style={{ background: "#fff", borderRadius: 16, padding: "8px 0", marginBottom: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.05)" }}>
               <div style={{ padding: "8px 16px 4px", fontSize: 12, fontWeight: 700, color: "#9CA3AF" }}>{g}</div>
               {rows.map((l: any, i: number) => (
-                <div key={l.id} style={{ padding: "11px 16px", borderTop: "1px solid #F6F7F9", opacity: l.visible ? 1 : 0.45 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
-                    {l.name} {!l.visible && <span style={{ fontSize: 11, color: "#DC2626" }}>(숨김)</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2, wordBreak: "break-all" }}>{l.url}</div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    <button onClick={() => move(l, -1)} disabled={i === 0} style={chipSt("#6B7280")}>▲ 위로</button>
-                    <button onClick={() => move(l, 1)} disabled={i === rows.length - 1} style={chipSt("#6B7280")}>▼ 아래로</button>
-                    <button onClick={() => toggleVisible(l)} style={chipSt(l.visible ? "#D97706" : "#2563EB")}>{l.visible ? "숨기기" : "표시"}</button>
-                    <button onClick={() => removeLink(l)} style={chipSt("#DC2626")}>삭제</button>
-                  </div>
+                <div key={l.id} style={{ padding: "11px 16px", borderTop: "1px solid #F6F7F9", opacity: l.visible || editId === l.id ? 1 : 0.45 }}>
+                  {editId === l.id ? (
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+                        {l.name} <span style={{ fontSize: 11, color: "#2563EB" }}>수정 중</span>
+                      </div>
+                      <label style={lbSt}>이름</label>
+                      <input value={eName} onChange={(e) => setEName(e.target.value)} style={inpSt} />
+                      <label style={lbSt}>설명 (선택)</label>
+                      <input value={eSub} onChange={(e) => setESub(e.target.value)} style={inpSt} />
+                      <label style={lbSt}>주소</label>
+                      <input value={eUrl} onChange={(e) => setEUrl(e.target.value)} style={inpSt} />
+                      <label style={lbSt}>그룹</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {["밴드", "사이트"].map((g) => (
+                          <button key={g} onClick={() => setEGroup(g)} style={{ flex: 1, textAlign: "center", padding: "9px 0", borderRadius: 10, fontSize: 14, border: "1px solid " + (eGroup === g ? "#2563EB" : "#E5E7EB"), color: eGroup === g ? "#2563EB" : "#6B7280", fontWeight: eGroup === g ? 600 : 400, background: eGroup === g ? "#EFF6FF" : "#fff", cursor: "pointer" }}>
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={saveEdit} style={{ display: "block", width: "100%", textAlign: "center", padding: "12px 0", borderRadius: 12, fontSize: 14, fontWeight: 600, border: "none", background: "#2563EB", color: "#fff", marginTop: 12, cursor: "pointer" }}>
+                        수정 저장
+                      </button>
+                      <button onClick={() => setEditId(null)} style={{ display: "block", width: "100%", textAlign: "center", padding: "11px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, border: "1px solid #E5E7EB", background: "#fff", color: "#374151", marginTop: 8, cursor: "pointer" }}>
+                        취소
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+                        {l.name} {!l.visible && <span style={{ fontSize: 11, color: "#DC2626" }}>(숨김)</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2, wordBreak: "break-all" }}>{l.url}</div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                        <button onClick={() => move(l, -1)} disabled={i === 0} style={chipSt("#6B7280")}>▲ 위로</button>
+                        <button onClick={() => move(l, 1)} disabled={i === rows.length - 1} style={chipSt("#6B7280")}>▼ 아래로</button>
+                        <button onClick={() => openEdit(l)} style={chipSt("#2563EB")}>✏️ 수정</button>
+                        <button onClick={() => toggleVisible(l)} style={chipSt(l.visible ? "#D97706" : "#2563EB")}>{l.visible ? "숨기기" : "표시"}</button>
+                        <button onClick={() => removeLink(l)} style={chipSt("#DC2626")}>삭제</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -42070,16 +42132,16 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8 }}>
-        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "space-around", background: "rgba(255,255,255,0.15)", borderRadius: 11, padding: "7px 4px" }}>
-          <span
+        <div style={{ display: "flex", alignItems: "stretch", gap: 6, marginTop: 8 }}>
+          <div
             onClick={() => { setAboutInitialTab("members"); setScreen("about"); }}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
           >
-            조합원 <b style={{ fontSize: 14, color: "#fff" }}>{memberCount}</b>명
-          </span>
-          <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
-          <span
+            <div style={{ fontSize: 12, lineHeight: 1 }}>👥</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginTop: 2 }}>{memberCount}</div>
+            <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>조합원</div>
+          </div>
+          <div
             onClick={() => {
               supabase
                 .from("members")
@@ -42092,19 +42154,20 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   setShowAppUserModal(true);
                 });
             }}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
           >
-            앱이용 <b style={{ fontSize: 14, color: "#C4B5FD" }}>{appUserCount}</b>명
-          </span>
-          <span style={{ opacity: 0.35, color: "#fff", fontSize: 11 }}>|</span>
-          <span
+            <div style={{ fontSize: 12, lineHeight: 1 }}>📲</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#C4B5FD", marginTop: 2 }}>{appUserCount}</div>
+            <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>앱이용</div>
+          </div>
+          <div
             onClick={() => setShowOnlineModal(true)}
-            style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
           >
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ADE80", display: "inline-block" }} />
-            접속중 <b style={{ fontSize: 14, color: "#4ADE80" }}>{onlineCount}</b>명
-          </span>
-        </div>
+            <div style={{ fontSize: 12, lineHeight: 1 }}>🟢</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#4ADE80", marginTop: 2 }}>{onlineCount}</div>
+            <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.85)", marginTop: 1 }}>접속중</div>
+          </div>
           <div
             onClick={async () => {
               const msg = "서울교통공사노동조합 대공원승무지회\n우리 지회 조합원 전용 앱 '모다링크'예요 📲\n내 근무표 · 예상 급여 · 공지 · 투표까지 한 곳에서.\n노동자의 내일을 연결하다\n👉 https://modalink.app";
@@ -42117,9 +42180,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 }
               } catch (e) {}
             }}
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.22)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 11, padding: "8px 11px", color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
           >
-            📨 초대
+            <div style={{ fontSize: 12, lineHeight: 1 }}>✉️</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", marginTop: 2 }}>초대</div>
+            <div style={{ fontSize: 8.5, color: "#8B5CF6", marginTop: 1 }}>공유</div>
           </div>
           <div
             onClick={async () => {
@@ -42131,9 +42196,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
               }
               setShowLinkSheet(true);
             }}
-            style={{ flexShrink: 0, display: "flex", alignItems: "center", background: "rgba(255,255,255,0.22)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 11, padding: "8px 10px", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", marginLeft: 6 }}
+            style={{ flex: 1, minWidth: 0, textAlign: "center", background: "#fff", border: "1px solid #fff", borderRadius: 11, padding: "7px 0", cursor: "pointer" }}
           >
-            🔗
+            <div style={{ fontSize: 12, lineHeight: 1 }}>🔗</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#6D28D9", marginTop: 2 }}>링크</div>
+            <div style={{ fontSize: 8.5, color: "#8B5CF6", marginTop: 1 }}>바로가기</div>
           </div>
         </div>
       </div>
