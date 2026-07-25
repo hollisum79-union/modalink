@@ -38510,9 +38510,15 @@ function HomeCarousel({
   React.useEffect(() => {
     const load = async () => {
       const cutoff = new Date(Date.now() - 3 * 86400000).toISOString();
+      // first_login_at은 탈퇴해도 members에 남는다(이력 보존).
+      // 그래서 조합원·앱사용자 여부를 함께 봐야 탈퇴한 사람이 환영 카드에 계속 뜨지 않는다.
+      //   · 비조합원 전환(탈퇴 처리) → is_union=false, is_app_user=false
+      //   · 본인 앱탈퇴            → is_app_user=false
       const { data } = await supabase
         .from("members")
         .select("name, first_login_at")
+        .eq("is_union", true)
+        .eq("is_app_user", true)
         .gte("first_login_at", cutoff)
         .order("first_login_at", { ascending: false });
       setRecentJoins((data || []).filter((m: any) => m.name && !String(m.name).includes("결원")));
