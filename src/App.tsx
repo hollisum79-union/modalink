@@ -15288,7 +15288,7 @@ function OperatorHome({ opName }: { opName: string }) {
       setFillDiaImg(imgRow && imgRow.image ? imgRow.image : "");
     })();
   }, [fillDia, targetStr, opHolidays]);
-  const [assigned, setAssigned] = useState<Record<string, { name: string; via: string }>>({});
+  const [assigned, setAssigned] = useState<Record<string, { name: string; via: string; emp?: string }>>({});
 
   // ── 휴무충당 횟수 (operator_assign 기록 기반 · 다들 0부터 시작 · 기준점수 입력은 나중에) ──
   const [fillCounts, setFillCounts] = useState<Record<string, number>>({});
