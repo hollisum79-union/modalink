@@ -515,6 +515,43 @@ function calcSupportOvertimeHours(diaNo: any, shift: string, dateStr: string, di
   if (e > END) ot += e - END;
   return ot;
 }
+// ── 교번충당 시간외 계산 (교대 전용 · 2026-07-26 확정) ──
+//   교대 정규 근무시간: 주간 08:50~18:30 / 야간 18:00~익일 09:10.
+//   충당한 교번 다이아의 출퇴근이 정규 밖으로 나가는 만큼이 시간외 (배율 1.5는 호출부에서).
+//   심야는 여기서 계산하지 않는다 — 야간수당은 교대 본인 근무로 이미 지급되므로 (이중 지급 금지).
+function calcKyobunFillOvertimeHours(diaNo: any, memberShift: string, dateStr: string, diaTable: any[], holidays: string[]) {
+  if (!diaNo || !diaTable || diaTable.length === 0) return 0;
+  const date = new Date(dateStr + "T00:00:00");
+  const isHol = (d: Date) => {
+    const g = d.getDay();
+    if (g === 0 || g === 6) return true;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return (holidays || []).includes(`${y}-${m}-${dd}`);
+  };
+  const n = Number(diaNo);
+  let dayType: string;
+  if (n >= 60) {
+    const tomo = new Date(date);
+    tomo.setDate(tomo.getDate() + 1);
+    const th = isHol(date), mh = isHol(tomo);
+    dayType = !th && !mh ? "평평" : !th && mh ? "평휴" : th && mh ? "휴휴" : "휴평";
+  } else {
+    dayType = isHol(date) ? "휴일" : "평일";
+  }
+  const row = (diaTable || []).find((r: any) => Number(r.dia_no) === n && r.day_type === dayType);
+  if (!row || !row.start_time || !row.end_time) return 0;
+  const toHr = (t: any) => { const p = String(t).split(":"); return (Number(p[0]) || 0) + (Number(p[1]) || 0) / 60; };
+  let s = toHr(row.start_time), e = toHr(row.end_time);
+  if (e <= s) e += 24; // 자정 넘김
+  const START = memberShift === "야간" ? 18.0 : 8 + 50 / 60;
+  const END = memberShift === "야간" ? 24 + 9 + 10 / 60 : 18.5;
+  let ot = 0;
+  if (s < START) ot += START - s;
+  if (e > END) ot += e - END;
+  return ot;
+}
 function calcIncomeTax(monthlyPay: number, familyCount: number, childCount: number) {
   const w = Math.max(Number(monthlyPay) || 0, 0);
   const fam = Math.max(Number(familyCount) || 1, 1);
@@ -641,6 +678,8 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   dutyRecords.forEach((rec: any) => {
     // 휴가가 모든 근무에 우선 — 휴가 날의 근무조정은 급여에서 뺀다 (3단계)
     if (leaveSet.has(String(rec.work_date))) return;
+    // 교번충당의 심야는 교대 본인 야간수당으로 이미 지급 — 여기서 더하면 이중 (2026-07-26 확정)
+    if (rec.adjust_type === "kyobun_fill") return;
     if (rec.work_shift !== "야간") return;
     if (rec.is_temp_dia) {
       dutyNightHours += Number(rec.temp_night_hours) || 0;
@@ -692,6 +731,14 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
     const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!sm) return;
     supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
+  });
+  // 교번충당(교대 전용): 정규 밖 초과분만 시간외로 — 지원근무와 합산 (미러: 급여화면 동일)
+  dutyRecords.forEach((rec: any) => {
+    if (rec.adjust_type !== "kyobun_fill") return;
+    if (leaveSet.has(String(rec.work_date))) return; // 휴가우선
+    const km = (rec.memo || "").match(/다이아\s*(\d+)/);
+    if (!km) return;
+    supportOtHours += calcKyobunFillOvertimeHours(km[1], rec.work_shift, rec.work_date, diaTable, holidays);
   });
   const supportPay = Math.round(hourlyWage * supportOtHours * 1.5);
 
@@ -748,6 +795,13 @@ function estimateAdjustPay(records: any[], hourlyWage: number, diaTable: any[], 
       const sm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!sm) return;
       supportOtHours += calcSupportOvertimeHours(sm[1], rec.work_shift, rec.work_date, diaTable, holidays);
+      return;
+    }
+    if (rec.adjust_type === "kyobun_fill") {
+      // 교번충당(교대): 정규 밖 초과분만 ×1.5 — 심야는 교대 본인 야간수당이라 여기서 안 더함
+      const kmm = (rec.memo || "").match(/다이아\s*(\d+)/);
+      if (!kmm) return;
+      supportOtHours += calcKyobunFillOvertimeHours(kmm[1], rec.work_shift, rec.work_date, diaTable, holidays);
       return;
     }
     if (rec.adjust_type === "standby" || rec.adjust_type === "designated") {
@@ -18165,7 +18219,7 @@ const APPLY_KINDS: Record<string, string> = {
 //   문제가 있으면 사유 문자열을, 없으면 빈 문자열을 돌려준다.
 async function checkAdjustDate(empNo: any, workDate: string, adjustType: string): Promise<string> {
   if (!workDate || !empNo) return "";
-  const KO: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무" };
+  const KO: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무", kyobun_fill: "교번충당" };
   const label = KO[adjustType] || adjustType;
   const { data: m } = await supabase
     .from("members")
@@ -18178,6 +18232,7 @@ async function checkAdjustDate(empNo: any, workDate: string, adjustType: string)
 
   if (m.work_type === "교번" && m.start_position != null) {
     if (adjustType === "support") return `지원근무는 교대 근무자만 신청할 수 있어요.`;
+    if (adjustType === "kyobun_fill") return `교번충당은 교대 근무자만 넣을 수 있어요.`;
     const [rotRes, shRes, swRes, allRes, hols] = await Promise.all([
       supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
       supabase.from("kyobun_start_history").select("*"),
@@ -18222,8 +18277,39 @@ async function checkAdjustDate(empNo: any, workDate: string, adjustType: string)
     return "";
   }
 
-  // 교대·통상은 아직 규칙을 확정하지 않았다 → 잘못 막는 것보다 통과가 안전.
-  //   (교대: 휴무일에 휴무충당·지원근무 / 통상: 미정 — 확정되면 여기에 추가)
+  // ── 교대 (4조 회전) — 확정 규칙 (2026-07-26 정정) ──
+  //   휴무일 → 휴무충당·지원근무 (지원근무는 휴무일 전용)
+  //   근무일(주·야) → 차단. ※ 노사 합의 "교번충당"(출퇴근 전후 초과분 시간외)이 현실에 있으나
+  //     앱에 입력 항목이 아직 없음 — 새 adjust_type으로 별도 구현 예정 (미구현 상태에서 지원근무로 대신 받지 말 것)
+  //   비번 → 전부 차단 / 대기충당·지정근무 → 교대에는 대기·강제휴무 개념이 없어 항상 차단
+  //   참고: 교대는 지원근무를 2달에 1회 의무 이행 (차단 규칙 아님 — 도메인 정보)
+  if (m.work_type === "교대" && m.shift_team) {
+    if (adjustType === "standby") return `대기충당은 교번 근무자만 넣을 수 있어요 (교대에는 대기 근무가 없어요).`;
+    if (adjustType === "designated") return `지정근무는 교번 근무자만 넣을 수 있어요 (교대에는 강제휴무가 없어요).`;
+    const { data: sb } = await supabase
+      .from("shift_base")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const t = calcShiftWork(m.shift_team, d, sb);
+    if (!t) return ""; // 교대 기준 정보가 없으면 잘못 막는 것보다 통과가 안전
+    if (t === "비번") return `${md}은 비번이에요 (야간 다음날). 비번에는 근무를 넣을 수 없어요.`;
+    if (t === "휴무") {
+      if (adjustType === "holiday_fill" || adjustType === "support") return "";
+      return `${md}은 휴무일이에요. 휴무일에는 「휴무충당」이나 「지원근무」만 넣을 수 있어요.`;
+    }
+    // 주간·야간 근무일 — 노사 합의 교번충당만 (출퇴근 전후 초과분 시간외 ×1.5)
+    if (adjustType === "kyobun_fill") return "";
+    return `${md}은 근무일이에요 (교대 ${t}). 근무일에는 「교번충당」만 넣을 수 있어요.`;
+  }
+
+  // ── 통상 (51~54) — 확정 규칙 (2026-07-26): 근무조정 전면 차단 ──
+  if (m.work_type === "통상") {
+    return `통상 근무자는 근무조정(${label})을 넣을 수 없어요.`;
+  }
+
+  // 그 외(미분류 등)는 잘못 막는 것보다 통과가 안전.
   return "";
 }
 
@@ -26835,7 +26921,7 @@ const getKyobunWork = (member: any, date: Date) => {
                     // 휴가가 모든 근무에 우선 — 휴가 있는 날은 근무조정 배지를 그리지 않는다 (데이터는 그대로)
                     if (myCrew && leaveRecords.some((r: any) => r.used_date === key)) return null;
                     if (recs.length === 0) return null;
-                    const LABEL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
+                    const LABEL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원", kyobun_fill: "교충" };
                     const COLOR: any = {
                       standby: { bg: "#EDE9FE", fg: "#6D28D9" },
                       holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" },
@@ -26993,6 +27079,7 @@ const getKyobunWork = (member: any, date: Date) => {
     // 근무조정이 이미 잡혔으면 "배정될 수 있어요"(예고) 대신 확정 안내를 보여준다.
     const ADJ_ATT: Record<string, { ko: string; verb: string }> = {
       standby: { ko: "대기충당", verb: "배정됐어요" },
+    kyobun_fill: { ko: "교번충당", verb: "기록됐어요" },
       holiday_fill: { ko: "휴무충당", verb: "잡혔어요" },
       designated: { ko: "지정근무", verb: "잡혔어요" },
       support: { ko: "지원근무", verb: "잡혔어요" },
@@ -27666,7 +27753,7 @@ const getKyobunWork = (member: any, date: Date) => {
               const dayMemos = isSelf ? (memos[dstr] || []) : [];
               const adjs = isSelf ? adjustRecords.filter((r) => r.work_date === dstr) : [];
               const lvs = isSelf ? leaveRecords.filter((r) => r.used_date === dstr) : [];
-              const ADJL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
+              const ADJL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원", kyobun_fill: "교충" };
               const ADJC: any = { standby: { bg: "#EDE9FE", fg: "#6D28D9" }, holiday_fill: { bg: "#FAEEDA", fg: "#854F0B" }, designated: { bg: "#E1F5EE", fg: "#0F6E56" }, support: { bg: "#E6F1FB", fg: "#185FA5" } };
               const LVL: any = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체", study: "학습", longService: "장기재직" };
               return (
@@ -28794,7 +28881,7 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                     if (leaveRecords.some((r: any) => r.used_date === dstr)) return null;
                     if (recs.length === 0) return null;
                     const LABEL = {
-                      standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원",
+                      standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원", kyobun_fill: "교충",
                     };
                     const COLOR = {
                       standby: { bg: "#EDE9FE", fg: "#6D28D9" },
@@ -32078,7 +32165,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         emp ? supabase.from("salary_settings").select("*").eq("employee_number", emp).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
-       emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+       emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support", "kyobun_fill"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
         supabase.from("members").select("employee_number, work_group, start_position, schedule_total"),
         supabase.from("kyobun_start_history").select("member_id, effective_date, start_position"),
@@ -32333,6 +32420,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     (dutyRecords || []).forEach((rec: any) => {
       if (rec.work_shift !== "야간") return;
       if (leaveSet.has(String(rec.work_date))) return; // 휴가 날의 근무조정 제외 (3단계)
+      if (rec.adjust_type === "kyobun_fill") return; // 교번충당 심야는 교대 야간수당으로 지급 — 이중 금지
       if (rec.is_temp_dia) { sum += Number(rec.temp_night_hours) || 0; return; }
       const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!dm) return;
@@ -32347,6 +32435,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     (dutyRecords || []).forEach((rec: any) => {
       if (rec.work_shift !== "야간") return;
       if (leaveSet.has(String(rec.work_date))) return; // 휴가 날의 근무조정 제외 (3단계)
+      if (rec.adjust_type === "kyobun_fill") return; // 교번충당 심야는 교대 야간수당으로 지급 — 이중 금지
       if (rec.is_temp_dia) { s += Number(rec.temp_night_hours) || 0; return; }
       const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!dm) return;
@@ -32469,6 +32558,17 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     supportOtHours += otH;
     const sd2 = new Date(rec.work_date);
     supportList.push({ dateLabel: `${sd2.getMonth() + 1}/${sd2.getDate()}`, diaLabel: `다이아 ${sm[1]}`, ot: otH });
+  });
+  // 교번충당(교대 전용): 정규 밖 초과분만 시간외 — 지원근무 목록에 나란히 (미러: 홈 동일)
+  dutyRecords.forEach((rec: any) => {
+    if (rec.adjust_type !== "kyobun_fill") return;
+    if (leaveSet.has(String(rec.work_date))) return; // 휴가우선
+    const km = (rec.memo || "").match(/다이아\s*(\d+)/);
+    if (!km) return;
+    const otH = calcKyobunFillOvertimeHours(km[1], rec.work_shift, rec.work_date, diaTable, holidays);
+    supportOtHours += otH;
+    const kd = new Date(rec.work_date);
+    supportList.push({ dateLabel: `${kd.getMonth() + 1}/${kd.getDate()}`, diaLabel: `교번충당 · 다이아 ${km[1]}`, ot: otH });
   });
    const supportPay = Math.round(hourlyWage * supportOtHours * 1.5);
 
@@ -35424,6 +35524,10 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
 
   // 휴무충당 모드: "기록" 또는 "신청"
   const [holidayMode, setHolidayMode] = useState("기록");
+  // ── 교번충당 전용 상태: 그날 내 교대 근무 자동 판정 + 예상 시간외 미리보기 ──
+  const [kfMyShift, setKfMyShift] = useState("");
+  const [kfShiftMsg, setKfShiftMsg] = useState("");
+  const [kfPreview, setKfPreview] = useState<any>(null);
   // 지원근무 모드: "기록" 또는 "신청" (신청은 대상자만)
   const [supportMode, setSupportMode] = useState("기록");
   const [requests, setRequests] = useState([]); // 신청 목록
@@ -35550,12 +35654,13 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       Number(formDiaNum) >= diaMin &&
       Number(formDiaNum) <= diaMax);
 
- const tabs = ["대기충당", "지정근무", "지원근무", "휴무충당", "교번교체"];
+ const tabs = ["대기충당", "지정근무", "지원근무", "휴무충당", ...(user?.work_type === "교대" ? ["교번충당"] : []), "교번교체"];
   const tabTypeMap = {
     대기충당: "standby",
     지정근무: "designated",
     지원근무: "support",
     휴무충당: "holiday_fill",
+    교번충당: "kyobun_fill",
   };
 
   // 기록 불러오기 (work_adjust 테이블)
@@ -35606,6 +35711,34 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     fetchRequests();
   }, [activeTab, user, holidayMode]);
 
+  // ── 교번충당: 날짜 → 그날 교대 근무(주간/야간) 자동 판정 ──
+  useEffect(() => {
+    if (activeTab !== "교번충당") return;
+    setKfMyShift(""); setKfShiftMsg(""); setKfPreview(null);
+    if (!formDate || !user?.employee_number) return;
+    (async () => {
+      const { data: me } = await supabase.from("members").select("shift_team, work_type").eq("employee_number", String(user.employee_number)).maybeSingle();
+      if (!me || me.work_type !== "교대" || !me.shift_team) { setKfShiftMsg("교번충당은 교대 근무자 전용이에요."); return; }
+      const { data: sb } = await supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle();
+      const t = calcShiftWork(me.shift_team, new Date(formDate + "T00:00:00"), sb);
+      if (t === "주간" || t === "야간") { setKfMyShift(t); setFormShift(t); }
+      else setKfShiftMsg(t ? `${t}날에는 교번충당을 넣을 수 없어요 (근무일 전용).` : "교대 기준 정보를 찾지 못했어요.");
+    })();
+  }, [activeTab, formDate, user]);
+
+  // ── 교번충당: 다이아 입력 → 예상 시간외 미리보기 (저장 전 확인용) ──
+  useEffect(() => {
+    if (activeTab !== "교번충당") return;
+    setKfPreview(null);
+    if (!formDate || !formDiaNum || !kfMyShift) return;
+    (async () => {
+      const { data: rows } = await supabase.from("kyobun_dia").select("*").eq("dia_no", formDiaNum);
+      const hols = await fetchHolidays(new Date(formDate + "T00:00:00").getFullYear());
+      const ot = calcKyobunFillOvertimeHours(formDiaNum, kfMyShift, formDate, rows || [], hols || []);
+      setKfPreview({ ot });
+    })();
+  }, [activeTab, formDate, formDiaNum, kfMyShift]);
+
   // 저장 (work_adjust - 가계부형 기록)
   const handleSave = async () => {
     if (!user?.employee_number) {
@@ -35614,6 +35747,10 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     }
     if (!formDate) {
       showToast("날짜를 선택해주세요.");
+      return;
+    }
+    if (activeTab === "교번충당" && !kfMyShift) {
+      showToast(kfShiftMsg || "교번충당은 근무일(주간·야간)에만 입력할 수 있어요.", "error");
       return;
     }
     if (formFillType === "다이아" && !formIsTemp) {
@@ -35658,7 +35795,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     ]);
     const mdTxt = String(formDate).slice(5).replace("-", "/");
     if (adjDup.data && adjDup.data.length > 0) {
-      const ADJN: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무" };
+      const ADJN: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무", kyobun_fill: "교번충당" };
       showToast(`${mdTxt}에는 이미 「${ADJN[adjDup.data[0].adjust_type] || adjDup.data[0].adjust_type}」 기록이 있습니다. 같은 날에 두 개를 입력할 수 없어요.`, "error");
       return;
     }
@@ -36782,7 +36919,22 @@ appearance: "none",
                 />
               </div>
 
-              {/* 근무 종류 */}
+              {/* 근무 종류 — 교번충당은 자동 판정 (교대 회전으로 계산) */}
+              {activeTab === "교번충당" ? (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 7 }}>이 날 내 교대 근무</div>
+                  {kfMyShift ? (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#F8F9FF", border: "1px solid #E0E3FF", borderRadius: 12, padding: "12px 14px", fontSize: 13 }}>
+                      <span style={{ color: "#6B7280" }}>자동 판정</span>
+                      <b style={{ color: "#4F46E5" }}>{kfMyShift} · 정규 {kfMyShift === "야간" ? "18:00~익일 09:10" : "08:50~18:30"}</b>
+                    </div>
+                  ) : (
+                    <div style={{ background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 12, padding: "12px 14px", fontSize: 12, color: "#9A3412", lineHeight: 1.6 }}>
+                      {kfShiftMsg || "날짜를 선택하면 그날 교대 근무(주간/야간)를 자동으로 판정해요."}
+                    </div>
+                  )}
+                </div>
+              ) : (
               <div style={{ marginBottom: 14 }}>
                 <div
                   style={{
@@ -36823,8 +36975,10 @@ appearance: "none",
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* 충당 종류 */}
+              {/* 충당 종류 — 교번충당은 다이아 고정이라 숨김 */}
+              {activeTab !== "교번충당" && (
               <div style={{ marginBottom: 14 }}>
                 <div
                   style={{
@@ -36862,6 +37016,7 @@ appearance: "none",
                   ))}
                 </div>
               </div>
+              )}
 
               {/* 다이아 번호 */}
              {formFillType === "다이아" && (
@@ -36922,6 +37077,7 @@ appearance: "none",
                         }}
                       />
                     )}
+                    {activeTab !== "교번충당" && (
                     <button
                       onClick={() => {
                         if (formIsTemp) {
@@ -36948,12 +37104,21 @@ appearance: "none",
                     >
                       {formIsTemp ? "취소" : "임시"}
                     </button>
+                    )}
                   </div>
                   {!formIsTemp && formDiaNum && !diaNumValid && (
                     <div style={{ fontSize: 11, color: "#EF4444", marginTop: 5 }}>
                       ⚠️ {formShift}은(는) {diaRange}번 범위입니다.
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 교번충당: 예상 시간외 미리보기 */}
+              {activeTab === "교번충당" && kfPreview && (
+                <div style={{ marginBottom: 14, background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 12, padding: "11px 13px", fontSize: 12, color: "#166534", lineHeight: 1.7 }}>
+                  예상 시간외 <b>{Number(kfPreview.ot || 0).toFixed(2)}시간</b> × 1.5배
+                  {(!kfPreview.ot || kfPreview.ot === 0) && " — 정규 시간 안이거나, 이 다이아의 시간표가 아직 등록되지 않았어요."}
                 </div>
               )}
 
@@ -41263,7 +41428,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         supabase.from("deduction_rates").select("*").order("year", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         emp ? supabase.from("leave_history").select("*").eq("employee_number", emp).neq("status", "취소").gte("used_date", `${py}-${mm}-01`).lte("used_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
-        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
+        emp ? supabase.from("work_adjust").select("*").eq("employee_number", emp).in("adjust_type", ["standby", "designated", "support", "kyobun_fill"]).gte("work_date", `${py}-${mm}-01`).lte("work_date", `${py}-${mm}-${String(endDay).padStart(2, "0")}`) : Promise.resolve({ data: null }),
         emp ? supabase.from("kyobun_swap").select("*").eq("status", "수락").or(`a_employee_number.eq.${emp},b_employee_number.eq.${emp}`) : Promise.resolve({ data: [] }),
          supabase.from("members").select("employee_number, work_group, start_position, schedule_total, bojeon_gasan"),  
          supabase.from("allowance_settings").select("name, visible"),
