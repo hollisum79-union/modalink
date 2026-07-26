@@ -26832,6 +26832,8 @@ const getKyobunWork = (member: any, date: Date) => {
                       (selectedMember && user && String(selectedMember.employee_number) === String(user.employee_number)) &&
                       String(user?.work_group || "") === String(crew);
                     const recs = myCrew ? adjustRecords.filter((r: any) => r.work_date === key) : [];
+                    // 휴가가 모든 근무에 우선 — 휴가 있는 날은 근무조정 배지를 그리지 않는다 (데이터는 그대로)
+                    if (myCrew && leaveRecords.some((r: any) => r.used_date === key)) return null;
                     if (recs.length === 0) return null;
                     const LABEL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
                     const COLOR: any = {
@@ -27683,7 +27685,7 @@ const getKyobunWork = (member: any, date: Date) => {
                   ) : (
                     <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#9CA3AF", marginTop: 6 }}>휴</div>
                   )}
-                  {adjs.length > 0 && (
+                  {adjs.length > 0 && lvs.length === 0 && (
                     <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
                       {adjs.map((r, i) => {
                         const c = ADJC[r.adjust_type] || { bg: "#F3F4F6", fg: "#374151" };
@@ -28785,6 +28787,8 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                     const dstr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                     if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
                     const recs = adjustRecords.filter((r) => r.work_date === dstr);
+                    // 휴가가 모든 근무에 우선 — 휴가 있는 날은 근무조정 배지를 그리지 않는다 (데이터는 그대로)
+                    if (leaveRecords.some((r: any) => r.used_date === dstr)) return null;
                     if (recs.length === 0) return null;
                     const LABEL = {
                       standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원",
