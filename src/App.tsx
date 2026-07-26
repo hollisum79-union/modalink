@@ -26975,8 +26975,11 @@ const getKyobunWork = (member: any, date: Date) => {
     //   근무조정(대기충당·지정근무·지원근무·휴무충당)이 있으면 그 다이아가 실제 근무.
     //   없으면 본인 교번·통상 다이아. 대기·비번·휴무는 행로가 없으므로 제외.
     //   ※ 안내문 · 운행시각표 버튼 · 아래 접이식이 모두 이 값을 본다 (셋이 어긋나지 않게).
-    const popAdj = isOtherPerson ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
+    // 휴가가 모든 근무에 우선 — 휴가 있는 날은 근무조정 안내·다이아를 팝업에서 그리지 않는다 (데이터는 그대로)
+    const popLeave = isOtherPerson ? false : (leaveRecords || []).some((r: any) => r.used_date === dateStr);
+    const popAdj = (isOtherPerson || popLeave) ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
     const popWork: any = (() => {
+      if (popLeave) return null; // 휴가 날은 "근무한 다이아"가 없다
       if (popAdj) {
         const m = popAdj.is_temp_dia ? null : String(popAdj.memo || "").match(/다이아\s*(\d+)/);
         return { dia: m ? m[1] : null, shift: popAdj.work_shift || "주간", temp: popAdj.is_temp_dia ? popAdj : null };
