@@ -37238,6 +37238,8 @@ appearance: "none",
                   <div
                     key={r.id}
                     style={{
+                      // 휴가로 제외된 기록은 흐리게 — "기록은 있지만 계산엔 안 친다"를 한눈에
+                      opacity: (r.adjust_type !== "holiday_fill" && adjLeaveSet.has(String(r.work_date))) ? 0.45 : 1,
                       padding: "12px 0",
                       borderBottom: "1px solid #F3F4F6",
                       display: "flex",
