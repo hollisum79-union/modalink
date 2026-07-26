@@ -41356,25 +41356,32 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     })();
     const now = new Date();
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    supabase
-      .from("monthly_pay")
-      .upsert(
-        { employee_number: user.employee_number, year_month: ym, net_pay: result.netPay, gross_pay: result.totalGross },
-        { onConflict: "employee_number,year_month" }
-      )
-      .then(() => {
+    // ── RLS 3탄: monthly_pay는 서버(my-pay.js) 경유 — anon 직접 접근 잠금 대비 ──
+    //    기기 토큰(ml_device)이 신분증. 토큰이 없거나 실패해도 전월 대비만 빈칸이 될 뿐 홈은 정상.
+    (async () => {
+      try {
         const lp = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const pym = `${lp.getFullYear()}-${String(lp.getMonth() + 1).padStart(2, "0")}`;
-        supabase
-          .from("monthly_pay")
-          .select("net_pay, gross_pay")
-          .eq("employee_number", user.employee_number)
-          .eq("year_month", pym)
-          .maybeSingle()
-          .then(({ data }) => {
-            setPayCompare({ curr: result.totalGross, prev: data ? data.gross_pay : null });
-          });
-      });
+        const dtok = localStorage.getItem("ml_device") || "";
+        if (!dtok) { setPayCompare({ curr: result.totalGross, prev: null }); return; }
+        const res = await fetch("/.netlify/functions/my-pay", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "save_and_prev",
+            token: dtok,
+            year_month: ym,
+            prev_year_month: pym,
+            net_pay: result.netPay,
+            gross_pay: result.totalGross,
+          }),
+        });
+        const j = await res.json();
+        setPayCompare({ curr: result.totalGross, prev: j && j.prev ? j.prev.gross_pay : null });
+      } catch (e) {
+        setPayCompare({ curr: result.totalGross, prev: null });
+      }
+    })();
   }, [homeSalaryData, homeDia, homeHolidays, homeRotation, user]);
   useEffect(() => {
     if (screen !== "home") return;
