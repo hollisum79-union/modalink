@@ -627,6 +627,8 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
       const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      // 휴가가 모든 근무에 우선한다 — 휴가 쓴 날은 근무를 안 한 것이므로 야간에서 뺀다
+      if (leaveSet.has(ds)) continue;
       if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) kyobunNightHours += 4;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
@@ -32200,6 +32202,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const isKyobun =
     memberInfo?.work_type === "교번" &&
     (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
+  // 휴가가 모든 근무에 우선 — 급여 산정에서 그날은 뺀다 (홈 computeNetPay의 leaveSet과 같은 재료)
+  const leaveSet: Set<string> = new Set((lastMonthLeaves || []).map((r: any) => String(r.used_date)));
   const kyobunNightHours = (() => {
     if (!isKyobun || rotationData.length === 0 || diaTable.length === 0) return 0;
     const n = new Date();
@@ -32218,6 +32222,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      // 휴가가 모든 근무에 우선한다 — 휴가 쓴 날은 근무를 안 한 것이므로 야간에서 뺀다
+      if (leaveSet.has(ds)) continue;
       if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) sum += 4;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
