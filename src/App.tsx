@@ -572,7 +572,11 @@ function computeNetPay(input: any) {
     memberInfo = null, rotationData = [], dutyRecords = [],
     swapData = [], allMembers = [], allowSettings = [], hiddenItems = [],
     startHistory = [],
+    // 휴가 쓴 날짜 목록 ("YYYY-MM-DD"). 휴가는 모든 근무에 우선하므로 그날은 급여 산정에서 뺀다.
+    // 1단계에서는 받기만 하고 계산에는 아직 쓰지 않는다 (금액이 바뀌면 안 됨).
+    leaveDates = [],
   } = input;
+  const leaveSet: Set<string> = new Set((leaveDates || []).map((x: any) => String(x)));
 
     const row = salaryTable.find((r: any) => Number(r.hobong) === Number(hobong));
   const basicSalary = row ? (row[`grade_${Number(grade)}`] ?? null) : null;
@@ -623,6 +627,8 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
       const w = calcKyobunWork(memberInfo, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      // 휴가가 모든 근무에 우선한다 — 휴가 쓴 날은 근무를 안 한 것이므로 야간에서 뺀다
+      if (leaveSet.has(ds)) continue;
       if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) kyobunNightHours += 4;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
@@ -15090,6 +15096,9 @@ function OperatorHome({ opName }: { opName: string }) {
   const [opHolidays, setOpHolidays] = useState<string[]>([]);
   // 휴게 11시간 검사용 — 다이아별 출퇴근 시각표 (전체, 읽기 전용)
   const [opDiaTable, setOpDiaTable] = useState<any[]>([]);
+  // 주 52시간 계산용 — 그 주(월~일)의 근무조정·휴가
+  const [opWeekAdjust, setOpWeekAdjust] = useState<any[]>([]);
+  const [opWeekLeaves, setOpWeekLeaves] = useState<any[]>([]);
   useEffect(() => {
     supabase
       .from("kyobun_dia")
@@ -15171,6 +15180,12 @@ function OperatorHome({ opName }: { opName: string }) {
   // DB에는 퇴근시각이 08:00처럼 적히므로, 퇴근 < 출근이면 다음날로 본다(+1440분).
   // 검사는 바로 전날 / 바로 다음날만 본다. 비번·휴무는 근무가 없으니 통과.
   const REST_MIN = 11 * 60;
+  // ── 주 52시간 계산 기준 ──
+  //   미충당 대기: 주간 8시간 · 야간 10시간 30분 (충당되면 그 다이아 인정시간으로 대체)
+  const STANDBY_DAY_H = 8;
+  const STANDBY_NIGHT_H = 10.5;
+  const WEEK_LIMIT_H = 52;
+  const MONTH_LIMIT_H = 174;
   const hhmmToMin = (s: any): number | null => {
     const m = String(s == null ? "" : s).match(/^(\d{1,2}):(\d{2})/);
     if (!m) return null;
@@ -15248,6 +15263,68 @@ function OperatorHome({ opName }: { opName: string }) {
     const s = m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
     return min < 0 ? `근무 겹침` : s;
   };
+
+  // ══ 주 52시간 · 월 174시간 ═══════════════════════════════════════
+  // 출근일 기준으로 그 근무 전체를 귀속한다 (야간은 다음날 아침 퇴근이어도 출근일에 통째로).
+  // 시간은 다이아별 인정시간(work_hours) — 체류시간에는 불인정분이 섞여 있으므로.
+  const ymdOf = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const weekStartOf = (d: Date) => {
+    const day = d.getDay(); // 0=일요일
+    const mon = new Date(d);
+    mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    mon.setHours(0, 0, 0, 0);
+    return mon;
+  };
+  // 그 사람의 그 날짜 인정근무시간 (휴가=0, 근무조정 우선, 미충당 대기=주간 8h·야간 10.5h)
+  const dayHoursOf = (member: any, d: Date) => {
+    const emp = String(member?.employee_number || "");
+    const ds = ymdOf(d);
+    if ((opWeekLeaves || []).some((lv: any) => String(lv.employee_number) === emp && lv.used_date === ds)) return 0;
+    const adj = (opWeekAdjust || []).find((r: any) => String(r.employee_number) === emp && r.work_date === ds);
+    if (adj) {
+      if (adj.is_temp_dia) return Number(adj.temp_work_hours) || 0;
+      const m = String(adj.memo || "").match(/다이아\s*(\d+)/);
+      if (m) {
+        const t = diaTimesOf(m[1], dayTypeOn(String(adj.work_shift || "주간"), d));
+        return t ? t.work : 0;
+      }
+      return 0;
+    }
+    const w: any = calcKyobunWork(member, d, opRotation, opSwaps, opMembers, opStartHist);
+    if (!w) return 0;
+    if (isStandbyDia(w.dia)) {
+      // 충당됐다면 위에서 근무조정으로 잡힌다 → 여기 오면 미충당 대기
+      return shiftOf(String(w.dia)) === "야간" ? STANDBY_NIGHT_H : STANDBY_DAY_H;
+    }
+    if (w.type !== "주간" && w.type !== "야간") return 0;
+    const t = diaTimesOf(w.dia, dayTypeOn(w.type, d));
+    return t ? t.work : 0;
+  };
+  const sumRange = (member: any, from: Date, days: number) => {
+    let sum = 0;
+    for (let i = 0; i < days; i++) {
+      const d = new Date(from);
+      d.setDate(from.getDate() + i);
+      sum += dayHoursOf(member, d);
+    }
+    return sum;
+  };
+  // 이 사람을 이 다이아에 배정했을 때의 주·월 합계 (그날 원래 시간은 빼고 충당 다이아 시간으로 교체)
+  const loadAfterOf = (member: any, d: Date, fillDiaNo: any) => {
+    if (!member || !fillDiaNo) return null;
+    const ft = diaTimesOf(fillDiaNo, dayTypeOn(shiftOf(String(fillDiaNo)), d));
+    if (!ft) return null;
+    const todayH = dayHoursOf(member, d); // 대기라면 미충당 기준으로 잡혀 있다
+    const swap = ft.work - todayH;
+    const wk = sumRange(member, weekStartOf(d), 7) + swap;
+    const mStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    const mDays = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const mo = sumRange(member, mStart, mDays) + swap;
+    return { week: wk, month: mo, weekOver: wk > WEEK_LIMIT_H, monthOver: mo > MONTH_LIMIT_H };
+  };
+  const hLabel = (h: number) => `${(Math.round(h * 10) / 10).toFixed(1)}h`;
+  // ══════════════════════════════════════════════════════════════
   // ══════════════════════════════════════════════════════════════
 
   // 빈 자리(결원)는 아래에서 휴가 데이터(leave_history)로 계산 → const empty
@@ -15275,6 +15352,32 @@ function OperatorHome({ opName }: { opName: string }) {
 
   // 대상 날짜 문자열 (로컬)
   const targetStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+
+  // 주 52시간 · 월 174시간 계산에 쓸 근무조정·휴가 (그 달 전체 + 주가 달을 걸칠 때를 위한 앞뒤 여유)
+  useEffect(() => {
+    const from = new Date(target.getFullYear(), target.getMonth(), 1);
+    from.setDate(from.getDate() - 7);
+    const to = new Date(target.getFullYear(), target.getMonth() + 1, 0);
+    to.setDate(to.getDate() + 7);
+    const f = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, "0")}-${String(from.getDate()).padStart(2, "0")}`;
+    const t = `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, "0")}-${String(to.getDate()).padStart(2, "0")}`;
+    Promise.all([
+      supabase
+        .from("work_adjust")
+        .select("employee_number, work_date, work_shift, memo, is_temp_dia, temp_work_hours, adjust_type")
+        .gte("work_date", f)
+        .lte("work_date", t),
+      supabase
+        .from("leave_history")
+        .select("employee_number, used_date")
+        .neq("status", "취소")
+        .gte("used_date", f)
+        .lte("used_date", t),
+    ]).then(([a, b]: any) => {
+      setOpWeekAdjust(a.data || []);
+      setOpWeekLeaves(b.data || []);
+    });
+  }, [targetStr]);
 
   // ── 전날 야간 충당 기록 → 오늘은 충당비번 (야간 뛰면 다음날 근무 불가) ──
   //    대기충당은 원래 야간 대기 근무자라 비번이 근무표에 이미 있음 → 제외
@@ -16259,15 +16362,16 @@ function OperatorHome({ opName }: { opName: string }) {
     const standbyCands = standby
       .filter((x) => x.usable && shiftOf(x.slot) === s && !usedNames.includes(x.name))
       .map((x: any) => {
-        // 이 사람을 이 다이아에 넣었을 때 앞뒤 휴게가 11시간 이상인지
+        // 이 사람을 이 다이아에 넣었을 때 앞뒤 휴게 11시간 / 주 52시간 / 월 174시간
         const mem = opMembers.find((m: any) => String(m.employee_number) === String(x.emp)) || null;
         const rest = mem ? restCheckOf(mem, target, fillDia) : null;
-        return { ...x, rest };
+        const load = mem ? loadAfterOf(mem, target, fillDia) : null;
+        return { ...x, rest, load };
       })
       .sort((a: any, b: any) => {
-        // 휴게 기준에 걸리는 사람은 무조건 아래로
-        const ba = a.rest && !a.rest.ok ? 1 : 0;
-        const bb = b.rest && !b.rest.ok ? 1 : 0;
+        // 근로시간 기준에 걸리는 사람은 무조건 아래로
+        const ba = ((a.rest && !a.rest.unknown && !a.rest.ok) || (a.load && (a.load.weekOver || a.load.monthOver))) ? 1 : 0;
+        const bb = ((b.rest && !b.rest.unknown && !b.rest.ok) || (b.load && (b.load.weekOver || b.load.monthOver))) ? 1 : 0;
         if (ba !== bb) return ba - bb;
         // 빈 자리와 같은 소속 우선, 그다음 높은 번호부터
         const ra = a.region === slot.region ? 0 : 1;
@@ -16555,7 +16659,9 @@ function OperatorHome({ opName }: { opName: string }) {
                   const _emp = empOfId.get(d.member_id);
                   const _mem = _emp ? opMembers.find((m: any) => String(m.employee_number) === String(_emp)) : null;
                   const rest = _mem ? restCheckOf(_mem, target, fillDia, "next") : null;
-                  const bad = !!(rest && !rest.unknown && !rest.ok);
+                  const load = _mem ? loadAfterOf(_mem, target, fillDia) : null;
+                  const restBad = !!(rest && !rest.unknown && !rest.ok);
+                  const bad = restBad || !!(load && (load.weekOver || load.monthOver));
                   return (
                   <div key={d.id} style={{ ...row, borderBottom: i === total - 1 ? 0 : row.borderBottom }}>
                     <div style={{ flex: 1 }}>
@@ -16573,8 +16679,18 @@ function OperatorHome({ opName }: { opName: string }) {
                           <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#F3F4F6", color: "#9CA3AF" }}>다이아 시간 없음</span>
                         )}
                         {rest && !rest.unknown && rest.worst != null && (
-                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: bad ? "#FEF2F2" : "#F3F4F6", color: bad ? "#B91C1C" : "#6B7280" }}>
-                            {bad ? "⚠️ " : ""}휴게 {restLabel(rest.worst)}
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: restBad ? "#FEF2F2" : "#F3F4F6", color: restBad ? "#B91C1C" : "#6B7280" }}>
+                            {restBad ? "⚠️ " : ""}휴게 {restLabel(rest.worst)}
+                          </span>
+                        )}
+                        {load && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: load.weekOver ? "#FEF2F2" : "#F3F4F6", color: load.weekOver ? "#B91C1C" : "#6B7280" }}>
+                            {load.weekOver ? "⚠️ " : ""}주 {hLabel(load.week)}
+                          </span>
+                        )}
+                        {load && load.monthOver && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#FEF2F2", color: "#B91C1C" }}>
+                            ⚠️ 월 {hLabel(load.month)}
                           </span>
                         )}
                       </div>
@@ -16582,11 +16698,14 @@ function OperatorHome({ opName }: { opName: string }) {
                     <button
                       onClick={() => {
                         if (bad) {
-                          const g = rest!.worst as number;
-                          const txt = g < 0
-                            ? `${d.member_name}님은 다음날 근무와 시간이 겹칩니다.`
-                            : `${d.member_name}님을 ${fillDia}번에 배정하면 퇴근 후 다음 근무까지 ${restLabel(g)}입니다.`;
-                          if (!window.confirm(`${txt}\n11시간 이상 보장되어야 합니다.\n\n그래도 배정할까요?`)) return;
+                          const lines: string[] = [];
+                          if (restBad) {
+                            const g = rest!.worst as number;
+                            lines.push(g < 0 ? "· 다음날 근무와 시간이 겹칩니다" : `· 퇴근 후 다음 근무까지 ${restLabel(g)} (11시간 이상 필요)`);
+                          }
+                          if (load && load.weekOver) lines.push(`· 주 근무 ${hLabel(load.week)} (52시간 초과)`);
+                          if (load && load.monthOver) lines.push(`· 월 근무 ${hLabel(load.month)} (174시간 초과)`);
+                          if (!window.confirm(`${d.member_name}님을 ${fillDia}번에 배정하면\n\n${lines.join("\n")}\n\n그래도 배정할까요?`)) return;
                         }
                         pick(d.member_name, "지정근무", d.member_id ? String(d.member_id) : undefined);
                       }}
@@ -16618,13 +16737,15 @@ function OperatorHome({ opName }: { opName: string }) {
             </div>
           ) : (
             standbyCands.map((c: any, i: number) => {
-              const bad = !!(c.rest && !c.rest.unknown && !c.rest.ok);
-              const prevBad = i > 0 && !!(standbyCands[i - 1] as any).rest && !(standbyCands[i - 1] as any).rest.unknown && !(standbyCands[i - 1] as any).rest.ok;
+              const restBad = !!(c.rest && !c.rest.unknown && !c.rest.ok);
+              const bad = restBad || !!(c.load && (c.load.weekOver || c.load.monthOver));
+              const p: any = standbyCands[i - 1];
+              const prevBad = i > 0 && (!!(p.rest && !p.rest.unknown && !p.rest.ok) || !!(p.load && (p.load.weekOver || p.load.monthOver)));
               return (
               <React.Fragment key={c.slot}>
                 {bad && !prevBad && (
                   <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#FFFBEB", borderTop: "2px solid #FDE68A", borderBottom: "1px solid #FDE68A", fontSize: 11, fontWeight: 800, color: "#B45309" }}>
-                    ⚠️ 아래는 휴게 11시간에 걸립니다
+                    ⚠️ 아래는 근로시간 기준에 걸립니다
                   </div>
                 )}
                 <div style={{ ...row, borderBottom: i === standbyCands.length - 1 ? 0 : row.borderBottom }}>
@@ -16643,8 +16764,18 @@ function OperatorHome({ opName }: { opName: string }) {
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#F3F4F6", color: "#9CA3AF" }}>다이아 시간 없음</span>
                     )}
                     {c.rest && !c.rest.unknown && c.rest.worst != null && (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: bad ? "#FEF2F2" : "#F3F4F6", color: bad ? "#B91C1C" : "#6B7280" }}>
-                        {bad ? "⚠️ " : ""}휴게 {restLabel(c.rest.worst)}
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: restBad ? "#FEF2F2" : "#F3F4F6", color: restBad ? "#B91C1C" : "#6B7280" }}>
+                        {restBad ? "⚠️ " : ""}휴게 {restLabel(c.rest.worst)}
+                      </span>
+                    )}
+                    {c.load && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: c.load.weekOver ? "#FEF2F2" : "#F3F4F6", color: c.load.weekOver ? "#B91C1C" : "#6B7280" }}>
+                        {c.load.weekOver ? "⚠️ " : ""}주 {hLabel(c.load.week)}
+                      </span>
+                    )}
+                    {c.load && c.load.monthOver && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#FEF2F2", color: "#B91C1C" }}>
+                        ⚠️ 월 {hLabel(c.load.month)}
                       </span>
                     )}
                   </div>
@@ -16652,11 +16783,14 @@ function OperatorHome({ opName }: { opName: string }) {
                 <button
                   onClick={() => {
                     if (bad) {
-                      const g = c.rest.worst;
-                      const txt = g < 0
-                        ? `${c.name}님은 앞뒤 근무와 시간이 겹칩니다.`
-                        : `${c.name}님을 ${fillDia}번에 배정하면 앞뒤 휴게가 ${restLabel(g)}입니다.`;
-                      if (!window.confirm(`${txt}\n11시간 이상 보장되어야 합니다.\n\n그래도 배정할까요?`)) return;
+                      const lines: string[] = [];
+                      if (restBad) {
+                        const g = c.rest.worst;
+                        lines.push(g < 0 ? "· 앞뒤 근무와 시간이 겹칩니다" : `· 앞뒤 휴게 ${restLabel(g)} (11시간 이상 필요)`);
+                      }
+                      if (c.load && c.load.weekOver) lines.push(`· 주 근무 ${hLabel(c.load.week)} (52시간 초과)`);
+                      if (c.load && c.load.monthOver) lines.push(`· 월 근무 ${hLabel(c.load.month)} (174시간 초과)`);
+                      if (!window.confirm(`${c.name}님을 ${fillDia}번에 배정하면\n\n${lines.join("\n")}\n\n그래도 배정할까요?`)) return;
                     }
                     pick(c.name, "대기충당", c.emp);
                   }}
@@ -18017,6 +18151,77 @@ const APPLY_KINDS: Record<string, string> = {
   support: "지원근무",
   no_holiday_fill: "휴무충당 불가",
 };
+
+// ── 근무조정 저장 전 검사 (종류마다 넣을 수 있는 날이 다르다) ──
+//   대기충당 → 그날이 "대기" 근무인 날만 (교번)
+//   휴무충당 → 휴무일
+//   지정근무 → 강제휴무 예정일 (교번, 미영업 다이아라 안 나오는 날)
+//   지원근무 → 휴무일 (교대 근무자 전용)
+//   ※ 주간·야간 실근무일과 비번에는 어떤 것도 넣을 수 없다.
+//   문제가 있으면 사유 문자열을, 없으면 빈 문자열을 돌려준다.
+async function checkAdjustDate(empNo: any, workDate: string, adjustType: string): Promise<string> {
+  if (!workDate || !empNo) return "";
+  const KO: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무" };
+  const label = KO[adjustType] || adjustType;
+  const { data: m } = await supabase
+    .from("members")
+    .select("id, name, employee_number, work_group, work_type, start_position, schedule_total, shift_team")
+    .eq("employee_number", String(empNo))
+    .maybeSingle();
+  if (!m) return ""; // 사람을 못 찾으면 막지 않음
+  const d = new Date(workDate + "T00:00:00");
+  const md = String(workDate).slice(5).replace("-", "/");
+
+  if (m.work_type === "교번" && m.start_position != null) {
+    if (adjustType === "support") return `지원근무는 교대 근무자만 신청할 수 있어요.`;
+    const [rotRes, shRes, swRes, allRes, hols] = await Promise.all([
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_start_history").select("*"),
+      supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+      supabase.from("members").select("id, employee_number, work_group, start_position, schedule_total"),
+      fetchHolidays(d.getFullYear()),
+    ]);
+    const w: any = calcKyobunWork(m, d, rotRes.data || [], swRes.data || [], allRes.data || [], shRes.data || []);
+    if (!w) return "";
+    const isStandby = isStandbyDia(w.dia);
+    if (isStandby) {
+      if (adjustType === "standby") return "";
+      return `${md}은 대기 근무일이에요. 대기 근무일에는 「대기충당」만 넣을 수 있어요.`;
+    }
+    if (w.type === "비번") return `${md}은 비번이에요 (야간 다음날). 비번에는 근무를 넣을 수 없어요.`;
+    if (w.type === "휴무") {
+      // 지정근무는 "강제휴무가 발생한 만큼" 휴무일에 이행한다 (강제휴무 당일도 포함)
+      if (adjustType === "holiday_fill" || adjustType === "designated") return "";
+      return `${md}은 휴무일이에요. 휴무일에는 「휴무충당」이나 「지정근무」만 넣을 수 있어요.`;
+    }
+    if (w.type === "주간" || w.type === "야간") {
+      // 강제휴무 예정일이면 지정근무 가능 (원래 근무지만 미영업 다이아라 안 나오는 날)
+      const isHol = (dt: Date) => {
+        const g = dt.getDay();
+        if (g === 0 || g === 6) return true;
+        const ss = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+        return Array.isArray(hols) && hols.includes(ss);
+      };
+      const ds = String(w.dia).replace(/\s+/g, "");
+      const n = /^\d+$/.test(ds) ? Number(ds) : -1;
+      let forcedRest = false;
+      if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(d)) forcedRest = true;
+      if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(d)) {
+        const tm = new Date(d);
+        tm.setDate(tm.getDate() + 1);
+        if (isHol(tm)) forcedRest = true;
+      }
+      if (!forcedRest) return `${md}은 근무일이에요 (${w.type} ${w.dia}). 근무일에는 「${label}」을 넣을 수 없어요.`;
+      if (adjustType === "designated") return "";
+      return `${md}은 강제휴무 예정일이에요. 이 날에는 「지정근무」만 넣을 수 있어요.`;
+    }
+    return "";
+  }
+
+  // 교대·통상은 아직 규칙을 확정하지 않았다 → 잘못 막는 것보다 통과가 안전.
+  //   (교대: 휴무일에 휴무충당·지원근무 / 통상: 미정 — 확정되면 여기에 추가)
+  return "";
+}
 
 // ── 신청 날짜 검사 (지원근무·지정근무·신청함 대리 입력 공용) ──
 //   규칙 ① 지난 날짜는 안 됨 (오늘 포함 이후만)
@@ -25621,6 +25826,8 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refr
   const [selectedMember, setSelectedMember] = React.useState<any>(null);
   React.useEffect(() => {
     if (!user?.employee_number) return;
+    // 대공원·도봉 소속은 직원검색으로 다른 사람 근무표를 볼 수 있다 → selectedMember를 덮어쓰지 않는다.
+    // (교대 근무자도 이 소속이라 검색 기능을 쓴다. 근무형태로 가르면 검색이 곧바로 본인으로 되돌아감)
     if (user.work_group === "대공원" || user.work_group === "도봉") return;
     setSelectedMember(user);
   }, [user]);
@@ -26615,7 +26822,12 @@ const getKyobunWork = (member: any, date: Date) => {
                     </div>
                   )}
                   {(() => {
-                    const recs = adjustRecords.filter((r: any) => r.work_date === key);
+                    // 교대는 "조"를 바꿔서 남의 근무표를 본다 (직원검색이 selectedMember를 안 건드림).
+                    // 그래서 본인 계정 + 본인 조일 때만 내 근무조정을 그린다.
+                    const myCrew =
+                      (selectedMember && user && String(selectedMember.employee_number) === String(user.employee_number)) &&
+                      String(user?.work_group || "") === String(crew);
+                    const recs = myCrew ? adjustRecords.filter((r: any) => r.work_date === key) : [];
                     if (recs.length === 0) return null;
                     const LABEL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
                     const COLOR: any = {
@@ -26651,7 +26863,11 @@ const getKyobunWork = (member: any, date: Date) => {
                     );
                   })()}
                   {(() => {
-                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
+                    // 근무조정과 같은 이유 — 본인 계정 + 본인 조일 때만
+                    const myCrew =
+                      (selectedMember && user && String(selectedMember.employee_number) === String(user.employee_number)) &&
+                      String(user?.work_group || "") === String(crew);
+                    if (!myCrew) return null;
                     const lv = leaveRecords.filter((r: any) => r.used_date === key);
                     if (lv.length === 0) return null;
                     const LV: any = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체", study: "학습", longService: "장기재직" };
@@ -26731,6 +26947,12 @@ const getKyobunWork = (member: any, date: Date) => {
     const isKyobun = activeTab === "교번";
     const isOtherKyobun = isKyobun && selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number);
     const isTongsang = activeTab === "통상";
+    // 근무조정은 "남의 근무표를 보는 중"이면 무조건 감춘다.
+    //   · 교번·통상 → selectedMember가 나와 다른가
+    //   · 교대     → 직원검색이 selectedMember를 안 건드리고 "조"만 바꾸므로 조로 판단
+    const isOtherPerson =
+      !!(selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) ||
+      (!isKyobun && !isTongsang && String(user?.work_group || "") !== String(selectedCrew || ""));
     const tWork = isTongsang ? getTongsangWork(user, dateObj) : null;
     const tDayType = tWork ? getDiaDayType(tWork.type, dateObj) : null;
     const tDia = tWork ? getDiaInfo(tWork.dia, tDayType) : null;
@@ -26747,7 +26969,7 @@ const getKyobunWork = (member: any, date: Date) => {
     //   근무조정(대기충당·지정근무·지원근무·휴무충당)이 있으면 그 다이아가 실제 근무.
     //   없으면 본인 교번·통상 다이아. 대기·비번·휴무는 행로가 없으므로 제외.
     //   ※ 안내문 · 운행시각표 버튼 · 아래 접이식이 모두 이 값을 본다 (셋이 어긋나지 않게).
-    const popAdj = isOtherKyobun ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
+    const popAdj = isOtherPerson ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
     const popWork: any = (() => {
       if (popAdj) {
         const m = popAdj.is_temp_dia ? null : String(popAdj.memo || "").match(/다이아\s*(\d+)/);
@@ -32068,6 +32290,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     const isKyobun =
     memberInfo?.work_type === "교번" &&
     (memberInfo?.work_group === "대공원" || memberInfo?.work_group === "도봉");
+  // 휴가가 모든 근무에 우선 — 급여 산정에서 그날은 뺀다 (홈 computeNetPay의 leaveSet과 같은 재료)
+  const leaveSet: Set<string> = new Set((lastMonthLeaves || []).map((r: any) => String(r.used_date)));
   const kyobunNightHours = (() => {
     if (!isKyobun || rotationData.length === 0 || diaTable.length === 0) return 0;
     const n = new Date();
@@ -32086,6 +32310,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      // 휴가가 모든 근무에 우선한다 — 휴가 쓴 날은 근무를 안 한 것이므로 야간에서 뺀다
+      if (leaveSet.has(ds)) continue;
       if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) sum += 4;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
@@ -35414,6 +35640,12 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     }
     if (abDup2.data && abDup2.data.length > 0) {
       showToast(`${mdTxt}에는 운용기관사가 입력한 「${abDup2.data[0].reason}」이 있어요. 근무를 입력할 수 없습니다.`, "error");
+      return;
+    }
+    // 그날 근무 상태 검사 — 대기충당은 대기 근무일에만, 근무일·비번에는 아무것도 넣을 수 없다
+    const badDay = await checkAdjustDate(user.employee_number, formDate, tabTypeMap[activeTab]);
+    if (badDay) {
+      showToast(badDay, "error");
       return;
     }
 
@@ -40891,6 +41123,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       allMembers: d.allMembers || [],
       allowSettings: d.allowSettings || [],
       hiddenItems: s.hidden_items || [],
+      leaveDates: d.leaveDates || [],
     });
     if (!result) return;
     (async () => {
@@ -41028,6 +41261,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         allMembers: allMemRes.data || [],
         allowSettings: allowRes.data || [],
         startHistory: shRes.data || [],
+        // 휴가는 모든 근무에 우선 — 그날은 급여 산정에서 뺀다 (정산 대상 월 기준)
+        leaveDates: (lvRes.data || []).map((r: any) => String(r.used_date)),
       });
     };
     loadHomeWork();
@@ -42884,6 +43119,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   allMembers: d.allMembers || [],
                   allowSettings: d.allowSettings || [],
                   hiddenItems: s.hidden_items || [],
+                  leaveDates: d.leaveDates || [],
                 });
                 if (!result) return "—";
                 return result.totalGross.toLocaleString("ko-KR");
