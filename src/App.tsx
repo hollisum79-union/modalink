@@ -15086,6 +15086,16 @@ function OperatorHome({ opName }: { opName: string }) {
   const [opRotation, setOpRotation] = useState<any[]>([]);
   const [opStartHist, setOpStartHist] = useState<any[]>([]);
   const [opSwaps, setOpSwaps] = useState<any[]>([]);
+  // 공휴일 (근무표와 같은 소스 · read-holidays) — 휴게 검사 헬퍼보다 먼저 선언되어야 한다
+  const [opHolidays, setOpHolidays] = useState<string[]>([]);
+  // 휴게 11시간 검사용 — 다이아별 출퇴근 시각표 (전체, 읽기 전용)
+  const [opDiaTable, setOpDiaTable] = useState<any[]>([]);
+  useEffect(() => {
+    supabase
+      .from("kyobun_dia")
+      .select("dia_no, day_type, start_time, end_time, work_hours")
+      .then(({ data }: any) => setOpDiaTable(data || []));
+  }, []);
   const [opLoaded, setOpLoaded] = useState(false);
   // 결원 펼침 (뱃지 눌렀을 때 어느 시간대의 결원 목록을 보여줄지)
   const [openVacant, setOpenVacant] = useState<string | null>(null);
@@ -15155,6 +15165,90 @@ function OperatorHome({ opName }: { opName: string }) {
     const n = Number(String(no).replace(/[^0-9]/g, ""));
     return n >= 60 ? "야간" : "주간";
   };
+
+  // ══ 휴게 11시간 검사 ══════════════════════════════════════════
+  // 야간 근무는 "그날 저녁 출근 → 다음날 아침 퇴근"이 한 번의 근무다.
+  // DB에는 퇴근시각이 08:00처럼 적히므로, 퇴근 < 출근이면 다음날로 본다(+1440분).
+  // 검사는 바로 전날 / 바로 다음날만 본다. 비번·휴무는 근무가 없으니 통과.
+  const REST_MIN = 11 * 60;
+  const hhmmToMin = (s: any): number | null => {
+    const m = String(s == null ? "" : s).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+    return isNaN(h) || isNaN(mi) ? null : h * 60 + mi;
+  };
+  const isHolDate = (d: Date) => {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return true;
+    const y = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return (opHolidays || []).includes(`${y}-${mm}-${dd}`);
+  };
+  // 그 날짜 기준 다이아 구분 (주간=평일/휴일, 야간=평평/평휴/휴평/휴휴)
+  const dayTypeOn = (shift: string, d: Date) => {
+    const tomo = new Date(d);
+    tomo.setDate(tomo.getDate() + 1);
+    const th = isHolDate(d), mh = isHolDate(tomo);
+    if (shift === "주간") return th ? "휴일" : "평일";
+    if (!th && !mh) return "평평";
+    if (!th && mh) return "평휴";
+    if (th && mh) return "휴휴";
+    return "휴평";
+  };
+  // 다이아의 출근·퇴근 시각(분). 퇴근이 출근보다 이르면 다음날로 넘긴다.
+  const diaTimesOf = (diaNo: any, dayType: string) => {
+    if (diaNo == null || !dayType) return null;
+    const rows = (opDiaTable || []).filter((r: any) => Number(r.dia_no) === Number(diaNo));
+    const row = rows.find((r: any) => r.day_type === dayType) || rows[0];
+    if (!row) return null;
+    const s = hhmmToMin(row.start_time);
+    const e0 = hhmmToMin(row.end_time);
+    if (s == null || e0 == null) return null;
+    return { start: s, end: e0 < s ? e0 + 1440 : e0, work: Number(row.work_hours) || 0 };
+  };
+  // 그 사람의 그 날짜 실제 근무 다이아 시각 (비번·휴무·대기는 null = 근무 없음)
+  const workTimesOn = (member: any, d: Date) => {
+    const w: any = calcKyobunWork(member, d, opRotation, opSwaps, opMembers, opStartHist);
+    if (!w) return null;
+    if (isStandbyDia(w.dia)) return null;
+    if (w.type !== "주간" && w.type !== "야간") return null;
+    return diaTimesOf(w.dia, dayTypeOn(w.type, d));
+  };
+  // 충당했을 때 앞뒤 휴게시간(분). null = 확인 불가(시간 정보 없음) 또는 근무 없음(=제한 없음)
+  const restGapOf = (member: any, d: Date, fillDiaNo: any) => {
+    if (!member || !fillDiaNo) return null;
+    const ft = diaTimesOf(fillDiaNo, dayTypeOn(shiftOf(String(fillDiaNo)), d));
+    if (!ft) return { prev: null, next: null, unknown: true };
+    const prevD = new Date(d); prevD.setDate(prevD.getDate() - 1);
+    const nextD = new Date(d); nextD.setDate(nextD.getDate() + 1);
+    const pt = workTimesOn(member, prevD);
+    const nt = workTimesOn(member, nextD);
+    // 전날 퇴근시각을 "이 날 0시" 기준으로 환산 (전날 기준 분 − 1440)
+    const prev = pt ? ft.start - (pt.end - 1440) : null;
+    // 다음날 출근시각을 "이 날 0시" 기준으로 환산 (다음날 기준 분 + 1440)
+    const next = nt ? (nt.start + 1440) - ft.end : null;
+    return { prev, next, unknown: false };
+  };
+  // 검사 결과 요약: ok(통과) / 미달 분 / 확인 불가
+  const restCheckOf = (member: any, d: Date, fillDiaNo: any, mode: "both" | "next" = "both") => {
+    const g = restGapOf(member, d, fillDiaNo);
+    if (!g) return null;
+    if (g.unknown) return { ok: true, unknown: true, worst: null as number | null };
+    const gaps: number[] = [];
+    if (mode === "both" && g.prev != null) gaps.push(g.prev);
+    if (g.next != null) gaps.push(g.next);
+    if (gaps.length === 0) return { ok: true, unknown: false, worst: null };
+    const worst = Math.min(...gaps);
+    return { ok: worst >= REST_MIN, unknown: false, worst };
+  };
+  const restLabel = (min: number | null) => {
+    if (min == null) return "";
+    const h = Math.floor(Math.abs(min) / 60), m = Math.abs(min) % 60;
+    const s = m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+    return min < 0 ? `근무 겹침` : s;
+  };
+  // ══════════════════════════════════════════════════════════════
 
   // 빈 자리(결원)는 아래에서 휴가 데이터(leave_history)로 계산 → const empty
   // 대기 근무자(standby)는 휴가·유고 데이터 로드 뒤에서 계산 (usable 판정에 필요) → 아래 const standby
@@ -15385,8 +15479,7 @@ function OperatorHome({ opName }: { opName: string }) {
     })();
   }, [targetStr, opSupport]);
 
-  // 공휴일 (근무표와 같은 소스 · read-holidays)
-  const [opHolidays, setOpHolidays] = useState<string[]>([]);
+  // 공휴일 로드 (state 선언은 위쪽 · 휴게 검사 헬퍼가 먼저 참조하므로)
   useEffect(() => {
     fetchHolidays(target.getFullYear()).then((h) => { if (Array.isArray(h)) setOpHolidays(h); });
   }, [targetStr]);
@@ -16165,7 +16258,17 @@ function OperatorHome({ opName }: { opName: string }) {
     // 충당 순서대로 후보 구성 (예시)
     const standbyCands = standby
       .filter((x) => x.usable && shiftOf(x.slot) === s && !usedNames.includes(x.name))
-      .sort((a, b) => {
+      .map((x: any) => {
+        // 이 사람을 이 다이아에 넣었을 때 앞뒤 휴게가 11시간 이상인지
+        const mem = opMembers.find((m: any) => String(m.employee_number) === String(x.emp)) || null;
+        const rest = mem ? restCheckOf(mem, target, fillDia) : null;
+        return { ...x, rest };
+      })
+      .sort((a: any, b: any) => {
+        // 휴게 기준에 걸리는 사람은 무조건 아래로
+        const ba = a.rest && !a.rest.ok ? 1 : 0;
+        const bb = b.rest && !b.rest.ok ? 1 : 0;
+        if (ba !== bb) return ba - bb;
         // 빈 자리와 같은 소속 우선, 그다음 높은 번호부터
         const ra = a.region === slot.region ? 0 : 1;
         const rb = b.region === slot.region ? 0 : 1;
@@ -16447,7 +16550,13 @@ function OperatorHome({ opName }: { opName: string }) {
             const total = active.length + done.length;
             return (
               <>
-                {active.map((d, i) => (
+                {active.map((d, i) => {
+                  // 지정근무는 뒤쪽만 검사 — 지정근무 퇴근 → 다음날 근무 출근 11시간
+                  const _emp = empOfId.get(d.member_id);
+                  const _mem = _emp ? opMembers.find((m: any) => String(m.employee_number) === String(_emp)) : null;
+                  const rest = _mem ? restCheckOf(_mem, target, fillDia, "next") : null;
+                  const bad = !!(rest && !rest.unknown && !rest.ok);
+                  return (
                   <div key={d.id} style={{ ...row, borderBottom: i === total - 1 ? 0 : row.borderBottom }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
@@ -16458,18 +16567,36 @@ function OperatorHome({ opName }: { opName: string }) {
                           </span>
                         )}
                       </div>
-                      <div style={meta}>
-                        지정근무 · {d.via === "app" || d.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${d.via}`}
+                      <div style={{ ...meta, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                        <span>지정근무 · {d.via === "app" || d.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${d.via}`}</span>
+                        {rest && rest.unknown && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#F3F4F6", color: "#9CA3AF" }}>다이아 시간 없음</span>
+                        )}
+                        {rest && !rest.unknown && rest.worst != null && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: bad ? "#FEF2F2" : "#F3F4F6", color: bad ? "#B91C1C" : "#6B7280" }}>
+                            {bad ? "⚠️ " : ""}휴게 {restLabel(rest.worst)}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <button
-                      onClick={() => pick(d.member_name, "지정근무", d.member_id ? String(d.member_id) : undefined)}
-                      style={{ border: 0, borderRadius: 10, background: "#BE185D", color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                      onClick={() => {
+                        if (bad) {
+                          const g = rest!.worst as number;
+                          const txt = g < 0
+                            ? `${d.member_name}님은 다음날 근무와 시간이 겹칩니다.`
+                            : `${d.member_name}님을 ${fillDia}번에 배정하면 퇴근 후 다음 근무까지 ${restLabel(g)}입니다.`;
+                          if (!window.confirm(`${txt}\n11시간 이상 보장되어야 합니다.\n\n그래도 배정할까요?`)) return;
+                        }
+                        pick(d.member_name, "지정근무", d.member_id ? String(d.member_id) : undefined);
+                      }}
+                      style={{ border: bad ? "1.5px solid #FCD34D" : 0, borderRadius: 10, background: bad ? "#fff" : "#BE185D", color: bad ? "#B45309" : "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
                     >
                       배정
                     </button>
                   </div>
-                ))}
+                  );
+                })}
                 {done.map((d, i) => (
                   <div key={"off" + d.id} style={{ ...row, borderBottom: active.length + i === total - 1 ? 0 : row.borderBottom }}>
                     <div style={{ flex: 1 }}>
@@ -16490,29 +16617,57 @@ function OperatorHome({ opName }: { opName: string }) {
               쓸 수 있는 {s} 대기가 없습니다.
             </div>
           ) : (
-            standbyCands.map((c, i) => (
-              <div key={c.slot} style={{ ...row, borderBottom: i === standbyCands.length - 1 ? 0 : row.borderBottom }}>
+            standbyCands.map((c: any, i: number) => {
+              const bad = !!(c.rest && !c.rest.unknown && !c.rest.ok);
+              const prevBad = i > 0 && !!(standbyCands[i - 1] as any).rest && !(standbyCands[i - 1] as any).rest.unknown && !(standbyCands[i - 1] as any).rest.ok;
+              return (
+              <React.Fragment key={c.slot}>
+                {bad && !prevBad && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#FFFBEB", borderTop: "2px solid #FDE68A", borderBottom: "1px solid #FDE68A", fontSize: 11, fontWeight: 800, color: "#B45309" }}>
+                    ⚠️ 아래는 휴게 11시간에 걸립니다
+                  </div>
+                )}
+                <div style={{ ...row, borderBottom: i === standbyCands.length - 1 ? 0 : row.borderBottom }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: bad ? "#9CA3AF" : "#111827" }}>
                     {c.name}
-                    {i === 0 && (
+                    {i === 0 && !bad && (
                       <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 6, background: "#CCFBF1", color: OP_TEAL_DARK }}>
                         추천
                       </span>
                     )}
                   </div>
-                  <div style={meta}>
-                    {c.slot} · {c.region}
+                  <div style={{ ...meta, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                    <span>{c.slot} · {c.region}</span>
+                    {c.rest && c.rest.unknown && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#F3F4F6", color: "#9CA3AF" }}>다이아 시간 없음</span>
+                    )}
+                    {c.rest && !c.rest.unknown && c.rest.worst != null && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: bad ? "#FEF2F2" : "#F3F4F6", color: bad ? "#B91C1C" : "#6B7280" }}>
+                        {bad ? "⚠️ " : ""}휴게 {restLabel(c.rest.worst)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button
-                  onClick={() => pick(c.name, "대기충당", c.emp)}
-                  style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                  onClick={() => {
+                    if (bad) {
+                      const g = c.rest.worst;
+                      const txt = g < 0
+                        ? `${c.name}님은 앞뒤 근무와 시간이 겹칩니다.`
+                        : `${c.name}님을 ${fillDia}번에 배정하면 앞뒤 휴게가 ${restLabel(g)}입니다.`;
+                      if (!window.confirm(`${txt}\n11시간 이상 보장되어야 합니다.\n\n그래도 배정할까요?`)) return;
+                    }
+                    pick(c.name, "대기충당", c.emp);
+                  }}
+                  style={{ border: bad ? "1.5px solid #FCD34D" : 0, borderRadius: 10, background: bad ? "#fff" : OP_TEAL, color: bad ? "#B45309" : "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
                 >
                   배정
                 </button>
-              </div>
-            ))
+                </div>
+              </React.Fragment>
+              );
+            })
           )}
         </div>
 
