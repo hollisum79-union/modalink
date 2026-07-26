@@ -639,6 +639,8 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   const nightHoursPerShift = worktypeSettings.find((w: any) => w.work_type === workType)?.night_hours || 0;
   let dutyNightHours = 0;
   dutyRecords.forEach((rec: any) => {
+    // 휴가가 모든 근무에 우선 — 휴가 날의 근무조정은 급여에서 뺀다 (3단계)
+    if (leaveSet.has(String(rec.work_date))) return;
     if (rec.work_shift !== "야간") return;
     if (rec.is_temp_dia) {
       dutyNightHours += Number(rec.temp_night_hours) || 0;
@@ -673,6 +675,8 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
 
   let supportOtHours = 0;
   dutyRecords.forEach((rec: any) => {
+    // 휴가가 모든 근무에 우선 — 휴가 날의 지원근무는 급여에서 뺀다 (3단계)
+    if (leaveSet.has(String(rec.work_date))) return;
     if (rec.adjust_type !== "support") return;
     if (rec.work_shift === "야간") return;
     if (rec.is_temp_dia) {
@@ -32321,6 +32325,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     }
     (dutyRecords || []).forEach((rec: any) => {
       if (rec.work_shift !== "야간") return;
+      if (leaveSet.has(String(rec.work_date))) return; // 휴가 날의 근무조정 제외 (3단계)
       if (rec.is_temp_dia) { sum += Number(rec.temp_night_hours) || 0; return; }
       const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!dm) return;
@@ -32334,6 +32339,7 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
     let s = 0;
     (dutyRecords || []).forEach((rec: any) => {
       if (rec.work_shift !== "야간") return;
+      if (leaveSet.has(String(rec.work_date))) return; // 휴가 날의 근무조정 제외 (3단계)
       if (rec.is_temp_dia) { s += Number(rec.temp_night_hours) || 0; return; }
       const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!dm) return;
@@ -32364,11 +32370,12 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
         cnt += 1;
       }
     }
-    (dutyRecords || []).forEach((rec: any) => { if (rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/))) cnt += 1; });
+    (dutyRecords || []).forEach((rec: any) => { if (leaveSet.has(String(rec.work_date))) return; if (rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/))) cnt += 1; });
     return cnt;
   })();
-  const dutyNightCountScreen = isKyobun ? 0 : (dutyRecords || []).filter((rec: any) => rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/))).length;
+  const dutyNightCountScreen = isKyobun ? 0 : (dutyRecords || []).filter((rec: any) => !leaveSet.has(String(rec.work_date)) && rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/))).length;
   const dutyNightList = (dutyRecords || [])
+    .filter((rec: any) => !leaveSet.has(String(rec.work_date))) // 휴가 날의 근무조정은 목록에도 표시 안 함 (3단계)
     .filter((rec: any) => rec.work_shift === "야간" && (rec.is_temp_dia || (rec.memo || "").match(/다이아\s*(\d+)/)))
     .map((rec: any) => {
       const dm = (rec.memo || "").match(/다이아\s*(\d+)/);
@@ -32433,6 +32440,8 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
 
   let supportOtHours = 0;
   dutyRecords.forEach((rec: any) => {
+    // 휴가가 모든 근무에 우선 — 휴가 날의 지원근무는 급여·목록에서 뺀다 (3단계)
+    if (leaveSet.has(String(rec.work_date))) return;
     if (rec.adjust_type !== "support") return;
     if (rec.work_shift === "야간") return;
     if (rec.is_temp_dia) {
