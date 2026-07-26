@@ -26751,10 +26751,12 @@ const getKyobunWork = (member: any, date: Date) => {
                     </div>
                   )}
                   {(() => {
-                    // 교대 달력은 본인 근무조정만 — selectedMember가 남아 있어도 남의 기록이 새지 않게
-                    const recs = (selectedMember && user && String(selectedMember.employee_number) === String(user.employee_number))
-                      ? adjustRecords.filter((r: any) => r.work_date === key)
-                      : [];
+                    // 교대는 "조"를 바꿔서 남의 근무표를 본다 (직원검색이 selectedMember를 안 건드림).
+                    // 그래서 본인 계정 + 본인 조일 때만 내 근무조정을 그린다.
+                    const myCrew =
+                      (selectedMember && user && String(selectedMember.employee_number) === String(user.employee_number)) &&
+                      String(user?.work_group || "") === String(crew);
+                    const recs = myCrew ? adjustRecords.filter((r: any) => r.work_date === key) : [];
                     if (recs.length === 0) return null;
                     const LABEL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
                     const COLOR: any = {
@@ -26790,7 +26792,11 @@ const getKyobunWork = (member: any, date: Date) => {
                     );
                   })()}
                   {(() => {
-                    if (selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) return null;
+                    // 근무조정과 같은 이유 — 본인 계정 + 본인 조일 때만
+                    const myCrew =
+                      (selectedMember && user && String(selectedMember.employee_number) === String(user.employee_number)) &&
+                      String(user?.work_group || "") === String(crew);
+                    if (!myCrew) return null;
                     const lv = leaveRecords.filter((r: any) => r.used_date === key);
                     if (lv.length === 0) return null;
                     const LV: any = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체", study: "학습", longService: "장기재직" };
@@ -26869,10 +26875,13 @@ const getKyobunWork = (member: any, date: Date) => {
     const COLOR_MAP: Record<string, string> = { 주: "#3B82F6", 야: "#7C3AED", 비: "#9CA3AF", 휴: "#92400E" };
     const isKyobun = activeTab === "교번";
     const isOtherKyobun = isKyobun && selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number);
-    // 근무조정은 "남의 근무표를 보는 중"이면 무조건 감춘다.
-    // isOtherKyobun은 교번 탭일 때만 참이라, 교대·통상 근무자를 검색해 볼 때 내 근무조정이 새어 나온다.
-    const isOtherPerson = !!(selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number));
     const isTongsang = activeTab === "통상";
+    // 근무조정은 "남의 근무표를 보는 중"이면 무조건 감춘다.
+    //   · 교번·통상 → selectedMember가 나와 다른가
+    //   · 교대     → 직원검색이 selectedMember를 안 건드리고 "조"만 바꾸므로 조로 판단
+    const isOtherPerson =
+      !!(selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number)) ||
+      (!isKyobun && !isTongsang && String(user?.work_group || "") !== String(selectedCrew || ""));
     const tWork = isTongsang ? getTongsangWork(user, dateObj) : null;
     const tDayType = tWork ? getDiaDayType(tWork.type, dateObj) : null;
     const tDia = tWork ? getDiaInfo(tWork.dia, tDayType) : null;
