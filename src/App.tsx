@@ -32355,6 +32355,9 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
       const w = calcKyobunWork({ ...memberInfo, employee_number: user?.employee_number }, new Date(yy, mn, i), rotationData, swapData, allMembers, startHistory);
       if (!w) continue;
       const ds = `${yy}-${String(mn + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      // 휴가가 모든 근무에 우선한다 — 휴가 쓴 날은 근무를 안 한 것이므로 횟수에서도 뺀다
+      // (바로 위 kyobunNightHours 와 반드시 같은 조건을 유지할 것 — 시간과 횟수가 어긋나면 안 됨)
+      if (leaveSet.has(ds)) continue;
       if (isStandbyDia(w.dia)) {
         if (w.type === "야간" && !dutyDates.has(ds)) cnt += 1;
       } else if (w.type === "야간" && Number(w.dia) >= 1) {
