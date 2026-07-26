@@ -41157,8 +41157,19 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         .gte("work_date", fd)
         .lte("work_date", ld);
       if (caErr) { console.error("이번 달 조정 기록 로드 실패:", caErr); return; }
+      // 휴가가 모든 근무에 우선 — 이번 달 휴가 날의 근무조정은 환산에서 뺀다 (computeNetPay 3단계와 동일).
+      // 휴무충당(holiday_fill)은 제외하지 않는다 — 휴무충당은 휴가와 공존하지 않고 취소로 관리 (확정 규칙).
+      const { data: curLv } = await supabase
+        .from("leave_history")
+        .select("used_date")
+        .eq("employee_number", user.employee_number)
+        .neq("status", "취소")
+        .gte("used_date", fd)
+        .lte("used_date", ld);
+      const curLvSet = new Set((curLv || []).map((r: any) => String(r.used_date)));
+      const curAdjNoLeave = (curAdj || []).filter((r: any) => r.adjust_type === "holiday_fill" || !curLvSet.has(String(r.work_date)));
       const hw = result.tongsangWage > 0 ? result.tongsangWage / 209 : 0;
-      setAdjustPayEst(estimateAdjustPay(curAdj || [], hw, homeDia, homeHolidays));
+      setAdjustPayEst(estimateAdjustPay(curAdjNoLeave, hw, homeDia, homeHolidays));
     })();
     const now = new Date();
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
