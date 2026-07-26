@@ -25755,10 +25755,9 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refr
   const [selectedMember, setSelectedMember] = React.useState<any>(null);
   React.useEffect(() => {
     if (!user?.employee_number) return;
-    // "직원검색"으로 다른 사람 근무표를 보는 건 교번 근무자만이다.
-    // 소속(work_group)으로 가르면 대공원 소속 교대 근무자까지 걸려서,
-    // 계정을 바꿔도 앞사람이 selectedMember로 남아 그 사람 근무조정이 보인다.
-    if (user.work_type === "교번") return;
+    // 대공원·도봉 소속은 직원검색으로 다른 사람 근무표를 볼 수 있다 → selectedMember를 덮어쓰지 않는다.
+    // (교대 근무자도 이 소속이라 검색 기능을 쓴다. 근무형태로 가르면 검색이 곧바로 본인으로 되돌아감)
+    if (user.work_group === "대공원" || user.work_group === "도봉") return;
     setSelectedMember(user);
   }, [user]);
  const [members, setMembers] = React.useState<any[]>([]);
@@ -26870,6 +26869,9 @@ const getKyobunWork = (member: any, date: Date) => {
     const COLOR_MAP: Record<string, string> = { 주: "#3B82F6", 야: "#7C3AED", 비: "#9CA3AF", 휴: "#92400E" };
     const isKyobun = activeTab === "교번";
     const isOtherKyobun = isKyobun && selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number);
+    // 근무조정은 "남의 근무표를 보는 중"이면 무조건 감춘다.
+    // isOtherKyobun은 교번 탭일 때만 참이라, 교대·통상 근무자를 검색해 볼 때 내 근무조정이 새어 나온다.
+    const isOtherPerson = !!(selectedMember && user && String(selectedMember.employee_number) !== String(user.employee_number));
     const isTongsang = activeTab === "통상";
     const tWork = isTongsang ? getTongsangWork(user, dateObj) : null;
     const tDayType = tWork ? getDiaDayType(tWork.type, dateObj) : null;
@@ -26887,7 +26889,7 @@ const getKyobunWork = (member: any, date: Date) => {
     //   근무조정(대기충당·지정근무·지원근무·휴무충당)이 있으면 그 다이아가 실제 근무.
     //   없으면 본인 교번·통상 다이아. 대기·비번·휴무는 행로가 없으므로 제외.
     //   ※ 안내문 · 운행시각표 버튼 · 아래 접이식이 모두 이 값을 본다 (셋이 어긋나지 않게).
-    const popAdj = isOtherKyobun ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
+    const popAdj = isOtherPerson ? null : (adjustRecords || []).find((r: any) => r.work_date === dateStr);
     const popWork: any = (() => {
       if (popAdj) {
         const m = popAdj.is_temp_dia ? null : String(popAdj.memo || "").match(/다이아\s*(\d+)/);
