@@ -18152,6 +18152,77 @@ const APPLY_KINDS: Record<string, string> = {
   no_holiday_fill: "휴무충당 불가",
 };
 
+// ── 근무조정 저장 전 검사 (종류마다 넣을 수 있는 날이 다르다) ──
+//   대기충당 → 그날이 "대기" 근무인 날만 (교번)
+//   휴무충당 → 휴무일
+//   지정근무 → 강제휴무 예정일 (교번, 미영업 다이아라 안 나오는 날)
+//   지원근무 → 휴무일 (교대 근무자 전용)
+//   ※ 주간·야간 실근무일과 비번에는 어떤 것도 넣을 수 없다.
+//   문제가 있으면 사유 문자열을, 없으면 빈 문자열을 돌려준다.
+async function checkAdjustDate(empNo: any, workDate: string, adjustType: string): Promise<string> {
+  if (!workDate || !empNo) return "";
+  const KO: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무" };
+  const label = KO[adjustType] || adjustType;
+  const { data: m } = await supabase
+    .from("members")
+    .select("id, name, employee_number, work_group, work_type, start_position, schedule_total, shift_team")
+    .eq("employee_number", String(empNo))
+    .maybeSingle();
+  if (!m) return ""; // 사람을 못 찾으면 막지 않음
+  const d = new Date(workDate + "T00:00:00");
+  const md = String(workDate).slice(5).replace("-", "/");
+
+  if (m.work_type === "교번" && m.start_position != null) {
+    if (adjustType === "support") return `지원근무는 교대 근무자만 신청할 수 있어요.`;
+    const [rotRes, shRes, swRes, allRes, hols] = await Promise.all([
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_start_history").select("*"),
+      supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+      supabase.from("members").select("id, employee_number, work_group, start_position, schedule_total"),
+      fetchHolidays(d.getFullYear()),
+    ]);
+    const w: any = calcKyobunWork(m, d, rotRes.data || [], swRes.data || [], allRes.data || [], shRes.data || []);
+    if (!w) return "";
+    const isStandby = isStandbyDia(w.dia);
+    if (isStandby) {
+      if (adjustType === "standby") return "";
+      return `${md}은 대기 근무일이에요. 대기 근무일에는 「대기충당」만 넣을 수 있어요.`;
+    }
+    if (w.type === "비번") return `${md}은 비번이에요 (야간 다음날). 비번에는 근무를 넣을 수 없어요.`;
+    if (w.type === "휴무") {
+      // 지정근무는 "강제휴무가 발생한 만큼" 휴무일에 이행한다 (강제휴무 당일도 포함)
+      if (adjustType === "holiday_fill" || adjustType === "designated") return "";
+      return `${md}은 휴무일이에요. 휴무일에는 「휴무충당」이나 「지정근무」만 넣을 수 있어요.`;
+    }
+    if (w.type === "주간" || w.type === "야간") {
+      // 강제휴무 예정일이면 지정근무 가능 (원래 근무지만 미영업 다이아라 안 나오는 날)
+      const isHol = (dt: Date) => {
+        const g = dt.getDay();
+        if (g === 0 || g === 6) return true;
+        const ss = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+        return Array.isArray(hols) && hols.includes(ss);
+      };
+      const ds = String(w.dia).replace(/\s+/g, "");
+      const n = /^\d+$/.test(ds) ? Number(ds) : -1;
+      let forcedRest = false;
+      if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(d)) forcedRest = true;
+      if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(d)) {
+        const tm = new Date(d);
+        tm.setDate(tm.getDate() + 1);
+        if (isHol(tm)) forcedRest = true;
+      }
+      if (!forcedRest) return `${md}은 근무일이에요 (${w.type} ${w.dia}). 근무일에는 「${label}」을 넣을 수 없어요.`;
+      if (adjustType === "designated") return "";
+      return `${md}은 강제휴무 예정일이에요. 이 날에는 「지정근무」만 넣을 수 있어요.`;
+    }
+    return "";
+  }
+
+  // 교대·통상은 아직 규칙을 확정하지 않았다 → 잘못 막는 것보다 통과가 안전.
+  //   (교대: 휴무일에 휴무충당·지원근무 / 통상: 미정 — 확정되면 여기에 추가)
+  return "";
+}
+
 // ── 신청 날짜 검사 (지원근무·지정근무·신청함 대리 입력 공용) ──
 //   규칙 ① 지난 날짜는 안 됨 (오늘 포함 이후만)
 //        ② 휴가(leave_history)·유고(operator_absence)가 있는 날은 안 됨 — 기간 유고는 걸치기만 해도 차단
@@ -35569,6 +35640,12 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     }
     if (abDup2.data && abDup2.data.length > 0) {
       showToast(`${mdTxt}에는 운용기관사가 입력한 「${abDup2.data[0].reason}」이 있어요. 근무를 입력할 수 없습니다.`, "error");
+      return;
+    }
+    // 그날 근무 상태 검사 — 대기충당은 대기 근무일에만, 근무일·비번에는 아무것도 넣을 수 없다
+    const badDay = await checkAdjustDate(user.employee_number, formDate, tabTypeMap[activeTab]);
+    if (badDay) {
+      showToast(badDay, "error");
       return;
     }
 
