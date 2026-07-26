@@ -35418,6 +35418,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   const [diaResult, setDiaResult] = useState(null);
   const [diaError, setDiaError] = useState("");
   const [records, setRecords] = useState([]);
+  // 휴가 쓴 날짜 목록 — 통계에서 휴가 날 기록을 빼기 위해 (휴가가 모든 근무에 우선)
+  const [adjLeaveSet, setAdjLeaveSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
   // 휴무충당 모드: "기록" 또는 "신청"
@@ -35572,6 +35574,13 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
         .order("work_date", { ascending: false });
 
       if (!error && data) setRecords(data);
+      // 휴가 날짜 로드 — 휴가 낸 날의 근무조정은 "안 한 것"이라 통계에서 뺀다 (목록에는 표시 유지)
+      const { data: lvData } = await supabase
+        .from("leave_history")
+        .select("used_date")
+        .eq("employee_number", user.employee_number)
+        .neq("status", "취소");
+      setAdjLeaveSet(new Set((lvData || []).map((r: any) => String(r.used_date))));
       setLoading(false);
     };
 
@@ -36683,7 +36692,9 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
               };
               const c = COLOR[activeTab] || "#4F46E5";
               const y = new Date().getFullYear();
-              const yearRecs = records.filter((r) => (r.work_date || "").startsWith(`${y}-`));
+              const _adjIsHf = tabTypeMap[activeTab] === "holiday_fill";
+              // 휴가가 모든 근무에 우선 — 휴가 날의 기록은 올해 횟수에서 뺀다 (휴무충당은 취소로 관리하므로 안 뺌)
+              const yearRecs = records.filter((r) => (r.work_date || "").startsWith(`${y}-`) && (_adjIsHf || !adjLeaveSet.has(String(r.work_date))));
               const dayCnt = yearRecs.filter((r) => r.work_shift === "주간").length;
               const nightCnt = yearRecs.filter((r) => r.work_shift === "야간").length;
               return (
@@ -37227,6 +37238,8 @@ appearance: "none",
                   <div
                     key={r.id}
                     style={{
+                      // 휴가로 제외된 기록은 흐리게 — "기록은 있지만 계산엔 안 친다"를 한눈에
+                      opacity: (r.adjust_type !== "holiday_fill" && adjLeaveSet.has(String(r.work_date))) ? 0.45 : 1,
                       padding: "12px 0",
                       borderBottom: "1px solid #F3F4F6",
                       display: "flex",
@@ -37275,6 +37288,11 @@ appearance: "none",
                             }}
                           >
                             💰
+                          </span>
+                        )}
+                        {r.adjust_type !== "holiday_fill" && adjLeaveSet.has(String(r.work_date)) && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#F3F4F6", color: "#6B7280" }}>
+                            휴가로 제외
                           </span>
                         )}
                         {r.source === "operator" && (
