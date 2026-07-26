@@ -572,7 +572,11 @@ function computeNetPay(input: any) {
     memberInfo = null, rotationData = [], dutyRecords = [],
     swapData = [], allMembers = [], allowSettings = [], hiddenItems = [],
     startHistory = [],
+    // 휴가 쓴 날짜 목록 ("YYYY-MM-DD"). 휴가는 모든 근무에 우선하므로 그날은 급여 산정에서 뺀다.
+    // 1단계에서는 받기만 하고 계산에는 아직 쓰지 않는다 (금액이 바뀌면 안 됨).
+    leaveDates = [],
   } = input;
+  const leaveSet: Set<string> = new Set((leaveDates || []).map((x: any) => String(x)));
 
     const row = salaryTable.find((r: any) => Number(r.hobong) === Number(hobong));
   const basicSalary = row ? (row[`grade_${Number(grade)}`] ?? null) : null;
@@ -41019,6 +41023,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       allMembers: d.allMembers || [],
       allowSettings: d.allowSettings || [],
       hiddenItems: s.hidden_items || [],
+      leaveDates: d.leaveDates || [],
     });
     if (!result) return;
     (async () => {
@@ -41156,6 +41161,8 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         allMembers: allMemRes.data || [],
         allowSettings: allowRes.data || [],
         startHistory: shRes.data || [],
+        // 휴가는 모든 근무에 우선 — 그날은 급여 산정에서 뺀다 (정산 대상 월 기준)
+        leaveDates: (lvRes.data || []).map((r: any) => String(r.used_date)),
       });
     };
     loadHomeWork();
@@ -43012,6 +43019,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   allMembers: d.allMembers || [],
                   allowSettings: d.allowSettings || [],
                   hiddenItems: s.hidden_items || [],
+                  leaveDates: d.leaveDates || [],
                 });
                 if (!result) return "—";
                 return result.totalGross.toLocaleString("ko-KR");
