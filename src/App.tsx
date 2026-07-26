@@ -25755,7 +25755,10 @@ function ScheduleScreen({ onBack, user, refreshUser, onGoAdjust, onGoLeave, refr
   const [selectedMember, setSelectedMember] = React.useState<any>(null);
   React.useEffect(() => {
     if (!user?.employee_number) return;
-    if (user.work_group === "대공원" || user.work_group === "도봉") return;
+    // "직원검색"으로 다른 사람 근무표를 보는 건 교번 근무자만이다.
+    // 소속(work_group)으로 가르면 대공원 소속 교대 근무자까지 걸려서,
+    // 계정을 바꿔도 앞사람이 selectedMember로 남아 그 사람 근무조정이 보인다.
+    if (user.work_type === "교번") return;
     setSelectedMember(user);
   }, [user]);
  const [members, setMembers] = React.useState<any[]>([]);
@@ -26749,7 +26752,10 @@ const getKyobunWork = (member: any, date: Date) => {
                     </div>
                   )}
                   {(() => {
-                    const recs = adjustRecords.filter((r: any) => r.work_date === key);
+                    // 교대 달력은 본인 근무조정만 — selectedMember가 남아 있어도 남의 기록이 새지 않게
+                    const recs = (selectedMember && user && String(selectedMember.employee_number) === String(user.employee_number))
+                      ? adjustRecords.filter((r: any) => r.work_date === key)
+                      : [];
                     if (recs.length === 0) return null;
                     const LABEL: any = { standby: "충당", holiday_fill: "휴충", designated: "지정", support: "지원" };
                     const COLOR: any = {
