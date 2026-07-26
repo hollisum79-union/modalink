@@ -18222,8 +18222,37 @@ async function checkAdjustDate(empNo: any, workDate: string, adjustType: string)
     return "";
   }
 
-  // 교대·통상은 아직 규칙을 확정하지 않았다 → 잘못 막는 것보다 통과가 안전.
-  //   (교대: 휴무일에 휴무충당·지원근무 / 통상: 미정 — 확정되면 여기에 추가)
+  // ── 교대 (4조 회전) — 확정 규칙 (2026-07-26) ──
+  //   휴무일 → 휴무충당·지원근무 / 근무일(주·야) → 지원근무만 (노사 합의 교번충당, 출퇴근 전후 초과분은 시간외)
+  //   비번 → 전부 차단 / 대기충당·지정근무 → 교대에는 대기·강제휴무 개념이 없어 항상 차단
+  //   참고: 교대는 지원근무를 2달에 1회 의무 이행 (차단 규칙 아님 — 도메인 정보)
+  if (m.work_type === "교대" && m.shift_team) {
+    if (adjustType === "standby") return `대기충당은 교번 근무자만 넣을 수 있어요 (교대에는 대기 근무가 없어요).`;
+    if (adjustType === "designated") return `지정근무는 교번 근무자만 넣을 수 있어요 (교대에는 강제휴무가 없어요).`;
+    const { data: sb } = await supabase
+      .from("shift_base")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const t = calcShiftWork(m.shift_team, d, sb);
+    if (!t) return ""; // 교대 기준 정보가 없으면 잘못 막는 것보다 통과가 안전
+    if (t === "비번") return `${md}은 비번이에요 (야간 다음날). 비번에는 근무를 넣을 수 없어요.`;
+    if (t === "휴무") {
+      if (adjustType === "holiday_fill" || adjustType === "support") return "";
+      return `${md}은 휴무일이에요. 휴무일에는 「휴무충당」이나 「지원근무」만 넣을 수 있어요.`;
+    }
+    // 주간·야간 근무일 — 노사 합의 교번충당은 지원근무로 입력
+    if (adjustType === "support") return "";
+    return `${md}은 근무일이에요 (교대 ${t}). 근무일에는 「지원근무」(노사 합의 교번충당)만 넣을 수 있어요.`;
+  }
+
+  // ── 통상 (51~54) — 확정 규칙 (2026-07-26): 근무조정 전면 차단 ──
+  if (m.work_type === "통상") {
+    return `통상 근무자는 근무조정(${label})을 넣을 수 없어요.`;
+  }
+
+  // 그 외(미분류 등)는 잘못 막는 것보다 통과가 안전.
   return "";
 }
 
