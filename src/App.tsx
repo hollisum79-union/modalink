@@ -16550,7 +16550,13 @@ function OperatorHome({ opName }: { opName: string }) {
             const total = active.length + done.length;
             return (
               <>
-                {active.map((d, i) => (
+                {active.map((d, i) => {
+                  // 지정근무는 뒤쪽만 검사 — 지정근무 퇴근 → 다음날 근무 출근 11시간
+                  const _emp = empOfId.get(d.member_id);
+                  const _mem = _emp ? opMembers.find((m: any) => String(m.employee_number) === String(_emp)) : null;
+                  const rest = _mem ? restCheckOf(_mem, target, fillDia, "next") : null;
+                  const bad = !!(rest && !rest.unknown && !rest.ok);
+                  return (
                   <div key={d.id} style={{ ...row, borderBottom: i === total - 1 ? 0 : row.borderBottom }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
@@ -16561,18 +16567,36 @@ function OperatorHome({ opName }: { opName: string }) {
                           </span>
                         )}
                       </div>
-                      <div style={meta}>
-                        지정근무 · {d.via === "app" || d.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${d.via}`}
+                      <div style={{ ...meta, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                        <span>지정근무 · {d.via === "app" || d.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${d.via}`}</span>
+                        {rest && rest.unknown && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: "#F3F4F6", color: "#9CA3AF" }}>다이아 시간 없음</span>
+                        )}
+                        {rest && !rest.unknown && rest.worst != null && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: bad ? "#FEF2F2" : "#F3F4F6", color: bad ? "#B91C1C" : "#6B7280" }}>
+                            {bad ? "⚠️ " : ""}휴게 {restLabel(rest.worst)}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <button
-                      onClick={() => pick(d.member_name, "지정근무", d.member_id ? String(d.member_id) : undefined)}
-                      style={{ border: 0, borderRadius: 10, background: "#BE185D", color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
+                      onClick={() => {
+                        if (bad) {
+                          const g = rest!.worst as number;
+                          const txt = g < 0
+                            ? `${d.member_name}님은 다음날 근무와 시간이 겹칩니다.`
+                            : `${d.member_name}님을 ${fillDia}번에 배정하면 퇴근 후 다음 근무까지 ${restLabel(g)}입니다.`;
+                          if (!window.confirm(`${txt}\n11시간 이상 보장되어야 합니다.\n\n그래도 배정할까요?`)) return;
+                        }
+                        pick(d.member_name, "지정근무", d.member_id ? String(d.member_id) : undefined);
+                      }}
+                      style={{ border: bad ? "1.5px solid #FCD34D" : 0, borderRadius: 10, background: bad ? "#fff" : "#BE185D", color: bad ? "#B45309" : "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer" }}
                     >
                       배정
                     </button>
                   </div>
-                ))}
+                  );
+                })}
                 {done.map((d, i) => (
                   <div key={"off" + d.id} style={{ ...row, borderBottom: active.length + i === total - 1 ? 0 : row.borderBottom }}>
                     <div style={{ flex: 1 }}>
