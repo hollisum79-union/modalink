@@ -19171,6 +19171,18 @@ function OperatorRank() {
   const [excMemo, setExcMemo] = useState<Record<string, string>>({});
   const [rankReload, setRankReload] = useState(0);
   const [outOpen, setOutOpen] = useState(false);
+  // ── 신규·전입 평균 부여 (2026-08-05) ──
+  //   단독 발령 후 3개월이 되면 0이 아니라 그 시점 직원 평균값으로 시작한다 (노사 확정 규칙)
+  //   야간 = 평균 개수(정수) → 주간 = 평균 합산점수 − 야간분 (소수 1자리)
+  //   → 주간판(합산점수)·야간판(야간개수) 양쪽에서 정확히 평균 자리에 놓인다
+  const [avgOpen, setAvgOpen] = useState(false);
+  const [avgKind, setAvgKind] = useState<"holiday" | "standby">("holiday");
+  const [avgStat, setAvgStat] = useState<any>(null);
+  const [avgTodo, setAvgTodo] = useState<any[]>([]);
+  const [avgQ, setAvgQ] = useState("");
+  const [avgLoading, setAvgLoading] = useState(false);
+  const [avgSaving, setAvgSaving] = useState("");
+  const [avgConfirm, setAvgConfirm] = useState<any>(null);
 
   const loadCount = async () => {
     const { count } = await supabase
@@ -19264,6 +19276,123 @@ function OperatorRank() {
     showToast("사유를 저장했어요", "success");
   };
 
+  // ── 신규·전입 평균 부여: 오늘 기준 평균 산정 + 미부여 대상 찾기 ──
+  //   모집단 = 사업소 재직자 (결원·충당제외자 뺌 / 유고는 일시적이라 포함 — 2026-08-05 확정)
+  const loadAvg = async (kind: "holiday" | "standby") => {
+    setAvgLoading(true);
+    const adjType = kind === "holiday" ? "holiday_fill" : "standby";
+    const W = kind === "holiday" ? 1.8 : 1; // 대기충당은 가중치 없음
+    const [baseRes, memRes] = await Promise.all([
+      supabase
+        .from("fill_score")
+        .select("name, day_cnt, night_cnt, base_date")
+        .eq("kind", kind)
+        .order("base_date", { ascending: false }),
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_type, fill_excluded"),
+    ]);
+    const base = baseRes.data || [];
+    const mems = memRes.data || [];
+    const d: Record<string, number> = {};
+    const n: Record<string, number> = {};
+    const took = new Set<string>();
+    base.forEach((r: any) => {
+      if (took.has(r.name)) return;
+      took.add(r.name);
+      d[r.name] = Number(r.day_cnt) || 0;
+      n[r.name] = Number(r.night_cnt) || 0;
+    });
+    const maxBase = base.length ? String(base[0].base_date) : "1970-01-01";
+    const { data: adds } = await supabase
+      .from("work_adjust")
+      .select("employee_number, work_shift")
+      .eq("adjust_type", adjType)
+      .gt("work_date", maxBase);
+    const nameOf = new Map<string, string>();
+    mems.forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
+    const memberNames = new Set(mems.map((m: any) => String(m.name)));
+    Object.keys(d).forEach((nm) => { if (!memberNames.has(nm)) { delete d[nm]; delete n[nm]; } });
+    Object.keys(n).forEach((nm) => { if (!memberNames.has(nm)) { delete d[nm]; delete n[nm]; } });
+    (adds || []).forEach((r: any) => {
+      const nm = nameOf.get(String(r.employee_number));
+      if (!nm) return;
+      if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
+      else d[nm] = (d[nm] || 0) + 1;
+    });
+    const excSet = new Set<string>();
+    mems.forEach((m: any) => { if (m.fill_excluded && m.name) excSet.add(String(m.name)); });
+    // Set 전개는 CRA 빌드가 거부 (TS2569) → Object.keys 병합 유지
+    const pop = Object.keys({ ...d, ...n }).filter(
+      (nm) => !nm.includes("결원") && !excSet.has(nm)
+    );
+    const scoreOf = (nm: string) => (d[nm] || 0) + (n[nm] || 0) * W;
+    let sumS = 0;
+    let sumN = 0;
+    pop.forEach((nm) => { sumS += scoreOf(nm); sumN += n[nm] || 0; });
+    const avgScore = pop.length ? sumS / pop.length : 0;
+    const avgNight = pop.length ? sumN / pop.length : 0;
+    const nightGive = Math.round(avgNight);
+    const dayGive = Math.max(0, Math.round((avgScore - nightGive * W) * 10) / 10);
+    setAvgStat({
+      kind,
+      W,
+      pop: pop.length,
+      avgScore,
+      avgNight,
+      dayGive,
+      nightGive,
+      check: dayGive + nightGive * W,
+    });
+    // 미부여 대상: 충당 대상 근무형태(교번·교대) 중 아직 점수가 하나도 없는 사람
+    //   통상은 충당 대상이 아니고, 충당 제외자는 목록에서도 뺀다 (2026-08-05 확정)
+    const has = (nm: string) => d[nm] !== undefined || n[nm] !== undefined;
+    setAvgTodo(
+      mems
+        .filter(
+          (m: any) =>
+            (m.work_type === "교번" || m.work_type === "교대") &&
+            !m.fill_excluded &&
+            !String(m.name || "").includes("결원") &&
+            !has(String(m.name))
+        )
+        .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
+    );
+    setAvgLoading(false);
+  };
+
+  const openAvg = async () => {
+    setAvgOpen(true);
+    setAvgQ("");
+    await loadAvg(avgKind);
+  };
+
+  const giveAvg = async (m: any) => {
+    if (!avgStat) return;
+    setAvgSaving(m.id);
+    const today = todayLocalStr();
+    const note =
+      `신규·전입 평균 부여 · ${today} 기준 · 모집단 ${avgStat.pop}명 · ` +
+      `평균 합산 ${avgStat.avgScore.toFixed(2)}점 · 평균 야간 ${avgStat.avgNight.toFixed(2)}개`;
+    const { error } = await supabase.from("fill_score").insert({
+      name: m.name,
+      kind: avgStat.kind,
+      day_cnt: avgStat.dayGive,
+      night_cnt: avgStat.nightGive,
+      base_date: today,
+      note,
+    });
+    setAvgSaving("");
+    setAvgConfirm(null);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`${m.name}님에게 평균값을 부여했어요`, "success");
+    setRankReload((v) => v + 1);
+    await loadAvg(avgStat.kind);
+  };
+
   // ── 실데이터 (2026-08-04 점수제): fill_score 엑셀 기준 + 기준일 이후 work_adjust 휴무충당 누적 ──
   //   점수 = 주간×1 + 야간×1.8 · 결원 제외 · [채우기] 화면과 같은 재료를 본다 (미러)
   const [rankDay, setRankDay] = useState<Record<string, number>>({});
@@ -19355,6 +19484,245 @@ function OperatorRank() {
     padding: "12px 0",
     borderBottom: "1px solid #F3F4F6",
   };
+
+  if (avgOpen) {
+    const kindKo = avgKind === "holiday" ? "휴무충당" : "대기충당";
+    const unit = avgKind === "holiday" ? "점" : "회";
+    const filtered = avgTodo.filter(
+      (m) =>
+        !avgQ.trim() ||
+        String(m.name || "").includes(avgQ.trim()) ||
+        String(m.employee_number || "").includes(avgQ.trim())
+    );
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <button
+            onClick={() => setAvgOpen(false)}
+            style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            ‹ 뒤로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>신규·전입 평균 부여</div>
+        </div>
+
+        <div
+          style={{
+            background: "#FEF3C7",
+            color: "#92400E",
+            borderRadius: 12,
+            padding: "10px 12px",
+            fontSize: 11.5,
+            fontWeight: 700,
+            lineHeight: 1.7,
+            marginBottom: 12,
+          }}
+        >
+          단독 발령 후 3개월이 된 사람에게 그 시점 직원 평균값을 부여합니다. 점수가 하나도 없는 사람은 순서판에 아직 나오지 않으며, 여기서 부여하는 순간 올라옵니다.
+          <br />
+          아래 값은 <b>오늘 기준</b> 평균입니다. 늦게 부여하면 그날의 평균이 들어가니 3개월 되는 날에 바로 부여하세요.
+        </div>
+
+        {/* 휴무충당 / 대기충당 전환 */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {([["holiday", "휴무충당"], ["standby", "대기충당"]] as const).map(([k, ko]) => (
+            <div
+              key={k}
+              onClick={() => { setAvgKind(k); loadAvg(k); }}
+              style={{
+                flex: 1,
+                textAlign: "center",
+                padding: "12px 0",
+                borderRadius: 13,
+                background: avgKind === k ? "#fff" : "transparent",
+                border: avgKind === k ? "1.5px solid #99F6E4" : "1.5px solid #E9EDEC",
+                fontSize: 13.5,
+                fontWeight: 800,
+                color: avgKind === k ? OP_TEAL_DARK : "#9CA3AF",
+                cursor: "pointer",
+              }}
+            >
+              {ko}
+            </div>
+          ))}
+        </div>
+
+        {avgLoading || !avgStat ? (
+          <div style={{ ...card, textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13 }}>
+            평균을 계산하는 중이에요…
+          </div>
+        ) : (
+          <>
+            <div style={card}>
+              <div style={ttl}>
+                오늘 기준 {kindKo} 평균
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
+                  모집단 {avgStat.pop}명
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                <div style={{ flex: 1, background: "#F8FAFC", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700 }}>평균 합산점수</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginTop: 3 }}>
+                    {avgStat.avgScore.toFixed(2)}{unit}
+                  </div>
+                </div>
+                <div style={{ flex: 1, background: "#F8FAFC", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700 }}>평균 야간 개수</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginTop: 3 }}>
+                    {avgStat.avgNight.toFixed(2)}개
+                  </div>
+                </div>
+              </div>
+              <div style={{ background: "#EEF0FF", borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>부여할 값</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "#111827" }}>
+                  주간 {avgStat.dayGive} · 야간 {avgStat.nightGive}개
+                </div>
+                <div style={{ fontSize: 11.5, color: "#4B5563", lineHeight: 1.8, marginTop: 6 }}>
+                  야간 = 평균 개수 반올림 → {avgStat.nightGive}개
+                  <br />
+                  주간 = {avgStat.avgScore.toFixed(2)} − ({avgStat.nightGive} × {avgStat.W}) = {avgStat.dayGive}
+                  <br />
+                  검산 = {avgStat.dayGive} + {avgStat.nightGive}×{avgStat.W} ={" "}
+                  <b style={{ color: "#059669" }}>{avgStat.check.toFixed(2)}{unit}</b> · 평균과 일치 ✓
+                </div>
+              </div>
+            </div>
+
+            <input
+              value={avgQ}
+              onChange={(e) => setAvgQ(e.target.value)}
+              placeholder="이름 또는 사번 검색"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{
+                width: "100%",
+                border: "1px solid #E5E7EB",
+                borderRadius: 12,
+                padding: "12px 14px",
+                fontSize: 14,
+                fontFamily: "inherit",
+                marginBottom: 12,
+                WebkitAppearance: "none",
+                appearance: "none",
+              }}
+            />
+
+            <div style={card}>
+              <div style={ttl}>
+                아직 {kindKo} 점수가 없는 사람
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "3px 9px", borderRadius: 20 }}>
+                  {avgTodo.length}명
+                </span>
+              </div>
+              {filtered.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13 }}>
+                  {avgTodo.length === 0 ? "부여할 사람이 없습니다." : "검색 결과가 없습니다."}
+                </div>
+              ) : (
+                filtered.map((m, i) => (
+                  <div key={m.id} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+                      <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                        {m.employee_number}
+                        {m.work_type ? ` · ${m.work_type}` : ""}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setAvgConfirm(m)}
+                      disabled={avgSaving === m.id}
+                      style={{
+                        border: 0,
+                        borderRadius: 10,
+                        background: OP_TEAL,
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        padding: "9px 14px",
+                        fontFamily: "inherit",
+                        cursor: "pointer",
+                        opacity: avgSaving === m.id ? 0.5 : 1,
+                      }}
+                    >
+                      평균 부여
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={card}>
+              <div style={ttl}>기록 방식</div>
+              <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.9 }}>
+                부여하면 명부(fill_score)에 오늘 날짜로 <b>새 줄이 추가</b>됩니다. 기존 명부는 고치지 않습니다.
+                <br />
+                그날의 평균과 모집단 수가 메모로 같이 저장돼 나중에 근거를 댈 수 있습니다.
+                <br />
+                잘못 넣었다면 Supabase에서 그 줄을 지우면 부여 전으로 돌아갑니다.
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* 확정 팝업 — 사람이 눈으로 보고 확인해야 저장됩니다 */}
+        {avgConfirm && avgStat && (
+          <div
+            onClick={() => setAvgConfirm(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(17,24,39,0.5)",
+              display: "grid",
+              placeItems: "center",
+              padding: 20,
+              zIndex: 200,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 340 }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 4 }}>
+                {avgConfirm.name}님에게 부여할까요?
+              </div>
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+                {kindKo} · {todayLocalStr()} 기준
+              </div>
+              <div style={{ background: "#EEF0FF", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: "#4F46E5" }}>
+                  주간 {avgStat.dayGive} · 야간 {avgStat.nightGive}개
+                </div>
+                <div style={{ fontSize: 12, color: "#4B5563", marginTop: 5 }}>
+                  합산 {avgStat.check.toFixed(2)}{unit} · 모집단 {avgStat.pop}명 평균
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: "#9CA3AF", lineHeight: 1.7, marginBottom: 14 }}>
+                부여하면 이 사람이 순서판에 바로 올라옵니다. 되돌리려면 명부에서 그 줄을 지워야 합니다.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setAvgConfirm(null)}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: "#F3F4F6", color: "#374151", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => giveAvg(avgConfirm)}
+                  disabled={avgSaving === avgConfirm.id}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: OP_TEAL, color: "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", opacity: avgSaving === avgConfirm.id ? 0.5 : 1 }}
+                >
+                  확정 부여
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (excOpen) {
     const filtered = excList.filter(
@@ -19744,6 +20112,31 @@ function OperatorRank() {
           <br />
           이때 0이 아니라 그 시점 직원 평균값으로 시작합니다. 주간은 주간 평균 점수, 야간은 야간 평균 개수를 부여합니다.
         </div>
+      </div>
+
+      <div style={{ ...card, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>🆕 신규·전입 평균 부여</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>
+            단독 발령 후 3개월 · 그 시점 평균값으로 시작
+          </div>
+        </div>
+        <button
+          onClick={openAvg}
+          style={{
+            border: 0,
+            borderRadius: 11,
+            background: OP_TEAL,
+            color: "#fff",
+            fontSize: 12.5,
+            fontWeight: 800,
+            padding: "10px 16px",
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          부여하기
+        </button>
       </div>
 
       <div style={{ ...card, display: "flex", alignItems: "center", gap: 10 }}>
@@ -36678,6 +37071,21 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
               boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
             }}
           >
+            <div
+              style={{
+                background: "#FEF3C7",
+                color: "#92400E",
+                borderRadius: 10,
+                padding: "8px 11px",
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: 1.6,
+                marginBottom: 12,
+                textAlign: "center",
+              }}
+            >
+              ⚠️ 테스트 중인 화면입니다 — 숫자가 확정된 값이 아닐 수 있어요
+            </div>
             <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, textAlign: "center" }}>
               내 {activeTab} 점수
             </div>
