@@ -15201,12 +15201,12 @@ function OperatorHome({ opName }: { opName: string }) {
       const [mRes, rRes, hRes, sRes, allRes, sbRes] = await Promise.all([
         supabase
           .from("members")
-          .select("id, name, employee_number, work_group, start_position, schedule_total, work_type, fill_excluded")
+          .select("id, name, employee_number, work_group, start_position, schedule_total, work_type, fill_excluded, night_fill_excluded")
           .eq("work_type", "교번"),
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("kyobun_start_history").select("*"),
         supabase.from("kyobun_swap").select("*").eq("status", "수락"),
-        supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team, tongsang_base_date, tongsang_base_dia, fill_excluded"),
+        supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team, tongsang_base_date, tongsang_base_dia, fill_excluded, night_fill_excluded"),
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
@@ -16506,6 +16506,7 @@ function OperatorHome({ opName }: { opName: string }) {
       .map((m) => {
         if (String(m.name).includes("결원")) return null;
         if (m.fill_excluded) return null; // 충당 제외(진급·직책 등 무기한) — 순서판과 같은 기준
+        if (s === "야간" && m.night_fill_excluded) return null; // 야간 면제자는 야간 다이아 후보에서만 빠짐
         if (restOffEmps.has(String(m.employee_number))) return null; // 그날 휴가·유고
         const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
         if (!w || w.type !== "휴무") return null;
@@ -16538,6 +16539,7 @@ function OperatorHome({ opName }: { opName: string }) {
         if (m.work_type !== "교대" || !m.shift_team) return null;
         if (String(m.name).includes("결원")) return null;
         if (m.fill_excluded) return null; // 충당 제외(진급·직책 등 무기한) — 순서판과 같은 기준
+        if (s === "야간" && m.night_fill_excluded) return null; // 야간 면제자는 야간 다이아 후보에서만 빠짐
         if (restOffEmps.has(String(m.employee_number))) return null;
         if (calcShiftWork(m.shift_team, target, opShiftBase) !== "휴무") return null;
         let warn = "";
@@ -19228,7 +19230,7 @@ function OperatorRank() {
   const openExc = async () => {
     const { data, error } = await supabase
       .from("members")
-      .select("id, name, employee_number, work_type, fill_excluded, fill_excluded_reason")
+      .select("id, name, employee_number, work_type, fill_excluded, fill_excluded_reason, night_fill_excluded, night_fill_excluded_reason")
       .order("name", { ascending: true });
     if (error) {
       showToast("불러오기 실패: " + error.message, "error");
@@ -19237,7 +19239,10 @@ function OperatorRank() {
     const rows = (data || []).filter((m: any) => !String(m.name || "").includes("결원"));
     setExcList(rows);
     const memo: Record<string, string> = {};
-    rows.forEach((m: any) => { memo[m.id] = String(m.fill_excluded_reason || ""); });
+    rows.forEach((m: any) => {
+      memo[m.id] = String(m.fill_excluded_reason || "");
+      memo[m.id + "N"] = String(m.night_fill_excluded_reason || "");
+    });
     setExcMemo(memo);
     setExcOpen(true);
   };
@@ -19263,8 +19268,41 @@ function OperatorRank() {
     showToast(next ? `${m.name}님을 충당 순서에서 제외했어요` : `${m.name}님이 충당 순서로 돌아왔어요`, "success");
   };
 
-  const saveExcMemo = async (m: any) => {
+  // ── 야간 면제 스위치 (야간 다이아만 못 하는 사람 · 주간은 정상 참여) ──
+  const toggleNightExc = async (m: any) => {
+    setExcSaving(m.id + "N");
+    const next = !m.night_fill_excluded;
     const { error } = await supabase
+      .from("members")
+      .update({
+        night_fill_excluded: next,
+        night_fill_excluded_reason: next ? (excMemo[m.id + "N"] || "") : null,
+        night_fill_excluded_at: next ? new Date().toISOString() : null,
+      })
+      .eq("id", m.id);
+    setExcSaving("");
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    setExcList((prev) => prev.map((x) => (x.id === m.id ? { ...x, night_fill_excluded: next } : x)));
+    setRankReload((v) => v + 1);
+    showToast(next ? `${m.name}님을 야간 충당에서 면제했어요` : `${m.name}님이 야간 충당으로 돌아왔어요`, "success");
+  };
+
+  const saveNightMemo = async (m: any) => {
+    const { error } = await supabase
+      .from("members")
+      .update({ night_fill_excluded_reason: excMemo[m.id + "N"] || "" })
+      .eq("id", m.id);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast("야간 면제 사유를 저장했어요", "success");
+  };
+
+  const saveExcMemo = async (m: any) => {    const { error } = await supabase
       .from("members")
       .update({ fill_excluded_reason: excMemo[m.id] || "" })
       .eq("id", m.id);
@@ -19399,6 +19437,7 @@ function OperatorRank() {
   const [rankNight, setRankNight] = useState<Record<string, number>>({});
   // 순서판에서 빠진 사람: 이름 → { why: "제외"|"유고", note: 사유 }
   const [rankOut, setRankOut] = useState<Record<string, { why: string; note: string }>>({});
+  const [nightExc, setNightExc] = useState<Record<string, boolean>>({});
   useEffect(() => {
     (async () => {
       const { data: base } = await supabase
@@ -19423,7 +19462,7 @@ function OperatorRank() {
         .gt("work_date", maxBase);
       const { data: mems } = await supabase
         .from("members")
-        .select("employee_number, name, fill_excluded, fill_excluded_reason");
+        .select("employee_number, name, fill_excluded, fill_excluded_reason, night_fill_excluded");
       const nameOf = new Map<string, string>();
       (mems || []).forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
       // 사업소 명단(members) 기준 — 전출·퇴사자는 명단 정리만 하면 점수판에서 자동 제외 (2026-08-04 확정)
@@ -19456,6 +19495,10 @@ function OperatorRank() {
         out[nm] = { why: "유고", note: `${r.reason || "유고"} (${String(r.work_date).slice(5)}${span})` };
       });
       setRankOut(out);
+      // 야간 면제 = 야간 다이아만 못 하는 사람. 개수판에는 남기되 배지로 표시 (2026-08-05 확정)
+      const nx: Record<string, boolean> = {};
+      (mems || []).forEach((m: any) => { if (m.night_fill_excluded && m.name) nx[String(m.name)] = true; });
+      setNightExc(nx);
       setRankDay(d);
       setRankNight(n);
     })();
@@ -19757,9 +19800,11 @@ function OperatorRank() {
             marginBottom: 12,
           }}
         >
-          진급·직책 등으로 열차를 아예 안 타는 사람만 여기서 끕니다. 아픈 사람·휴직은 「유고 입력」으로 넣으면 기간이 끝날 때 자동으로 돌아옵니다.
+          <b>[전체]</b> — 진급·직책 등으로 열차를 아예 안 타는 사람. 순서판과 [채우기] 양쪽에서 빠집니다.
           <br />
-          스위치를 켜면 순서판과 [채우기] 양쪽에서 바로 빠지고, 끄면 바로 돌아옵니다. 점수는 언제나 그대로 보존됩니다.
+          <b>[야간]</b> — 야간만 못 하는 사람. 야간 다이아 후보에서만 빠지고 <b>주간은 그대로</b> 참여합니다. 개수판에는 「야간면제」 배지로 남습니다.
+          <br />
+          아픈 사람·휴직은 「유고 입력」으로 넣으면 기간이 끝날 때 자동으로 돌아옵니다. 어느 쪽이든 점수는 언제나 그대로 보존됩니다.
         </div>
 
         <input
@@ -19798,30 +19843,80 @@ function OperatorRank() {
                         제외 중
                       </span>
                     )}
+                    {m.night_fill_excluded && (
+                      <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#FFF7ED", color: "#C2410C" }}>
+                        야간면제
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
                     {m.employee_number}
                     {m.work_type ? ` · ${m.work_type}` : ""}
                   </div>
                 </div>
-                <button
-                  onClick={() => toggleExc(m)}
-                  disabled={excSaving === m.id}
-                  style={{
-                    border: 0,
-                    borderRadius: 10,
-                    background: m.fill_excluded ? "#E11D48" : "#F3F4F6",
-                    color: m.fill_excluded ? "#fff" : "#6B7280",
-                    fontSize: 12,
-                    fontWeight: 800,
-                    padding: "9px 14px",
-                    fontFamily: "inherit",
-                    cursor: "pointer",
-                    opacity: excSaving === m.id ? 0.5 : 1,
-                  }}
-                >
-                  {m.fill_excluded ? "제외 중" : "제외"}
-                </button>
+                <div style={{ display: "flex", gap: 6, flex: "none" }}>
+                  <button
+                    onClick={() => toggleNightExc(m)}
+                    disabled={excSaving === m.id + "N"}
+                    style={{
+                      border: 0,
+                      borderRadius: 10,
+                      background: m.night_fill_excluded ? "#C2410C" : "#F3F4F6",
+                      color: m.night_fill_excluded ? "#fff" : "#6B7280",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      padding: "9px 12px",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      opacity: excSaving === m.id + "N" ? 0.5 : 1,
+                    }}
+                  >
+                    야간
+                  </button>
+                  <button
+                    onClick={() => toggleExc(m)}
+                    disabled={excSaving === m.id}
+                    style={{
+                      border: 0,
+                      borderRadius: 10,
+                      background: m.fill_excluded ? "#E11D48" : "#F3F4F6",
+                      color: m.fill_excluded ? "#fff" : "#6B7280",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      padding: "9px 12px",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      opacity: excSaving === m.id ? 0.5 : 1,
+                    }}
+                  >
+                    전체
+                  </button>
+                </div>
+                {m.night_fill_excluded && (
+                  <div style={{ width: "100%", display: "flex", gap: 6, marginTop: 8 }}>
+                    <input
+                      value={excMemo[m.id + "N"] || ""}
+                      onChange={(e) => setExcMemo((p) => ({ ...p, [m.id + "N"]: e.target.value }))}
+                      placeholder="야간 면제 사유 (예: 야간근무 제한 진단)"
+                      style={{
+                        flex: 1,
+                        border: "1px solid #FED7AA",
+                        borderRadius: 10,
+                        padding: "9px 11px",
+                        fontSize: 12.5,
+                        fontFamily: "inherit",
+                        WebkitAppearance: "none",
+                        appearance: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => saveNightMemo(m)}
+                      style={{ border: 0, borderRadius: 10, background: "#FFF7ED", color: "#C2410C", fontSize: 12, fontWeight: 800, padding: "9px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
+                    >
+                      저장
+                    </button>
+                  </div>
+                )}
                 {m.fill_excluded && (
                   <div style={{ width: "100%", display: "flex", gap: 6, marginTop: 8 }}>
                     <input
@@ -20033,7 +20128,14 @@ function OperatorRank() {
               {i + 1}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                {m.name}
+                {nightExc[m.name] && (
+                  <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#FFF7ED", color: "#C2410C" }}>
+                    야간면제
+                  </span>
+                )}
+              </div>
               <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>{m.note}</div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 800, color: OP_TEAL_DARK }}>
@@ -36487,6 +36589,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
   //   대기충당: 대기 횟수 (가중치 없음) · 순위는 횟수 적은 사람이 1위
   //   기준값(fill_score 노사 확인 명부) + 기준일 이후 work_adjust 기록. 명부가 없으면 0에서 앱 기록만 누적.
   const [myFill, setMyFill] = useState<any>(null);
+  const [predScores, setPredScores] = useState<{ day: Record<string, number>; night: Record<string, number> }>({ day: {}, night: {} });
   useEffect(() => {
     if (!user?.name) return;
     if (activeTab !== "대기충당" && activeTab !== "휴무충당") return;
@@ -36554,6 +36657,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       const sorted = names.slice().sort((a, b) => scoreOf(a) - scoreOf(b));
       const my = String(user.name);
       const idx = sorted.indexOf(my);
+      setPredScores({ day: d, night: n }); // 날짜별 예상순위가 같은 재료를 본다 (미러링)
       setMyFill({
         kind,
         day: d[my] || 0,
@@ -36567,6 +36671,82 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       });
     })();
   }, [activeTab, user?.name, user?.employee_number, records]);
+
+  // ── 그 날짜 예상 순위 (휴무충당 전용 · 2026-08-05) ──
+  //   실제 배정은 "그날 휴무인 사람들" 중에서만 이뤄지므로, 전체 순위보다 이 숫자가 훨씬 쓸모 있다.
+  //   순서판(운용)과 완전히 같은 산식: 주간 다이아 = 합산점수 낮은 순 / 야간 다이아 = 야간 개수 → 합산점수
+  //   ※ 예상일 뿐 — 그날 결원 수·대기충당 선처리에 따라 실제 배정은 달라질 수 있음
+  const [predDate, setPredDate] = useState("");
+  const [predLoading, setPredLoading] = useState(false);
+  const [predResult, setPredResult] = useState<any>(null);
+  const runPredict = async () => {
+    if (!predDate || !myFill) return;
+    setPredLoading(true);
+    setPredResult(null);
+    const target = new Date(predDate + "T00:00:00");
+    const [mRes, rRes, hRes, swRes, sbRes, lvRes, abRes] = await Promise.all([
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type, shift_team, fill_excluded, night_fill_excluded"),
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_start_history").select("*"),
+      supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+      supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("leave_history").select("employee_number").eq("used_date", predDate).neq("status", "취소"),
+      supabase.from("operator_absence").select("employee_number").lte("work_date", predDate).gte("end_date", predDate),
+    ]);
+    const all = mRes.data || [];
+    const kyobun = all.filter((m: any) => m.work_type === "교번" && m.start_position != null);
+    const offEmps = new Set<string>();
+    (lvRes.data || []).forEach((r: any) => offEmps.add(String(r.employee_number)));
+    (abRes.data || []).forEach((r: any) => offEmps.add(String(r.employee_number)));
+    const cands: any[] = [];
+    all.forEach((m: any) => {
+      if (String(m.name || "").includes("결원")) return;
+      if (m.fill_excluded) return;
+      if (offEmps.has(String(m.employee_number))) return;
+      if (m.work_type === "교번") {
+        if (m.start_position == null) return;
+        const w = calcKyobunWork(m, target, rRes.data || [], swRes.data || [], kyobun, hRes.data || []);
+        if (!w || w.type !== "휴무") return;
+        cands.push({
+          name: m.name,
+          nightOk: !m.night_fill_excluded,
+          hyuNo: Number(String(w.dia).replace(/[^0-9]/g, "")) || 0,
+        });
+      } else if (m.work_type === "교대" && m.shift_team) {
+        if (calcShiftWork(m.shift_team, target, sbRes.data || null) !== "휴무") return;
+        cands.push({ name: m.name, nightOk: !m.night_fill_excluded, hyuNo: 0 });
+      }
+    });
+    // 점수는 이미 계산해 둔 것을 그대로 사용 (myFill과 같은 재료 = 미러링)
+    const dMap = predScores.day;
+    const nMap = predScores.night;
+    const scoreOf = (nm: string) => (dMap[nm] || 0) + (nMap[nm] || 0) * 1.8;
+    const my = String(user?.name || "");
+    const dayList = cands
+      .slice()
+      .sort((a, b) => (scoreOf(a.name) - scoreOf(b.name)) || (b.hyuNo - a.hyuNo));
+    const nightList = cands
+      .filter((c) => c.nightOk)
+      .sort(
+        (a, b) =>
+          ((nMap[a.name] || 0) - (nMap[b.name] || 0)) ||
+          (scoreOf(a.name) - scoreOf(b.name)) ||
+          (b.hyuNo - a.hyuNo)
+      );
+    const dIdx = dayList.findIndex((c) => c.name === my);
+    const nIdx = nightList.findIndex((c) => c.name === my);
+    setPredResult({
+      offToday: dIdx >= 0,
+      dayRank: dIdx >= 0 ? dIdx + 1 : null,
+      dayTotal: dayList.length,
+      nightRank: nIdx >= 0 ? nIdx + 1 : null,
+      nightTotal: nightList.length,
+      nightExempt: dIdx >= 0 && nIdx < 0,
+    });
+    setPredLoading(false);
+  };
 
   // 기록 불러오기 (work_adjust 테이블)
   useEffect(() => {
@@ -37136,6 +37316,81 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
               <br />
               · 순위는 사업소 재직자 기준 (결원·유고·제외자 빠짐) · 궁금한 점은 지회로 문의하세요
             </div>
+
+            {/* 날짜별 예상 순위 (휴무충당 전용) */}
+            {activeTab === "휴무충당" && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: "#111827", marginBottom: 8 }}>
+                  📅 그날 예상 순위 보기
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="date"
+                    value={predDate}
+                    onChange={(e) => { setPredDate(e.target.value); setPredResult(null); }}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 10,
+                      padding: "10px 11px",
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      WebkitAppearance: "none",
+                      appearance: "none",
+                    }}
+                  />
+                  <button
+                    onClick={runPredict}
+                    disabled={!predDate || predLoading}
+                    style={{
+                      border: 0,
+                      borderRadius: 10,
+                      background: predDate ? "#4F46E5" : "#E5E7EB",
+                      color: predDate ? "#fff" : "#9CA3AF",
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      padding: "10px 15px",
+                      fontFamily: "inherit",
+                      cursor: predDate ? "pointer" : "default",
+                      flex: "none",
+                    }}
+                  >
+                    {predLoading ? "계산 중…" : "확인"}
+                  </button>
+                </div>
+
+                {predResult && (
+                  <div style={{ marginTop: 10 }}>
+                    {!predResult.offToday ? (
+                      <div style={{ background: "#F8FAFC", borderRadius: 12, padding: "13px 14px", fontSize: 12.5, color: "#6B7280", fontWeight: 600, lineHeight: 1.7 }}>
+                        그날은 휴무일이 아니에요. 휴무충당은 휴무인 날에만 걸립니다.
+                        <br />
+                        (휴가·유고가 있는 날도 대상에서 빠집니다)
+                      </div>
+                    ) : (
+                      <div style={{ background: "#EEF0FF", borderRadius: 12, padding: "13px 14px" }}>
+                        <div style={{ fontSize: 12.5, color: "#4F46E5", fontWeight: 800, marginBottom: 6 }}>
+                          {predDate} 휴무자 기준 예상
+                        </div>
+                        <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", lineHeight: 1.6 }}>
+                          주간 다이아 — {predResult.dayTotal}명 중 <span style={{ color: "#4F46E5" }}>{predResult.dayRank}위</span>
+                          <br />
+                          {predResult.nightExempt ? (
+                            <span style={{ fontSize: 13.5, color: "#C2410C" }}>야간 다이아 — 야간 면제 대상</span>
+                          ) : (
+                            <>야간 다이아 — {predResult.nightTotal}명 중 <span style={{ color: "#4F46E5" }}>{predResult.nightRank}위</span></>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.7, marginTop: 8 }}>
+                          ⚠️ 예상입니다. 그날 빈 자리 수, 대기충당으로 먼저 메워지는지, 지정·지원근무 신청 여부에 따라 실제 배정은 달라집니다.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
