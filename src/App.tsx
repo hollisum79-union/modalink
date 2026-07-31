@@ -15772,21 +15772,51 @@ function OperatorHome({ opName }: { opName: string }) {
   }, [fillDia, targetStr, opHolidays]);
   const [assigned, setAssigned] = useState<Record<string, { name: string; via: string; emp?: string }>>({});
 
-  // ── 휴무충당 횟수 (operator_assign 기록 기반 · 다들 0부터 시작 · 기준점수 입력은 나중에) ──
-  const [fillCounts, setFillCounts] = useState<Record<string, number>>({});
+  // ── 휴무충당 점수 (2026-08-04 점수제 전환) ──
+  //   점수 = 주간×1 + 야간×1.8 (회사 엑셀 역산으로 검증된 공식)
+  //   = fill_score 기준값(엑셀, 기준일 8/2) + 기준일 이후 work_adjust 휴무충당 기록
+  //   work_adjust는 운용 배정·본인 입력이 모이는 통합 원장 — 취소는 행 삭제라 자동 정합
+  const [fillCounts, setFillCounts] = useState<Record<string, number>>({}); // 합산 점수
+  const [fillNight, setFillNight] = useState<Record<string, number>>({});   // 야간 갯수 (야간 충당 1차 정렬용)
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("operator_assign")
-        .select("filled_name, action")
-        .eq("via", "휴무충당");
-      const c: Record<string, number> = {};
-      (data || []).forEach((r: any) => {
-        c[r.filled_name] = (c[r.filled_name] || 0) + (r.action === "cancel" ? -1 : 1);
+      const { data: base } = await supabase
+        .from("fill_score")
+        .select("name, day_cnt, night_cnt, base_date")
+        .eq("kind", "holiday")
+        .order("base_date", { ascending: false });
+      const dayC: Record<string, number> = {};
+      const nightC: Record<string, number> = {};
+      const took = new Set<string>();
+      (base || []).forEach((r: any) => {
+        if (took.has(r.name)) return; // 같은 이름은 최신 기준일 것만
+        took.add(r.name);
+        dayC[r.name] = Number(r.day_cnt) || 0;
+        nightC[r.name] = Number(r.night_cnt) || 0;
       });
-      setFillCounts(c);
+      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
+      // 기준일 이후 앱 기록 누적 (이중 카운트 방지: 기준일 이전 기록은 이미 엑셀 점수에 포함)
+      const { data: adds } = await supabase
+        .from("work_adjust")
+        .select("employee_number, work_shift, work_date")
+        .eq("adjust_type", "holiday_fill")
+        .gt("work_date", maxBase);
+      (adds || []).forEach((r: any) => {
+        const mm = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(r.employee_number));
+        if (!mm || !mm.name) return;
+        if (r.work_shift === "야간") nightC[mm.name] = (nightC[mm.name] || 0) + 1;
+        else dayC[mm.name] = (dayC[mm.name] || 0) + 1;
+      });
+      const sc: Record<string, number> = {};
+      const ng: Record<string, number> = {};
+      new Set([...Object.keys(dayC), ...Object.keys(nightC)]).forEach((nm) => {
+        sc[nm] = (dayC[nm] || 0) + (nightC[nm] || 0) * 1.8;
+        ng[nm] = nightC[nm] || 0;
+      });
+      setFillCounts(sc);
+      setFillNight(ng);
     })();
-  }, [targetStr, assigned]);
+  }, [targetStr, assigned, opAllMembers]);
 
   // ── 배정 기록 복원 (operator_assign · append-only · 그 날짜의 마지막 상태) ──
   useEffect(() => {
@@ -16491,10 +16521,12 @@ function OperatorHome({ opName }: { opName: string }) {
         return {
           name: m.name,
           emp: String(m.employee_number),
-          pts: `충당 ${fillCounts[m.name] || 0}회`,
+          pts: `${(fillCounts[m.name] || 0).toFixed(1)}점`,
           note: `기관사 · ${String(w.dia)}`,
           warn,
           cnt: fillCounts[m.name] || 0,
+          nightCnt: fillNight[m.name] || 0,
+          hyuNo: Number(String(w.dia).replace(/[^0-9]/g, "")) || 0, // 휴무번호 (동점 시 큰 순)
           isKyobun: true,
         };
       })
@@ -16515,10 +16547,12 @@ function OperatorHome({ opName }: { opName: string }) {
         return {
           name: m.name,
           emp: String(m.employee_number),
-          pts: `충당 ${fillCounts[m.name] || 0}회`,
+          pts: `${(fillCounts[m.name] || 0).toFixed(1)}점`,
           note: `교대 ${m.shift_team}조`,
           warn,
           cnt: fillCounts[m.name] || 0,
+          nightCnt: fillNight[m.name] || 0,
+          hyuNo: 0, // 교대 휴무는 번호 없음 → 동점이면 교번(휴무번호 있는 쪽)이 먼저
           isKyobun: false,
         };
       })
@@ -16530,8 +16564,12 @@ function OperatorHome({ opName }: { opName: string }) {
     );
     const restCands = [...restKyobun, ...restShift]
       .sort((a: any, b: any) => {
+        // ── 휴무충당 순서 (2026-08-04 확정 · 회사 실규칙) ──
+        // 주간 다이아: 합산점수(주+야×1.8) 적은 순 → 동점: 휴무번호 큰 순
+        // 야간 다이아: 야간 갯수 적은 순 → 동점: 합산점수 → 또 동점: 휴무번호 큰 순
+        if (s === "야간" && (a.nightCnt || 0) !== (b.nightCnt || 0)) return (a.nightCnt || 0) - (b.nightCnt || 0);
         if (a.cnt !== b.cnt) return a.cnt - b.cnt;
-        return a.isKyobun === b.isKyobun ? 0 : a.isKyobun ? -1 : 1; // 같으면 기관사 먼저
+        return (b.hyuNo || 0) - (a.hyuNo || 0);
       })
       .filter(
         (c: any) =>
@@ -16911,7 +16949,7 @@ function OperatorHome({ opName }: { opName: string }) {
           </div>
         </div>
 
-        <div style={secTtl}>④ 휴무충당 후보 (충당 횟수 적은 순 · 같으면 기관사 먼저)</div>
+        <div style={secTtl}>④ 휴무충당 후보 (주간: 점수 적은 순 / 야간: 야간 갯수 → 점수 · 동점 시 휴무번호 큰 순)</div>
         <div style={card}>
           {restCands.map((c, i) => (
             <div key={c.name} style={{ ...row, borderBottom: i === restCands.length - 1 ? 0 : row.borderBottom }}>
