@@ -16521,7 +16521,7 @@ function OperatorHome({ opName }: { opName: string }) {
         return {
           name: m.name,
           emp: String(m.employee_number),
-          pts: `${(fillCounts[m.name] || 0).toFixed(1)}점`,
+          pts: `야간 ${fillNight[m.name] || 0}개 · ${(fillCounts[m.name] || 0).toFixed(1)}점`,
           note: `기관사 · ${String(w.dia)}`,
           warn,
           cnt: fillCounts[m.name] || 0,
@@ -16547,7 +16547,7 @@ function OperatorHome({ opName }: { opName: string }) {
         return {
           name: m.name,
           emp: String(m.employee_number),
-          pts: `${(fillCounts[m.name] || 0).toFixed(1)}점`,
+          pts: `야간 ${fillNight[m.name] || 0}개 · ${(fillCounts[m.name] || 0).toFixed(1)}점`,
           note: `교대 ${m.shift_team}조`,
           warn,
           cnt: fillCounts[m.name] || 0,
