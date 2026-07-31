@@ -15201,12 +15201,12 @@ function OperatorHome({ opName }: { opName: string }) {
       const [mRes, rRes, hRes, sRes, allRes, sbRes] = await Promise.all([
         supabase
           .from("members")
-          .select("id, name, employee_number, work_group, start_position, schedule_total, work_type")
+          .select("id, name, employee_number, work_group, start_position, schedule_total, work_type, fill_excluded, night_fill_excluded")
           .eq("work_type", "교번"),
         supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
         supabase.from("kyobun_start_history").select("*"),
         supabase.from("kyobun_swap").select("*").eq("status", "수락"),
-        supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team, tongsang_base_date, tongsang_base_dia"),
+        supabase.from("members").select("id, name, employee_number, work_group, work_type, shift_team, tongsang_base_date, tongsang_base_dia, fill_excluded, night_fill_excluded"),
         supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       setOpMembers((mRes.data || []).filter((m: any) => m.start_position != null));
@@ -15772,21 +15772,51 @@ function OperatorHome({ opName }: { opName: string }) {
   }, [fillDia, targetStr, opHolidays]);
   const [assigned, setAssigned] = useState<Record<string, { name: string; via: string; emp?: string }>>({});
 
-  // ── 휴무충당 횟수 (operator_assign 기록 기반 · 다들 0부터 시작 · 기준점수 입력은 나중에) ──
-  const [fillCounts, setFillCounts] = useState<Record<string, number>>({});
+  // ── 휴무충당 점수 (2026-08-04 점수제 전환) ──
+  //   점수 = 주간×1 + 야간×1.8 (회사 엑셀 역산으로 검증된 공식)
+  //   = fill_score 기준값(엑셀, 기준일 8/2) + 기준일 이후 work_adjust 휴무충당 기록
+  //   work_adjust는 운용 배정·본인 입력이 모이는 통합 원장 — 취소는 행 삭제라 자동 정합
+  const [fillCounts, setFillCounts] = useState<Record<string, number>>({}); // 합산 점수
+  const [fillNight, setFillNight] = useState<Record<string, number>>({});   // 야간 갯수 (야간 충당 1차 정렬용)
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("operator_assign")
-        .select("filled_name, action")
-        .eq("via", "휴무충당");
-      const c: Record<string, number> = {};
-      (data || []).forEach((r: any) => {
-        c[r.filled_name] = (c[r.filled_name] || 0) + (r.action === "cancel" ? -1 : 1);
+      const { data: base } = await supabase
+        .from("fill_score")
+        .select("name, day_cnt, night_cnt, base_date")
+        .eq("kind", "holiday")
+        .order("base_date", { ascending: false });
+      const dayC: Record<string, number> = {};
+      const nightC: Record<string, number> = {};
+      const took = new Set<string>();
+      (base || []).forEach((r: any) => {
+        if (took.has(r.name)) return; // 같은 이름은 최신 기준일 것만
+        took.add(r.name);
+        dayC[r.name] = Number(r.day_cnt) || 0;
+        nightC[r.name] = Number(r.night_cnt) || 0;
       });
-      setFillCounts(c);
+      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
+      // 기준일 이후 앱 기록 누적 (이중 카운트 방지: 기준일 이전 기록은 이미 엑셀 점수에 포함)
+      const { data: adds } = await supabase
+        .from("work_adjust")
+        .select("employee_number, work_shift, work_date")
+        .eq("adjust_type", "holiday_fill")
+        .gt("work_date", maxBase);
+      (adds || []).forEach((r: any) => {
+        const mm = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(r.employee_number));
+        if (!mm || !mm.name) return;
+        if (r.work_shift === "야간") nightC[mm.name] = (nightC[mm.name] || 0) + 1;
+        else dayC[mm.name] = (dayC[mm.name] || 0) + 1;
+      });
+      const sc: Record<string, number> = {};
+      const ng: Record<string, number> = {};
+      new Set([...Object.keys(dayC), ...Object.keys(nightC)]).forEach((nm) => {
+        sc[nm] = (dayC[nm] || 0) + (nightC[nm] || 0) * 1.8;
+        ng[nm] = nightC[nm] || 0;
+      });
+      setFillCounts(sc);
+      setFillNight(ng);
     })();
-  }, [targetStr, assigned]);
+  }, [targetStr, assigned, opAllMembers]);
 
   // ── 배정 기록 복원 (operator_assign · append-only · 그 날짜의 마지막 상태) ──
   useEffect(() => {
@@ -16475,6 +16505,8 @@ function OperatorHome({ opName }: { opName: string }) {
     const restKyobun = opMembers
       .map((m) => {
         if (String(m.name).includes("결원")) return null;
+        if (m.fill_excluded) return null; // 충당 제외(진급·직책 등 무기한) — 순서판과 같은 기준
+        if (s === "야간" && m.night_fill_excluded) return null; // 야간 면제자는 야간 다이아 후보에서만 빠짐
         if (restOffEmps.has(String(m.employee_number))) return null; // 그날 휴가·유고
         const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
         if (!w || w.type !== "휴무") return null;
@@ -16491,10 +16523,12 @@ function OperatorHome({ opName }: { opName: string }) {
         return {
           name: m.name,
           emp: String(m.employee_number),
-          pts: `충당 ${fillCounts[m.name] || 0}회`,
+          pts: `야간 ${fillNight[m.name] || 0}개 · ${(fillCounts[m.name] || 0).toFixed(1)}점`,
           note: `기관사 · ${String(w.dia)}`,
           warn,
           cnt: fillCounts[m.name] || 0,
+          nightCnt: fillNight[m.name] || 0,
+          hyuNo: Number(String(w.dia).replace(/[^0-9]/g, "")) || 0, // 휴무번호 (동점 시 큰 순)
           isKyobun: true,
         };
       })
@@ -16504,6 +16538,8 @@ function OperatorHome({ opName }: { opName: string }) {
       .map((m) => {
         if (m.work_type !== "교대" || !m.shift_team) return null;
         if (String(m.name).includes("결원")) return null;
+        if (m.fill_excluded) return null; // 충당 제외(진급·직책 등 무기한) — 순서판과 같은 기준
+        if (s === "야간" && m.night_fill_excluded) return null; // 야간 면제자는 야간 다이아 후보에서만 빠짐
         if (restOffEmps.has(String(m.employee_number))) return null;
         if (calcShiftWork(m.shift_team, target, opShiftBase) !== "휴무") return null;
         let warn = "";
@@ -16515,10 +16551,12 @@ function OperatorHome({ opName }: { opName: string }) {
         return {
           name: m.name,
           emp: String(m.employee_number),
-          pts: `충당 ${fillCounts[m.name] || 0}회`,
+          pts: `야간 ${fillNight[m.name] || 0}개 · ${(fillCounts[m.name] || 0).toFixed(1)}점`,
           note: `교대 ${m.shift_team}조`,
           warn,
           cnt: fillCounts[m.name] || 0,
+          nightCnt: fillNight[m.name] || 0,
+          hyuNo: 0, // 교대 휴무는 번호 없음 → 동점이면 교번(휴무번호 있는 쪽)이 먼저
           isKyobun: false,
         };
       })
@@ -16530,8 +16568,12 @@ function OperatorHome({ opName }: { opName: string }) {
     );
     const restCands = [...restKyobun, ...restShift]
       .sort((a: any, b: any) => {
+        // ── 휴무충당 순서 (2026-08-04 확정 · 회사 실규칙) ──
+        // 주간 다이아: 합산점수(주+야×1.8) 적은 순 → 동점: 휴무번호 큰 순
+        // 야간 다이아: 야간 갯수 적은 순 → 동점: 합산점수 → 또 동점: 휴무번호 큰 순
+        if (s === "야간" && (a.nightCnt || 0) !== (b.nightCnt || 0)) return (a.nightCnt || 0) - (b.nightCnt || 0);
         if (a.cnt !== b.cnt) return a.cnt - b.cnt;
-        return a.isKyobun === b.isKyobun ? 0 : a.isKyobun ? -1 : 1; // 같으면 기관사 먼저
+        return (b.hyuNo || 0) - (a.hyuNo || 0);
       })
       .filter(
         (c: any) =>
@@ -16911,7 +16953,7 @@ function OperatorHome({ opName }: { opName: string }) {
           </div>
         </div>
 
-        <div style={secTtl}>④ 휴무충당 후보 (충당 횟수 적은 순 · 같으면 기관사 먼저)</div>
+        <div style={secTtl}>④ 휴무충당 후보 (주간: 점수 적은 순 / 야간: 야간 갯수 → 점수 · 동점 시 휴무번호 큰 순)</div>
         <div style={card}>
           {restCands.map((c, i) => (
             <div key={c.name} style={{ ...row, borderBottom: i === restCands.length - 1 ? 0 : row.borderBottom }}>
@@ -17352,7 +17394,49 @@ function OperatorHome({ opName }: { opName: string }) {
     );
   });
 
+  // ── 오늘 휴가·유고 전체 카드 (표시 전용 · 접이식 · 이미 로드된 opLeaves/opAbsences 사용) ──
+  const [offOpen, setOffOpen] = useState(false);
+  const offNameOf = (e: any) => { const m = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(e)); return m ? m.name : String(e); };
+  const offCard = (
+    <div style={{ background: "#fff", borderRadius: 18, padding: "14px 16px", marginBottom: 14 }}>
+      <div onClick={() => setOffOpen(!offOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+        <span style={{ fontSize: 14, fontWeight: 800 }}>🏖 오늘 휴가·유고</span>
+        <span style={{ fontSize: 11, fontWeight: 700 }}>
+          {opLeaves.length === 0 && opAbsences.length === 0 ? (
+            <span style={{ background: "#F3F4F6", color: "#9CA3AF", borderRadius: 8, padding: "3px 8px" }}>없음</span>
+          ) : (
+            <>
+              <span style={{ background: "#EEF0FF", color: "#4F46E5", borderRadius: 8, padding: "3px 8px" }}>휴가 {opLeaves.length}</span>
+              <span style={{ background: "#FFF1F2", color: "#E11D48", borderRadius: 8, padding: "3px 8px", marginLeft: 5 }}>유고 {opAbsences.length}</span>
+            </>
+          )}
+          <span style={{ color: "#9CA3AF", marginLeft: 7 }}>{offOpen ? "▲" : "▼"}</span>
+        </span>
+      </div>
+      {offOpen && (
+        <div style={{ marginTop: 6 }}>
+          {opLeaves.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>휴가</div>}
+          {opLeaves.map((lv: any, i: number) => (
+            <div key={"lv" + i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{offNameOf(lv.employee_number)}</span>
+              <span style={{ color: "#4F46E5", fontSize: 12, fontWeight: 700 }}>{lv.leave_type || "휴가"}</span>
+            </div>
+          ))}
+          {opAbsences.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>유고</div>}
+          {opAbsences.map((ab: any, i: number) => (
+            <div key={"ab" + i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{ab.member_name || offNameOf(ab.employee_number)}</span>
+              <span style={{ color: "#E11D48", fontSize: 12, fontWeight: 700 }}>{ab.reason || "유고"} · {String(ab.work_date || "").slice(5)}{ab.end_date ? ` ~ ${String(ab.end_date).slice(5)}` : ""}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const inputBtn = (
+    <>
+    {offCard}
     <button
       onClick={() => setShowAbsence(true)}
       style={{
@@ -17371,6 +17455,7 @@ function OperatorHome({ opName }: { opName: string }) {
     >
       + 휴가 · 유고 입력
     </button>
+    </>
   );
 
   const stampCard = (
@@ -19077,6 +19162,29 @@ function OperatorRank() {
   const [instrCount, setInstrCount] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const [saving, setSaving] = useState("");
+  // ── 충당 제외 관리 (2026-08-05) ──
+  //   ① fill_excluded = 진급·직책 등으로 열차를 안 타는 사람 (무기한 · 스위치)
+  //   ② 유고(operator_absence) = 기간이 있는 결근 → 기간 끝나면 자동 복귀 (스위치 불필요)
+  //   두 경우 모두 점수는 그대로 보존 — 순서판·[채우기]에서 빼기만 함
+  const [excOpen, setExcOpen] = useState(false);
+  const [excList, setExcList] = useState<any[]>([]);
+  const [excQ, setExcQ] = useState("");
+  const [excSaving, setExcSaving] = useState("");
+  const [excMemo, setExcMemo] = useState<Record<string, string>>({});
+  const [rankReload, setRankReload] = useState(0);
+  const [outOpen, setOutOpen] = useState(false);
+  // ── 신규·전입 평균 부여 (2026-08-05) ──
+  //   단독 발령 후 3개월이 되면 0이 아니라 그 시점 직원 평균값으로 시작한다 (노사 확정 규칙)
+  //   야간 = 평균 개수(정수) → 주간 = 평균 합산점수 − 야간분 (소수 1자리)
+  //   → 주간판(합산점수)·야간판(야간개수) 양쪽에서 정확히 평균 자리에 놓인다
+  const [avgOpen, setAvgOpen] = useState(false);
+  const [avgKind, setAvgKind] = useState<"holiday" | "standby">("holiday");
+  const [avgStat, setAvgStat] = useState<any>(null);
+  const [avgTodo, setAvgTodo] = useState<any[]>([]);
+  const [avgQ, setAvgQ] = useState("");
+  const [avgLoading, setAvgLoading] = useState(false);
+  const [avgSaving, setAvgSaving] = useState("");
+  const [avgConfirm, setAvgConfirm] = useState<any>(null);
 
   const loadCount = async () => {
     const { count } = await supabase
@@ -19118,6 +19226,284 @@ function OperatorRank() {
     loadCount();
   };
 
+  // ── 충당 제외 스위치 (진급·직책 등 무기한) ──
+  const openExc = async () => {
+    const { data, error } = await supabase
+      .from("members")
+      .select("id, name, employee_number, work_type, fill_excluded, fill_excluded_reason, night_fill_excluded, night_fill_excluded_reason")
+      .order("name", { ascending: true });
+    if (error) {
+      showToast("불러오기 실패: " + error.message, "error");
+      return;
+    }
+    const rows = (data || []).filter((m: any) => !String(m.name || "").includes("결원"));
+    setExcList(rows);
+    const memo: Record<string, string> = {};
+    rows.forEach((m: any) => {
+      memo[m.id] = String(m.fill_excluded_reason || "");
+      memo[m.id + "N"] = String(m.night_fill_excluded_reason || "");
+    });
+    setExcMemo(memo);
+    setExcOpen(true);
+  };
+
+  const toggleExc = async (m: any) => {
+    setExcSaving(m.id);
+    const next = !m.fill_excluded;
+    const { error } = await supabase
+      .from("members")
+      .update({
+        fill_excluded: next,
+        fill_excluded_reason: next ? (excMemo[m.id] || "") : null,
+        fill_excluded_at: next ? new Date().toISOString() : null,
+      })
+      .eq("id", m.id);
+    setExcSaving("");
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    setExcList((prev) => prev.map((x) => (x.id === m.id ? { ...x, fill_excluded: next } : x)));
+    setRankReload((v) => v + 1); // 순서판 즉시 반영
+    showToast(next ? `${m.name}님을 충당 순서에서 제외했어요` : `${m.name}님이 충당 순서로 돌아왔어요`, "success");
+  };
+
+  // ── 야간 면제 스위치 (야간 다이아만 못 하는 사람 · 주간은 정상 참여) ──
+  const toggleNightExc = async (m: any) => {
+    setExcSaving(m.id + "N");
+    const next = !m.night_fill_excluded;
+    const { error } = await supabase
+      .from("members")
+      .update({
+        night_fill_excluded: next,
+        night_fill_excluded_reason: next ? (excMemo[m.id + "N"] || "") : null,
+        night_fill_excluded_at: next ? new Date().toISOString() : null,
+      })
+      .eq("id", m.id);
+    setExcSaving("");
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    setExcList((prev) => prev.map((x) => (x.id === m.id ? { ...x, night_fill_excluded: next } : x)));
+    setRankReload((v) => v + 1);
+    showToast(next ? `${m.name}님을 야간 충당에서 면제했어요` : `${m.name}님이 야간 충당으로 돌아왔어요`, "success");
+  };
+
+  const saveNightMemo = async (m: any) => {
+    const { error } = await supabase
+      .from("members")
+      .update({ night_fill_excluded_reason: excMemo[m.id + "N"] || "" })
+      .eq("id", m.id);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast("야간 면제 사유를 저장했어요", "success");
+  };
+
+  const saveExcMemo = async (m: any) => {    const { error } = await supabase
+      .from("members")
+      .update({ fill_excluded_reason: excMemo[m.id] || "" })
+      .eq("id", m.id);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    setRankReload((v) => v + 1);
+    showToast("사유를 저장했어요", "success");
+  };
+
+  // ── 신규·전입 평균 부여: 오늘 기준 평균 산정 + 미부여 대상 찾기 ──
+  //   모집단 = 사업소 재직자 (결원·충당제외자 뺌 / 유고는 일시적이라 포함 — 2026-08-05 확정)
+  const loadAvg = async (kind: "holiday" | "standby") => {
+    setAvgLoading(true);
+    const adjType = kind === "holiday" ? "holiday_fill" : "standby";
+    const W = kind === "holiday" ? 1.8 : 1; // 대기충당은 가중치 없음
+    const [baseRes, memRes] = await Promise.all([
+      supabase
+        .from("fill_score")
+        .select("name, day_cnt, night_cnt, base_date")
+        .eq("kind", kind)
+        .order("base_date", { ascending: false }),
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_type, fill_excluded"),
+    ]);
+    const base = baseRes.data || [];
+    const mems = memRes.data || [];
+    const d: Record<string, number> = {};
+    const n: Record<string, number> = {};
+    const took = new Set<string>();
+    base.forEach((r: any) => {
+      if (took.has(r.name)) return;
+      took.add(r.name);
+      d[r.name] = Number(r.day_cnt) || 0;
+      n[r.name] = Number(r.night_cnt) || 0;
+    });
+    const maxBase = base.length ? String(base[0].base_date) : "1970-01-01";
+    const { data: adds } = await supabase
+      .from("work_adjust")
+      .select("employee_number, work_shift")
+      .eq("adjust_type", adjType)
+      .gt("work_date", maxBase);
+    const nameOf = new Map<string, string>();
+    mems.forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
+    const memberNames = new Set(mems.map((m: any) => String(m.name)));
+    Object.keys(d).forEach((nm) => { if (!memberNames.has(nm)) { delete d[nm]; delete n[nm]; } });
+    Object.keys(n).forEach((nm) => { if (!memberNames.has(nm)) { delete d[nm]; delete n[nm]; } });
+    (adds || []).forEach((r: any) => {
+      const nm = nameOf.get(String(r.employee_number));
+      if (!nm) return;
+      if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
+      else d[nm] = (d[nm] || 0) + 1;
+    });
+    const excSet = new Set<string>();
+    mems.forEach((m: any) => { if (m.fill_excluded && m.name) excSet.add(String(m.name)); });
+    // Set 전개는 CRA 빌드가 거부 (TS2569) → Object.keys 병합 유지
+    const pop = Object.keys({ ...d, ...n }).filter(
+      (nm) => !nm.includes("결원") && !excSet.has(nm)
+    );
+    const scoreOf = (nm: string) => (d[nm] || 0) + (n[nm] || 0) * W;
+    let sumS = 0;
+    let sumN = 0;
+    pop.forEach((nm) => { sumS += scoreOf(nm); sumN += n[nm] || 0; });
+    const avgScore = pop.length ? sumS / pop.length : 0;
+    const avgNight = pop.length ? sumN / pop.length : 0;
+    const nightGive = Math.round(avgNight);
+    const dayGive = Math.max(0, Math.round((avgScore - nightGive * W) * 10) / 10);
+    setAvgStat({
+      kind,
+      W,
+      pop: pop.length,
+      avgScore,
+      avgNight,
+      dayGive,
+      nightGive,
+      check: dayGive + nightGive * W,
+    });
+    // 미부여 대상: 충당 대상 근무형태(교번·교대) 중 아직 점수가 하나도 없는 사람
+    //   통상은 충당 대상이 아니고, 충당 제외자는 목록에서도 뺀다 (2026-08-05 확정)
+    const has = (nm: string) => d[nm] !== undefined || n[nm] !== undefined;
+    setAvgTodo(
+      mems
+        .filter(
+          (m: any) =>
+            (m.work_type === "교번" || m.work_type === "교대") &&
+            !m.fill_excluded &&
+            !String(m.name || "").includes("결원") &&
+            !has(String(m.name))
+        )
+        .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
+    );
+    setAvgLoading(false);
+  };
+
+  const openAvg = async () => {
+    setAvgOpen(true);
+    setAvgQ("");
+    await loadAvg(avgKind);
+  };
+
+  const giveAvg = async (m: any) => {
+    if (!avgStat) return;
+    setAvgSaving(m.id);
+    const today = todayLocalStr();
+    const note =
+      `신규·전입 평균 부여 · ${today} 기준 · 모집단 ${avgStat.pop}명 · ` +
+      `평균 합산 ${avgStat.avgScore.toFixed(2)}점 · 평균 야간 ${avgStat.avgNight.toFixed(2)}개`;
+    const { error } = await supabase.from("fill_score").insert({
+      name: m.name,
+      kind: avgStat.kind,
+      day_cnt: avgStat.dayGive,
+      night_cnt: avgStat.nightGive,
+      base_date: today,
+      note,
+    });
+    setAvgSaving("");
+    setAvgConfirm(null);
+    if (error) {
+      showToast("저장 실패: " + error.message, "error");
+      return;
+    }
+    showToast(`${m.name}님에게 평균값을 부여했어요`, "success");
+    setRankReload((v) => v + 1);
+    await loadAvg(avgStat.kind);
+  };
+
+  // ── 실데이터 (2026-08-04 점수제): fill_score 엑셀 기준 + 기준일 이후 work_adjust 휴무충당 누적 ──
+  //   점수 = 주간×1 + 야간×1.8 · 결원 제외 · [채우기] 화면과 같은 재료를 본다 (미러)
+  const [rankDay, setRankDay] = useState<Record<string, number>>({});
+  const [rankNight, setRankNight] = useState<Record<string, number>>({});
+  // 순서판에서 빠진 사람: 이름 → { why: "제외"|"유고", note: 사유 }
+  const [rankOut, setRankOut] = useState<Record<string, { why: string; note: string }>>({});
+  const [nightExc, setNightExc] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    (async () => {
+      const { data: base } = await supabase
+        .from("fill_score")
+        .select("name, day_cnt, night_cnt, base_date")
+        .eq("kind", "holiday")
+        .order("base_date", { ascending: false });
+      const d: Record<string, number> = {};
+      const n: Record<string, number> = {};
+      const took = new Set<string>();
+      (base || []).forEach((r: any) => {
+        if (took.has(r.name)) return;
+        took.add(r.name);
+        d[r.name] = Number(r.day_cnt) || 0;
+        n[r.name] = Number(r.night_cnt) || 0;
+      });
+      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
+      const { data: adds } = await supabase
+        .from("work_adjust")
+        .select("employee_number, work_shift")
+        .eq("adjust_type", "holiday_fill")
+        .gt("work_date", maxBase);
+      const { data: mems } = await supabase
+        .from("members")
+        .select("employee_number, name, fill_excluded, fill_excluded_reason, night_fill_excluded");
+      const nameOf = new Map<string, string>();
+      (mems || []).forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
+      // 사업소 명단(members) 기준 — 전출·퇴사자는 명단 정리만 하면 점수판에서 자동 제외 (2026-08-04 확정)
+      const memberNameSet = new Set((mems || []).map((m: any) => String(m.name)));
+      Object.keys(d).forEach((nm) => { if (!memberNameSet.has(nm)) { delete d[nm]; delete n[nm]; } });
+      Object.keys(n).forEach((nm) => { if (!memberNameSet.has(nm)) { delete d[nm]; delete n[nm]; } });
+      (adds || []).forEach((r: any) => {
+        const nm = nameOf.get(String(r.employee_number));
+        if (!nm) return;
+        if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
+        else d[nm] = (d[nm] || 0) + 1;
+      });
+      // ── 순서판에서 빼는 사람 모으기 (점수는 안 지움 — 복귀하면 그대로 살아남) ──
+      const out: Record<string, { why: string; note: string }> = {};
+      (mems || []).forEach((m: any) => {
+        if (m.fill_excluded && m.name)
+          out[String(m.name)] = { why: "제외", note: String(m.fill_excluded_reason || "") };
+      });
+      // 오늘 기준 유고 기간에 걸린 사람 (기간이 끝나면 다음날 자동 복귀)
+      const todayStr = todayLocalStr();
+      const { data: abs } = await supabase
+        .from("operator_absence")
+        .select("employee_number, reason, work_date, end_date")
+        .lte("work_date", todayStr)
+        .gte("end_date", todayStr);
+      (abs || []).forEach((r: any) => {
+        const nm = nameOf.get(String(r.employee_number));
+        if (!nm || out[nm]) return; // 무기한 제외가 우선 표시
+        const span = r.end_date ? ` ~ ${String(r.end_date).slice(5)}` : "";
+        out[nm] = { why: "유고", note: `${r.reason || "유고"} (${String(r.work_date).slice(5)}${span})` };
+      });
+      setRankOut(out);
+      // 야간 면제 = 야간 다이아만 못 하는 사람. 개수판에는 남기되 배지로 표시 (2026-08-05 확정)
+      const nx: Record<string, boolean> = {};
+      (mems || []).forEach((m: any) => { if (m.night_fill_excluded && m.name) nx[String(m.name)] = true; });
+      setNightExc(nx);
+      setRankDay(d);
+      setRankNight(n);
+    })();
+  }, [rankReload]);
+
   const card: React.CSSProperties = {
     background: "#fff",
     borderRadius: 16,
@@ -19141,6 +19527,428 @@ function OperatorRank() {
     padding: "12px 0",
     borderBottom: "1px solid #F3F4F6",
   };
+
+  if (avgOpen) {
+    const kindKo = avgKind === "holiday" ? "휴무충당" : "대기충당";
+    const unit = avgKind === "holiday" ? "점" : "회";
+    const filtered = avgTodo.filter(
+      (m) =>
+        !avgQ.trim() ||
+        String(m.name || "").includes(avgQ.trim()) ||
+        String(m.employee_number || "").includes(avgQ.trim())
+    );
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <button
+            onClick={() => setAvgOpen(false)}
+            style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            ‹ 뒤로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>신규·전입 평균 부여</div>
+        </div>
+
+        <div
+          style={{
+            background: "#FEF3C7",
+            color: "#92400E",
+            borderRadius: 12,
+            padding: "10px 12px",
+            fontSize: 11.5,
+            fontWeight: 700,
+            lineHeight: 1.7,
+            marginBottom: 12,
+          }}
+        >
+          단독 발령 후 3개월이 된 사람에게 그 시점 직원 평균값을 부여합니다. 점수가 하나도 없는 사람은 순서판에 아직 나오지 않으며, 여기서 부여하는 순간 올라옵니다.
+          <br />
+          아래 값은 <b>오늘 기준</b> 평균입니다. 늦게 부여하면 그날의 평균이 들어가니 3개월 되는 날에 바로 부여하세요.
+        </div>
+
+        {/* 휴무충당 / 대기충당 전환 */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {([["holiday", "휴무충당"], ["standby", "대기충당"]] as const).map(([k, ko]) => (
+            <div
+              key={k}
+              onClick={() => { setAvgKind(k); loadAvg(k); }}
+              style={{
+                flex: 1,
+                textAlign: "center",
+                padding: "12px 0",
+                borderRadius: 13,
+                background: avgKind === k ? "#fff" : "transparent",
+                border: avgKind === k ? "1.5px solid #99F6E4" : "1.5px solid #E9EDEC",
+                fontSize: 13.5,
+                fontWeight: 800,
+                color: avgKind === k ? OP_TEAL_DARK : "#9CA3AF",
+                cursor: "pointer",
+              }}
+            >
+              {ko}
+            </div>
+          ))}
+        </div>
+
+        {avgLoading || !avgStat ? (
+          <div style={{ ...card, textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13 }}>
+            평균을 계산하는 중이에요…
+          </div>
+        ) : (
+          <>
+            <div style={card}>
+              <div style={ttl}>
+                오늘 기준 {kindKo} 평균
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
+                  모집단 {avgStat.pop}명
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                <div style={{ flex: 1, background: "#F8FAFC", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700 }}>평균 합산점수</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginTop: 3 }}>
+                    {avgStat.avgScore.toFixed(2)}{unit}
+                  </div>
+                </div>
+                <div style={{ flex: 1, background: "#F8FAFC", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 700 }}>평균 야간 개수</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginTop: 3 }}>
+                    {avgStat.avgNight.toFixed(2)}개
+                  </div>
+                </div>
+              </div>
+              <div style={{ background: "#EEF0FF", borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#4F46E5", marginBottom: 6 }}>부여할 값</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "#111827" }}>
+                  주간 {avgStat.dayGive} · 야간 {avgStat.nightGive}개
+                </div>
+                <div style={{ fontSize: 11.5, color: "#4B5563", lineHeight: 1.8, marginTop: 6 }}>
+                  야간 = 평균 개수 반올림 → {avgStat.nightGive}개
+                  <br />
+                  주간 = {avgStat.avgScore.toFixed(2)} − ({avgStat.nightGive} × {avgStat.W}) = {avgStat.dayGive}
+                  <br />
+                  검산 = {avgStat.dayGive} + {avgStat.nightGive}×{avgStat.W} ={" "}
+                  <b style={{ color: "#059669" }}>{avgStat.check.toFixed(2)}{unit}</b> · 평균과 일치 ✓
+                </div>
+              </div>
+            </div>
+
+            <input
+              value={avgQ}
+              onChange={(e) => setAvgQ(e.target.value)}
+              placeholder="이름 또는 사번 검색"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{
+                width: "100%",
+                border: "1px solid #E5E7EB",
+                borderRadius: 12,
+                padding: "12px 14px",
+                fontSize: 14,
+                fontFamily: "inherit",
+                marginBottom: 12,
+                WebkitAppearance: "none",
+                appearance: "none",
+              }}
+            />
+
+            <div style={card}>
+              <div style={ttl}>
+                아직 {kindKo} 점수가 없는 사람
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "3px 9px", borderRadius: 20 }}>
+                  {avgTodo.length}명
+                </span>
+              </div>
+              {filtered.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13 }}>
+                  {avgTodo.length === 0 ? "부여할 사람이 없습니다." : "검색 결과가 없습니다."}
+                </div>
+              ) : (
+                filtered.map((m, i) => (
+                  <div key={m.id} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+                      <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                        {m.employee_number}
+                        {m.work_type ? ` · ${m.work_type}` : ""}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setAvgConfirm(m)}
+                      disabled={avgSaving === m.id}
+                      style={{
+                        border: 0,
+                        borderRadius: 10,
+                        background: OP_TEAL,
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        padding: "9px 14px",
+                        fontFamily: "inherit",
+                        cursor: "pointer",
+                        opacity: avgSaving === m.id ? 0.5 : 1,
+                      }}
+                    >
+                      평균 부여
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div style={card}>
+              <div style={ttl}>기록 방식</div>
+              <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.9 }}>
+                부여하면 명부(fill_score)에 오늘 날짜로 <b>새 줄이 추가</b>됩니다. 기존 명부는 고치지 않습니다.
+                <br />
+                그날의 평균과 모집단 수가 메모로 같이 저장돼 나중에 근거를 댈 수 있습니다.
+                <br />
+                잘못 넣었다면 Supabase에서 그 줄을 지우면 부여 전으로 돌아갑니다.
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* 확정 팝업 — 사람이 눈으로 보고 확인해야 저장됩니다 */}
+        {avgConfirm && avgStat && (
+          <div
+            onClick={() => setAvgConfirm(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(17,24,39,0.5)",
+              display: "grid",
+              placeItems: "center",
+              padding: 20,
+              zIndex: 200,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 340 }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 4 }}>
+                {avgConfirm.name}님에게 부여할까요?
+              </div>
+              <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+                {kindKo} · {todayLocalStr()} 기준
+              </div>
+              <div style={{ background: "#EEF0FF", borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: "#4F46E5" }}>
+                  주간 {avgStat.dayGive} · 야간 {avgStat.nightGive}개
+                </div>
+                <div style={{ fontSize: 12, color: "#4B5563", marginTop: 5 }}>
+                  합산 {avgStat.check.toFixed(2)}{unit} · 모집단 {avgStat.pop}명 평균
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: "#9CA3AF", lineHeight: 1.7, marginBottom: 14 }}>
+                부여하면 이 사람이 순서판에 바로 올라옵니다. 되돌리려면 명부에서 그 줄을 지워야 합니다.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setAvgConfirm(null)}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: "#F3F4F6", color: "#374151", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => giveAvg(avgConfirm)}
+                  disabled={avgSaving === avgConfirm.id}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: OP_TEAL, color: "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", opacity: avgSaving === avgConfirm.id ? 0.5 : 1 }}
+                >
+                  확정 부여
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (excOpen) {
+    const filtered = excList.filter(
+      (m) =>
+        !excQ.trim() ||
+        String(m.name || "").includes(excQ.trim()) ||
+        String(m.employee_number || "").includes(excQ.trim())
+    );
+    const picked = excList.filter((m) => m.fill_excluded).length;
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <button
+            onClick={() => setExcOpen(false)}
+            style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+          >
+            ‹ 뒤로
+          </button>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>충당 제외 관리</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#E11D48" }}>{picked}명</div>
+        </div>
+
+        <div
+          style={{
+            background: "#FFF1F2",
+            color: "#9F1239",
+            borderRadius: 12,
+            padding: "10px 12px",
+            fontSize: 11.5,
+            fontWeight: 700,
+            lineHeight: 1.7,
+            marginBottom: 12,
+          }}
+        >
+          <b>[전체]</b> — 진급·직책 등으로 열차를 아예 안 타는 사람. 순서판과 [채우기] 양쪽에서 빠집니다.
+          <br />
+          <b>[야간]</b> — 야간만 못 하는 사람. 야간 다이아 후보에서만 빠지고 <b>주간은 그대로</b> 참여합니다. 개수판에는 「야간면제」 배지로 남습니다.
+          <br />
+          아픈 사람·휴직은 「유고 입력」으로 넣으면 기간이 끝날 때 자동으로 돌아옵니다. 어느 쪽이든 점수는 언제나 그대로 보존됩니다.
+        </div>
+
+        <input
+          value={excQ}
+          onChange={(e) => setExcQ(e.target.value)}
+          placeholder="이름 또는 사번 검색"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{
+            width: "100%",
+            border: "1px solid #E5E7EB",
+            borderRadius: 12,
+            padding: "12px 14px",
+            fontSize: 14,
+            fontFamily: "inherit",
+            marginBottom: 12,
+            WebkitAppearance: "none",
+            appearance: "none",
+          }}
+        />
+
+        <div style={card}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "30px 0", color: "#9CA3AF", fontSize: 13 }}>
+              검색 결과가 없습니다.
+            </div>
+          ) : (
+            filtered.map((m, i) => (
+              <div key={m.id} style={{ ...row, borderBottom: i === filtered.length - 1 ? 0 : row.borderBottom, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                    {m.name}
+                    {m.fill_excluded && (
+                      <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#FFF1F2", color: "#E11D48" }}>
+                        제외 중
+                      </span>
+                    )}
+                    {m.night_fill_excluded && (
+                      <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#FFF7ED", color: "#C2410C" }}>
+                        야간면제
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                    {m.employee_number}
+                    {m.work_type ? ` · ${m.work_type}` : ""}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flex: "none" }}>
+                  <button
+                    onClick={() => toggleNightExc(m)}
+                    disabled={excSaving === m.id + "N"}
+                    style={{
+                      border: 0,
+                      borderRadius: 10,
+                      background: m.night_fill_excluded ? "#C2410C" : "#F3F4F6",
+                      color: m.night_fill_excluded ? "#fff" : "#6B7280",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      padding: "9px 12px",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      opacity: excSaving === m.id + "N" ? 0.5 : 1,
+                    }}
+                  >
+                    야간
+                  </button>
+                  <button
+                    onClick={() => toggleExc(m)}
+                    disabled={excSaving === m.id}
+                    style={{
+                      border: 0,
+                      borderRadius: 10,
+                      background: m.fill_excluded ? "#E11D48" : "#F3F4F6",
+                      color: m.fill_excluded ? "#fff" : "#6B7280",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      padding: "9px 12px",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      opacity: excSaving === m.id ? 0.5 : 1,
+                    }}
+                  >
+                    전체
+                  </button>
+                </div>
+                {m.night_fill_excluded && (
+                  <div style={{ width: "100%", display: "flex", gap: 6, marginTop: 8 }}>
+                    <input
+                      value={excMemo[m.id + "N"] || ""}
+                      onChange={(e) => setExcMemo((p) => ({ ...p, [m.id + "N"]: e.target.value }))}
+                      placeholder="야간 면제 사유 (예: 야간근무 제한 진단)"
+                      style={{
+                        flex: 1,
+                        border: "1px solid #FED7AA",
+                        borderRadius: 10,
+                        padding: "9px 11px",
+                        fontSize: 12.5,
+                        fontFamily: "inherit",
+                        WebkitAppearance: "none",
+                        appearance: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => saveNightMemo(m)}
+                      style={{ border: 0, borderRadius: 10, background: "#FFF7ED", color: "#C2410C", fontSize: 12, fontWeight: 800, padding: "9px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
+                    >
+                      저장
+                    </button>
+                  </div>
+                )}
+                {m.fill_excluded && (
+                  <div style={{ width: "100%", display: "flex", gap: 6, marginTop: 8 }}>
+                    <input
+                      value={excMemo[m.id] || ""}
+                      onChange={(e) => setExcMemo((p) => ({ ...p, [m.id]: e.target.value }))}
+                      placeholder="사유 (예: 진급, 지도기관사 발령)"
+                      style={{
+                        flex: 1,
+                        border: "1px solid #FECDD3",
+                        borderRadius: 10,
+                        padding: "9px 11px",
+                        fontSize: 12.5,
+                        fontFamily: "inherit",
+                        WebkitAppearance: "none",
+                        appearance: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => saveExcMemo(m)}
+                      style={{ border: 0, borderRadius: 10, background: "#FFF1F2", color: "#E11D48", fontSize: 12, fontWeight: 800, padding: "9px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
+                    >
+                      저장
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (instrOpen) {
     const filtered = instrList.filter(
@@ -19239,17 +20047,17 @@ function OperatorRank() {
     );
   }
 
-  // ── 예시 순위 데이터 (기준 점수 + 충당 기록이 생기면 실제 계산으로 교체) ──
-  const dayBoard = [
-    { name: "박민수", pts: 2, note: "휴45" },
-    { name: "이영희", pts: 2, note: "휴12" },
-    { name: "김철수", pts: 5, note: "휴3" },
-  ];
-  const nightBoard = [
-    { name: "정하늘", pts: 1, note: "휴30" },
-    { name: "최바다", pts: 2, note: "휴22" },
-    { name: "강산", pts: 4, note: "휴8" },
-  ];
+  // Set 전개는 CRA 빌드가 거부 (TS2569) → Object.keys 병합 유지
+  const rankAllNames = Object.keys({ ...rankDay, ...rankNight }).filter((nm) => !nm.includes("결원"));
+  const rankNames = rankAllNames.filter((nm) => !rankOut[nm]); // 제외·유고 뺀 실제 순서판
+  const outNames = rankAllNames.filter((nm) => !!rankOut[nm]);
+  const rankScoreOf = (nm: string) => (rankDay[nm] || 0) + (rankNight[nm] || 0) * 1.8;
+  const dayBoard = rankNames
+    .map((nm) => ({ name: nm, pts: rankScoreOf(nm).toFixed(1), note: `주간 ${rankDay[nm] || 0} · 야간 ${rankNight[nm] || 0}` }))
+    .sort((a: any, b: any) => Number(a.pts) - Number(b.pts));
+  const nightBoard = rankNames
+    .map((nm) => ({ name: nm, pts: rankNight[nm] || 0, note: `합산 ${rankScoreOf(nm).toFixed(1)}점` }))
+    .sort((a: any, b: any) => (Number(a.pts) - Number(b.pts)) || (rankScoreOf(a.name) - rankScoreOf(b.name)));
   const list = board === "주간" ? dayBoard : nightBoard;
   const unit = board === "주간" ? "점" : "개";
 
@@ -19267,7 +20075,7 @@ function OperatorRank() {
           lineHeight: 1.6,
         }}
       >
-        휴무충당 순서입니다. 아래 순위는 예시이며, 기준 점수를 받으면 실제 계산으로 바뀝니다.
+        휴무충당 순서 실데이터입니다. 엑셀 기준값(8/2)에 그 이후 앱 충당 기록이 자동 누적됩니다. 실제 배정은 그날 휴무자 중에서 — [채우기]와 같은 점수를 씁니다.
       </div>
 
       {/* 주간/야간 전환 */}
@@ -19320,7 +20128,14 @@ function OperatorRank() {
               {i + 1}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{m.name}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                {m.name}
+                {nightExc[m.name] && (
+                  <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#FFF7ED", color: "#C2410C" }}>
+                    야간면제
+                  </span>
+                )}
+              </div>
               <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>{m.note}</div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 800, color: OP_TEAL_DARK }}>
@@ -19330,6 +20145,61 @@ function OperatorRank() {
           </div>
         ))}
       </div>
+
+      {/* 🚫 순서판에서 빠진 사람 (유고 자동 · 제외 스위치) */}
+      {outNames.length > 0 && (
+        <div style={card}>
+          <div
+            onClick={() => setOutOpen(!outOpen)}
+            style={{ ...ttl, marginBottom: outOpen ? 12 : 0, cursor: "pointer" }}
+          >
+            <span>🚫 유고·제외로 빠진 사람</span>
+            <span style={{ fontSize: 11, fontWeight: 700, background: "#FFF1F2", color: "#E11D48", padding: "3px 9px", borderRadius: 20 }}>
+              {outNames.length}명 {outOpen ? "▲" : "▼"}
+            </span>
+          </div>
+          {outOpen && (
+            <>
+              {outNames
+                .sort((a, b) => rankScoreOf(a) - rankScoreOf(b))
+                .map((nm, i, arr) => (
+                  <div key={nm} style={{ ...row, borderBottom: i === arr.length - 1 ? 0 : row.borderBottom }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#9CA3AF" }}>
+                        {nm}
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 800,
+                            borderRadius: 6,
+                            padding: "2px 7px",
+                            marginLeft: 6,
+                            background: rankOut[nm].why === "제외" ? "#FFF1F2" : "#FFF7ED",
+                            color: rankOut[nm].why === "제외" ? "#E11D48" : "#C2410C",
+                          }}
+                        >
+                          {rankOut[nm].why}
+                          {rankOut[nm].note ? ` · ${rankOut[nm].note}` : ""}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: "#C4C7CC", fontWeight: 500, marginTop: 2 }}>
+                        주간 {rankDay[nm] || 0} · 야간 {rankNight[nm] || 0} · 점수 보존됨
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#C4C7CC" }}>
+                      {rankScoreOf(nm).toFixed(1)}점
+                    </div>
+                  </div>
+                ))}
+              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
+                유고는 기간이 끝나면 자동으로 순서판에 돌아옵니다. 제외는 아래 스위치를 끄면 바로 복귀합니다.
+                <br />
+                어느 쪽이든 점수는 그대로 남아 있어 복귀 시 원래 순위로 돌아갑니다.
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div style={card}>
         <div style={ttl}>계산 규칙 (확정)</div>
@@ -19344,6 +20214,56 @@ function OperatorRank() {
           <br />
           이때 0이 아니라 그 시점 직원 평균값으로 시작합니다. 주간은 주간 평균 점수, 야간은 야간 평균 개수를 부여합니다.
         </div>
+      </div>
+
+      <div style={{ ...card, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>🆕 신규·전입 평균 부여</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>
+            단독 발령 후 3개월 · 그 시점 평균값으로 시작
+          </div>
+        </div>
+        <button
+          onClick={openAvg}
+          style={{
+            border: 0,
+            borderRadius: 11,
+            background: OP_TEAL,
+            color: "#fff",
+            fontSize: 12.5,
+            fontWeight: 800,
+            padding: "10px 16px",
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          부여하기
+        </button>
+      </div>
+
+      <div style={{ ...card, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>🚷 충당 제외 관리</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>
+            {Object.keys(rankOut).filter((nm) => rankOut[nm].why === "제외").length}명 제외 중 · 진급·직책 등
+          </div>
+        </div>
+        <button
+          onClick={openExc}
+          style={{
+            border: 0,
+            borderRadius: 11,
+            background: "#E11D48",
+            color: "#fff",
+            fontSize: 12.5,
+            fontWeight: 800,
+            padding: "10px 16px",
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          관리하기
+        </button>
       </div>
 
       <div style={{ ...card, display: "flex", alignItems: "center", gap: 10 }}>
@@ -35663,6 +36583,171 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
     교번충당: "kyobun_fill",
   };
 
+  // ── 내 충당 점수·순위 (2026-08-05) ──
+  //   운용 「휴무충당순서」 순서판과 같은 재료·같은 산식을 본다 (미러링 — 한쪽만 고치면 숫자가 어긋남)
+  //   휴무충당: 점수 = 주간×1 + 야간×1.8 · 순위는 점수 낮은 사람이 1위
+  //   대기충당: 대기 횟수 (가중치 없음) · 순위는 횟수 적은 사람이 1위
+  //   기준값(fill_score 노사 확인 명부) + 기준일 이후 work_adjust 기록. 명부가 없으면 0에서 앱 기록만 누적.
+  const [myFill, setMyFill] = useState<any>(null);
+  const [predScores, setPredScores] = useState<{ day: Record<string, number>; night: Record<string, number> }>({ day: {}, night: {} });
+  useEffect(() => {
+    if (!user?.name) return;
+    if (activeTab !== "대기충당" && activeTab !== "휴무충당") return;
+    const kind = activeTab === "대기충당" ? "standby" : "holiday";
+    const adjType = activeTab === "대기충당" ? "standby" : "holiday_fill";
+    (async () => {
+      const [baseRes, memRes] = await Promise.all([
+        supabase
+          .from("fill_score")
+          .select("name, day_cnt, night_cnt, base_date")
+          .eq("kind", kind)
+          .order("base_date", { ascending: false }),
+        supabase.from("members").select("employee_number, name, fill_excluded"),
+      ]);
+      const base = baseRes.data || [];
+      const mems = memRes.data || [];
+      const d: Record<string, number> = {};
+      const n: Record<string, number> = {};
+      const took = new Set<string>();
+      base.forEach((r: any) => {
+        if (took.has(r.name)) return; // 같은 이름은 최신 기준일 것만
+        took.add(r.name);
+        d[r.name] = Number(r.day_cnt) || 0;
+        n[r.name] = Number(r.night_cnt) || 0;
+      });
+      const maxBase = base.length ? String(base[0].base_date) : "1970-01-01";
+      const { data: adds } = await supabase
+        .from("work_adjust")
+        .select("employee_number, work_shift, work_date")
+        .eq("adjust_type", adjType)
+        .gt("work_date", maxBase);
+      const nameOf = new Map<string, string>();
+      mems.forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
+      // 명부에만 있고 사업소 명단에 없는 사람(전출·퇴사)은 순위에서 빼기 — 순서판과 동일
+      const memberNames = new Set(mems.map((m: any) => String(m.name)));
+      Object.keys(d).forEach((nm) => { if (!memberNames.has(nm)) { delete d[nm]; delete n[nm]; } });
+      Object.keys(n).forEach((nm) => { if (!memberNames.has(nm)) { delete d[nm]; delete n[nm]; } });
+      let myAppCount = 0;
+      (adds || []).forEach((r: any) => {
+        const nm = nameOf.get(String(r.employee_number));
+        if (!nm) return;
+        if (String(r.employee_number) === String(user.employee_number)) myAppCount += 1;
+        if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
+        else d[nm] = (d[nm] || 0) + 1;
+      });
+      // 순위에서 빠지는 사람: 결원 · 충당 제외 · 오늘 유고 (순서판과 같은 기준)
+      const outSet = new Set<string>();
+      mems.forEach((m: any) => { if (m.fill_excluded && m.name) outSet.add(String(m.name)); });
+      const todayStr = todayLocalStr();
+      const { data: abs } = await supabase
+        .from("operator_absence")
+        .select("employee_number")
+        .lte("work_date", todayStr)
+        .gte("end_date", todayStr);
+      (abs || []).forEach((r: any) => {
+        const nm = nameOf.get(String(r.employee_number));
+        if (nm) outSet.add(nm);
+      });
+      const scoreOf = (nm: string) =>
+        kind === "holiday" ? (d[nm] || 0) + (n[nm] || 0) * 1.8 : (d[nm] || 0) + (n[nm] || 0);
+      // Set 전개는 CRA 빌드가 거부 (TS2569) → Object.keys 병합 유지
+      const names = Object.keys({ ...d, ...n }).filter(
+        (nm) => !nm.includes("결원") && !outSet.has(nm)
+      );
+      const sorted = names.slice().sort((a, b) => scoreOf(a) - scoreOf(b));
+      const my = String(user.name);
+      const idx = sorted.indexOf(my);
+      setPredScores({ day: d, night: n }); // 날짜별 예상순위가 같은 재료를 본다 (미러링)
+      setMyFill({
+        kind,
+        day: d[my] || 0,
+        night: n[my] || 0,
+        score: scoreOf(my),
+        rank: idx >= 0 ? idx + 1 : null,
+        total: sorted.length,
+        baseDate: base.length ? maxBase : "",
+        appCount: myAppCount,
+        outWhy: outSet.has(my) ? "제외" : "",
+      });
+    })();
+  }, [activeTab, user?.name, user?.employee_number, records]);
+
+  // ── 그 날짜 예상 순위 (휴무충당 전용 · 2026-08-05) ──
+  //   실제 배정은 "그날 휴무인 사람들" 중에서만 이뤄지므로, 전체 순위보다 이 숫자가 훨씬 쓸모 있다.
+  //   순서판(운용)과 완전히 같은 산식: 주간 다이아 = 합산점수 낮은 순 / 야간 다이아 = 야간 개수 → 합산점수
+  //   ※ 예상일 뿐 — 그날 결원 수·대기충당 선처리에 따라 실제 배정은 달라질 수 있음
+  const [predDate, setPredDate] = useState("");
+  const [predLoading, setPredLoading] = useState(false);
+  const [predResult, setPredResult] = useState<any>(null);
+  const runPredict = async () => {
+    if (!predDate || !myFill) return;
+    setPredLoading(true);
+    setPredResult(null);
+    const target = new Date(predDate + "T00:00:00");
+    const [mRes, rRes, hRes, swRes, sbRes, lvRes, abRes] = await Promise.all([
+      supabase
+        .from("members")
+        .select("id, name, employee_number, work_group, start_position, schedule_total, work_type, shift_team, fill_excluded, night_fill_excluded"),
+      supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]),
+      supabase.from("kyobun_start_history").select("*"),
+      supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+      supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("leave_history").select("employee_number").eq("used_date", predDate).neq("status", "취소"),
+      supabase.from("operator_absence").select("employee_number").lte("work_date", predDate).gte("end_date", predDate),
+    ]);
+    const all = mRes.data || [];
+    const kyobun = all.filter((m: any) => m.work_type === "교번" && m.start_position != null);
+    const offEmps = new Set<string>();
+    (lvRes.data || []).forEach((r: any) => offEmps.add(String(r.employee_number)));
+    (abRes.data || []).forEach((r: any) => offEmps.add(String(r.employee_number)));
+    const cands: any[] = [];
+    all.forEach((m: any) => {
+      if (String(m.name || "").includes("결원")) return;
+      if (m.fill_excluded) return;
+      if (offEmps.has(String(m.employee_number))) return;
+      if (m.work_type === "교번") {
+        if (m.start_position == null) return;
+        const w = calcKyobunWork(m, target, rRes.data || [], swRes.data || [], kyobun, hRes.data || []);
+        if (!w || w.type !== "휴무") return;
+        cands.push({
+          name: m.name,
+          nightOk: !m.night_fill_excluded,
+          hyuNo: Number(String(w.dia).replace(/[^0-9]/g, "")) || 0,
+        });
+      } else if (m.work_type === "교대" && m.shift_team) {
+        if (calcShiftWork(m.shift_team, target, sbRes.data || null) !== "휴무") return;
+        cands.push({ name: m.name, nightOk: !m.night_fill_excluded, hyuNo: 0 });
+      }
+    });
+    // 점수는 이미 계산해 둔 것을 그대로 사용 (myFill과 같은 재료 = 미러링)
+    const dMap = predScores.day;
+    const nMap = predScores.night;
+    const scoreOf = (nm: string) => (dMap[nm] || 0) + (nMap[nm] || 0) * 1.8;
+    const my = String(user?.name || "");
+    const dayList = cands
+      .slice()
+      .sort((a, b) => (scoreOf(a.name) - scoreOf(b.name)) || (b.hyuNo - a.hyuNo));
+    const nightList = cands
+      .filter((c) => c.nightOk)
+      .sort(
+        (a, b) =>
+          ((nMap[a.name] || 0) - (nMap[b.name] || 0)) ||
+          (scoreOf(a.name) - scoreOf(b.name)) ||
+          (b.hyuNo - a.hyuNo)
+      );
+    const dIdx = dayList.findIndex((c) => c.name === my);
+    const nIdx = nightList.findIndex((c) => c.name === my);
+    setPredResult({
+      offToday: dIdx >= 0,
+      dayRank: dIdx >= 0 ? dIdx + 1 : null,
+      dayTotal: dayList.length,
+      nightRank: nIdx >= 0 ? nIdx + 1 : null,
+      nightTotal: nightList.length,
+      nightExempt: dIdx >= 0 && nIdx < 0,
+    });
+    setPredLoading(false);
+  };
+
   // 기록 불러오기 (work_adjust 테이블)
   useEffect(() => {
     if (!user?.employee_number) return;
@@ -36152,6 +37237,160 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
             >
               📅 신청
             </button>
+          </div>
+        )}
+
+        {/* 내 충당 점수·순위 (대기충당 = 대기 점수만 / 휴무충당 = 휴무충당 점수만) */}
+        {myFill && (activeTab === "대기충당" || activeTab === "휴무충당") && (
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 16,
+              padding: "16px 16px 14px",
+              marginBottom: 12,
+              boxShadow: "0 2px 8px rgba(79,70,229,0.06)",
+            }}
+          >
+            <div
+              style={{
+                background: "#FEF3C7",
+                color: "#92400E",
+                borderRadius: 10,
+                padding: "8px 11px",
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: 1.6,
+                marginBottom: 12,
+                textAlign: "center",
+              }}
+            >
+              ⚠️ 테스트 중인 화면입니다 — 숫자가 확정된 값이 아닐 수 있어요
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, textAlign: "center" }}>
+              내 {activeTab} 점수
+            </div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: "#4F46E5", textAlign: "center", margin: "6px 0 2px" }}>
+              {myFill.kind === "holiday" ? `${myFill.score.toFixed(1)}점` : `${myFill.score}회`}
+            </div>
+            <div style={{ textAlign: "center" }}>
+              {myFill.outWhy ? (
+                <span style={{ display: "inline-block", background: "#FFF1F2", color: "#E11D48", borderRadius: 10, padding: "5px 13px", fontSize: 12.5, fontWeight: 800 }}>
+                  현재 충당 순서에서 제외 중 · 점수는 보존됩니다
+                </span>
+              ) : myFill.rank ? (
+                <span style={{ display: "inline-block", background: "#EEF0FF", color: "#4F46E5", borderRadius: 10, padding: "5px 13px", fontSize: 13, fontWeight: 800 }}>
+                  {myFill.rank}위 / {myFill.total}명 · 점수 낮은 순
+                </span>
+              ) : (
+                <span style={{ display: "inline-block", background: "#F3F4F6", color: "#6B7280", borderRadius: 10, padding: "5px 13px", fontSize: 12.5, fontWeight: 700 }}>
+                  아직 순위에 올라와 있지 않아요
+                </span>
+              )}
+            </div>
+            {myFill.kind === "holiday" && (
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10, fontSize: 12, color: "#6B7280" }}>
+                <span>주간 <b style={{ color: "#111827" }}>{myFill.day}회</b></span>
+                <span>·</span>
+                <span>야간 <b style={{ color: "#111827" }}>{myFill.night}회</b></span>
+              </div>
+            )}
+            <div
+              style={{
+                marginTop: 12,
+                paddingTop: 11,
+                borderTop: "1px solid #F3F4F6",
+                fontSize: 11.5,
+                color: "#6B7280",
+                lineHeight: 1.8,
+              }}
+            >
+              {myFill.baseDate
+                ? `· 기준: ${myFill.baseDate} 노사 확인 명부`
+                : "· 노사 확인 명부 기준값이 아직 등록되지 않았어요 (앱 기록만 집계)"}
+              <br />
+              · 기준일 이후 앱 기록 <b style={{ color: "#111827" }}>{myFill.appCount}건</b> — 충당하면 즉시 반영
+              <br />
+              {myFill.kind === "holiday"
+                ? "· 점수 = 주간×1 + 야간×1.8 · 동점이면 휴무번호 큰 사람이 먼저"
+                : "· 대기충당은 횟수로만 셉니다 (주간·야간 가중치 없음)"}
+              <br />
+              · 순위는 사업소 재직자 기준 (결원·유고·제외자 빠짐) · 궁금한 점은 지회로 문의하세요
+            </div>
+
+            {/* 날짜별 예상 순위 (휴무충당 전용) */}
+            {activeTab === "휴무충당" && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: "#111827", marginBottom: 8 }}>
+                  📅 그날 예상 순위 보기
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="date"
+                    value={predDate}
+                    onChange={(e) => { setPredDate(e.target.value); setPredResult(null); }}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 10,
+                      padding: "10px 11px",
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      WebkitAppearance: "none",
+                      appearance: "none",
+                    }}
+                  />
+                  <button
+                    onClick={runPredict}
+                    disabled={!predDate || predLoading}
+                    style={{
+                      border: 0,
+                      borderRadius: 10,
+                      background: predDate ? "#4F46E5" : "#E5E7EB",
+                      color: predDate ? "#fff" : "#9CA3AF",
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      padding: "10px 15px",
+                      fontFamily: "inherit",
+                      cursor: predDate ? "pointer" : "default",
+                      flex: "none",
+                    }}
+                  >
+                    {predLoading ? "계산 중…" : "확인"}
+                  </button>
+                </div>
+
+                {predResult && (
+                  <div style={{ marginTop: 10 }}>
+                    {!predResult.offToday ? (
+                      <div style={{ background: "#F8FAFC", borderRadius: 12, padding: "13px 14px", fontSize: 12.5, color: "#6B7280", fontWeight: 600, lineHeight: 1.7 }}>
+                        그날은 휴무일이 아니에요. 휴무충당은 휴무인 날에만 걸립니다.
+                        <br />
+                        (휴가·유고가 있는 날도 대상에서 빠집니다)
+                      </div>
+                    ) : (
+                      <div style={{ background: "#EEF0FF", borderRadius: 12, padding: "13px 14px" }}>
+                        <div style={{ fontSize: 12.5, color: "#4F46E5", fontWeight: 800, marginBottom: 6 }}>
+                          {predDate} 휴무자 기준 예상
+                        </div>
+                        <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", lineHeight: 1.6 }}>
+                          주간 다이아 — {predResult.dayTotal}명 중 <span style={{ color: "#4F46E5" }}>{predResult.dayRank}위</span>
+                          <br />
+                          {predResult.nightExempt ? (
+                            <span style={{ fontSize: 13.5, color: "#C2410C" }}>야간 다이아 — 야간 면제 대상</span>
+                          ) : (
+                            <>야간 다이아 — {predResult.nightTotal}명 중 <span style={{ color: "#4F46E5" }}>{predResult.nightRank}위</span></>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.7, marginTop: 8 }}>
+                          ⚠️ 예상입니다. 그날 빈 자리 수, 대기충당으로 먼저 메워지는지, 지정·지원근무 신청 여부에 따라 실제 배정은 달라집니다.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
