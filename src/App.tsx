@@ -17390,7 +17390,49 @@ function OperatorHome({ opName }: { opName: string }) {
     );
   });
 
+  // ── 오늘 휴가·유고 전체 카드 (표시 전용 · 접이식 · 이미 로드된 opLeaves/opAbsences 사용) ──
+  const [offOpen, setOffOpen] = useState(false);
+  const offNameOf = (e: any) => { const m = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(e)); return m ? m.name : String(e); };
+  const offCard = (
+    <div style={{ background: "#fff", borderRadius: 18, padding: "14px 16px", marginBottom: 14 }}>
+      <div onClick={() => setOffOpen(!offOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+        <span style={{ fontSize: 14, fontWeight: 800 }}>🏖 오늘 휴가·유고</span>
+        <span style={{ fontSize: 11, fontWeight: 700 }}>
+          {opLeaves.length === 0 && opAbsences.length === 0 ? (
+            <span style={{ background: "#F3F4F6", color: "#9CA3AF", borderRadius: 8, padding: "3px 8px" }}>없음</span>
+          ) : (
+            <>
+              <span style={{ background: "#EEF0FF", color: "#4F46E5", borderRadius: 8, padding: "3px 8px" }}>휴가 {opLeaves.length}</span>
+              <span style={{ background: "#FFF1F2", color: "#E11D48", borderRadius: 8, padding: "3px 8px", marginLeft: 5 }}>유고 {opAbsences.length}</span>
+            </>
+          )}
+          <span style={{ color: "#9CA3AF", marginLeft: 7 }}>{offOpen ? "▲" : "▼"}</span>
+        </span>
+      </div>
+      {offOpen && (
+        <div style={{ marginTop: 6 }}>
+          {opLeaves.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>휴가</div>}
+          {opLeaves.map((lv: any, i: number) => (
+            <div key={"lv" + i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{offNameOf(lv.employee_number)}</span>
+              <span style={{ color: "#4F46E5", fontSize: 12, fontWeight: 700 }}>{lv.leave_type || "휴가"}</span>
+            </div>
+          ))}
+          {opAbsences.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>유고</div>}
+          {opAbsences.map((ab: any, i: number) => (
+            <div key={"ab" + i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{ab.member_name || offNameOf(ab.employee_number)}</span>
+              <span style={{ color: "#E11D48", fontSize: 12, fontWeight: 700 }}>{ab.reason || "유고"} · {String(ab.work_date || "").slice(5)}{ab.end_date ? ` ~ ${String(ab.end_date).slice(5)}` : ""}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const inputBtn = (
+    <>
+    {offCard}
     <button
       onClick={() => setShowAbsence(true)}
       style={{
@@ -17409,6 +17451,7 @@ function OperatorHome({ opName }: { opName: string }) {
     >
       + 휴가 · 유고 입력
     </button>
+    </>
   );
 
   const stampCard = (
@@ -19277,17 +19320,53 @@ function OperatorRank() {
     );
   }
 
-  // ── 예시 순위 데이터 (기준 점수 + 충당 기록이 생기면 실제 계산으로 교체) ──
-  const dayBoard = [
-    { name: "박민수", pts: 2, note: "휴45" },
-    { name: "이영희", pts: 2, note: "휴12" },
-    { name: "김철수", pts: 5, note: "휴3" },
-  ];
-  const nightBoard = [
-    { name: "정하늘", pts: 1, note: "휴30" },
-    { name: "최바다", pts: 2, note: "휴22" },
-    { name: "강산", pts: 4, note: "휴8" },
-  ];
+  // ── 실데이터 (2026-08-04 점수제): fill_score 엑셀 기준 + 기준일 이후 work_adjust 휴무충당 누적 ──
+  //   점수 = 주간×1 + 야간×1.8 · 결원 제외 · [채우기] 화면과 같은 재료를 본다 (미러)
+  const [rankDay, setRankDay] = useState<Record<string, number>>({});
+  const [rankNight, setRankNight] = useState<Record<string, number>>({});
+  useEffect(() => {
+    (async () => {
+      const { data: base } = await supabase
+        .from("fill_score")
+        .select("name, day_cnt, night_cnt, base_date")
+        .eq("kind", "holiday")
+        .order("base_date", { ascending: false });
+      const d: Record<string, number> = {};
+      const n: Record<string, number> = {};
+      const took = new Set<string>();
+      (base || []).forEach((r: any) => {
+        if (took.has(r.name)) return;
+        took.add(r.name);
+        d[r.name] = Number(r.day_cnt) || 0;
+        n[r.name] = Number(r.night_cnt) || 0;
+      });
+      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
+      const { data: adds } = await supabase
+        .from("work_adjust")
+        .select("employee_number, work_shift")
+        .eq("adjust_type", "holiday_fill")
+        .gt("work_date", maxBase);
+      const { data: mems } = await supabase.from("members").select("employee_number, name");
+      const nameOf = new Map<string, string>();
+      (mems || []).forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
+      (adds || []).forEach((r: any) => {
+        const nm = nameOf.get(String(r.employee_number));
+        if (!nm) return;
+        if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
+        else d[nm] = (d[nm] || 0) + 1;
+      });
+      setRankDay(d);
+      setRankNight(n);
+    })();
+  }, []);
+  const rankNames = [...new Set([...Object.keys(rankDay), ...Object.keys(rankNight)])].filter((nm) => !nm.includes("결원"));
+  const rankScoreOf = (nm: string) => (rankDay[nm] || 0) + (rankNight[nm] || 0) * 1.8;
+  const dayBoard = rankNames
+    .map((nm) => ({ name: nm, pts: rankScoreOf(nm).toFixed(1), note: `주간 ${rankDay[nm] || 0} · 야간 ${rankNight[nm] || 0}` }))
+    .sort((a: any, b: any) => Number(a.pts) - Number(b.pts));
+  const nightBoard = rankNames
+    .map((nm) => ({ name: nm, pts: rankNight[nm] || 0, note: `합산 ${rankScoreOf(nm).toFixed(1)}점` }))
+    .sort((a: any, b: any) => (Number(a.pts) - Number(b.pts)) || (rankScoreOf(a.name) - rankScoreOf(b.name)));
   const list = board === "주간" ? dayBoard : nightBoard;
   const unit = board === "주간" ? "점" : "개";
 
@@ -19305,7 +19384,7 @@ function OperatorRank() {
           lineHeight: 1.6,
         }}
       >
-        휴무충당 순서입니다. 아래 순위는 예시이며, 기준 점수를 받으면 실제 계산으로 바뀝니다.
+        휴무충당 순서 실데이터입니다. 엑셀 기준값(8/2)에 그 이후 앱 충당 기록이 자동 누적됩니다. 실제 배정은 그날 휴무자 중에서 — [채우기]와 같은 점수를 씁니다.
       </div>
 
       {/* 주간/야간 전환 */}
