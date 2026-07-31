@@ -19349,6 +19349,10 @@ function OperatorRank() {
       const { data: mems } = await supabase.from("members").select("employee_number, name");
       const nameOf = new Map<string, string>();
       (mems || []).forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
+      // 사업소 명단(members) 기준 — 전출·퇴사자는 명단 정리만 하면 점수판에서 자동 제외 (2026-08-04 확정)
+      const memberNameSet = new Set((mems || []).map((m: any) => String(m.name)));
+      Object.keys(d).forEach((nm) => { if (!memberNameSet.has(nm)) { delete d[nm]; delete n[nm]; } });
+      Object.keys(n).forEach((nm) => { if (!memberNameSet.has(nm)) { delete d[nm]; delete n[nm]; } });
       (adds || []).forEach((r: any) => {
         const nm = nameOf.get(String(r.employee_number));
         if (!nm) return;
