@@ -18056,6 +18056,40 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
         return null;
       };
 
+      // ── 지정근무를 부여할 수 있는 날인가 ──
+      //   회사는 「안 태우는 날」에 지정근무를 준다. 그래서 휴무일뿐 아니라
+      //   미영업 다이아(강제휴무 발생일)도 정상이다 — 빚 장부와 같은 규칙을 쓴다.
+      //     · 휴51 · 휴71 → 조건 없이 미영업
+      //     · 주간 26·27·28·29·40 이면서 그날이 휴일
+      //     · 야간 61·62·63·64 이면서 그날과 다음날이 휴일
+      const noOpDia = (w: any, dt: Date) => {
+        if (!w || !w.dia) return false;
+        const ds = String(w.dia).replace(/\s+/g, "");
+        if (ds === "휴51" || ds === "휴71") return true;
+        if (!/^\d+$/.test(ds)) return false;
+        const n = Number(ds);
+        const tm = new Date(dt);
+        tm.setDate(tm.getDate() + 1);
+        if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(dt)) return true;
+        if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(dt) && isHol(tm)) return true;
+        return false;
+      };
+      const canDesignate = (m: any, day: number) => {
+        const dt = new Date(dstr(day) + "T00:00:00");
+        const w = workOf(m, day);
+        if (!w || !w.type) return { ok: true, why: "" }; // 판정 불가 → 통과 (사람이 보게 둠)
+        if (w.type === "휴무") return { ok: true, why: "" };
+        if (noOpDia(w, dt)) return { ok: true, why: "" };
+        // 비번인데 전날 야간이 미영업이면 실제로 야간을 안 했으므로 비번도 없다
+        if (w.type === "비번" && day > 1) {
+          const y = new Date(dt);
+          y.setDate(y.getDate() - 1);
+          const wy = workOf(m, day - 1);
+          if (noOpDia(wy, y)) return { ok: true, why: "" };
+        }
+        return { ok: false, why: `${w.type}${w.dia ? " " + w.dia : ""}` };
+      };
+
       const errs: any[] = [];
       const warns: any[] = [];
       const okLv: any[] = [];
@@ -18103,8 +18137,8 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
         if (!LEAVE_CODE_MAP[e.code])
           warns.push({ d: e.day, t: `휴가 — 모르는 코드 「${e.code}」 (${e.name}) → 「기타휴가(${e.code})」로 저장돼요` });
         const w = workOf(m, e.day);
-        if (w && w.type === "휴무")
-          warns.push({ d: e.day, t: `${e.name} — 그날은 원래 휴무예요. 휴가로 등록해도 되는지 확인하세요` });
+        if (w && (w.type === "휴무" || noOpDia(w, new Date(dstr(e.day) + "T00:00:00"))))
+          warns.push({ d: e.day, t: `${e.name} — 그날은 원래 안 태우는 날이에요 (${w.type}${w.dia ? " " + w.dia : ""}). 휴가로 등록해도 되는지 확인하세요` });
         okLv.push({
           employee_number: String(m.employee_number),
           used_date: dstr(e.day),
@@ -18122,9 +18156,9 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
         if (m.work_type !== "교번" && m.work_type !== "교대") {
           warns.push({ d: e.day, t: `${e.name} — 「${m.work_type || "?"}」 근무자예요. 지정근무 대상이 맞는지 확인하세요` });
         } else {
-          const w = workOf(m, e.day);
-          if (w && w.type && w.type !== "휴무")
-            errs.push({ d: e.day, t: `지정 ${e.cell} — ${e.name}님은 그날 「${w.type}${w.dia ? " " + w.dia : ""}」 근무예요 (휴무일이 아님)` });
+          const chk = canDesignate(m, e.day);
+          if (!chk.ok)
+            errs.push({ d: e.day, t: `지정 ${e.cell} — ${e.name}님은 그날 「${chk.why}」 근무예요 (휴무일도 미영업 다이아도 아님)` });
         }
         okDg.push({
           employee_number: String(m.employee_number),
@@ -18142,16 +18176,7 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
         for (let d = 1; d <= lastDay; d++) {
           const dt = new Date(dstr(d) + "T00:00:00");
           const w: any = calcKyobunWork(m, dt, rotation, swaps, kyobunAll, hist);
-          if (!w || !w.dia) continue;
-          const ds = String(w.dia).replace(/\s+/g, "");
-          const tm = new Date(dt);
-          tm.setDate(tm.getDate() + 1);
-          if (ds === "휴51" || ds === "휴71") n += 1;
-          else if (/^\d+$/.test(ds)) {
-            const num = Number(ds);
-            if (w.type === "주간" && [26, 27, 28, 29, 40].includes(num) && isHol(dt)) n += 1;
-            else if (w.type === "야간" && [61, 62, 63, 64].includes(num) && isHol(dt) && isHol(tm)) n += 1;
-          }
+          if (noOpDia(w, dt)) n += 1;
         }
         if (n > 0) owedBy.set(String(m.name), n);
       });
