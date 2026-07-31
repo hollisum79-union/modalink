@@ -18291,7 +18291,7 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
     if (dup && dup.length > 0) {
       await supabase.from("designated_plan").update({ status: "confirmed", confirmed_at: new Date().toISOString(), confirmed_by: opName, memo: "기존 기록 있어 연동 생략" }).eq("id", p.id);
       setConfirming("");
-      showToast("이미 그날 근무조정 기록이 있어 연동은 생략하고 확정만 했어요", "info");
+      showToast("이미 그날 근무조정 기록이 있어 연동은 생략하고 확정만 했어요", "success");
       loadPlans();
       return;
     }
