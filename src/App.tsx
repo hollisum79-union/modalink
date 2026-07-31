@@ -17846,9 +17846,865 @@ function OperatorHist() {
   );
 }
 
+// ── 월간 계획 업로드 (휴가계획 · 지정근무 엑셀) — 2026-08-05 ──
+//   원칙: ① 휴가는 leave_history(잔여일수 차감 안 함) ② 지정근무는 designated_plan에 "가안"
+//        ③ 확정해야 급여(work_adjust)에 들어감 ④ 검사는 경고만, 절대 자동으로 고치지 않음
+//        ⑤ 배치(batch_id) 단위로 통째 취소 가능
+const LEAVE_CODE_MAP: Record<string, string> = {
+  연: "annual",
+  촉: "promotedAnnual",
+  대: "substitute",
+  학: "study",
+  장: "longService",
+  돌: "돌봄휴가",
+  법: "법정휴가",
+  보: "법정휴가",
+  만: "만근휴가",
+};
+const LEAVE_TYPE_KO: Record<string, string> = {
+  annual: "연차",
+  tempAnnual: "가연차",
+  promotedAnnual: "촉진연차",
+  substitute: "대체휴가",
+  study: "학습휴가",
+  longService: "장기재직휴가",
+  petition: "청원휴가",
+};
+const leaveTypeOf = (code: string) => LEAVE_CODE_MAP[code] || `기타휴가(${code})`;
+const leaveKoOf = (t: string) => LEAVE_TYPE_KO[t] || t;
+const colName = (i: number) => {
+  let s = "";
+  let n = i + 1;
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+};
+
+function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [rep, setRep] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [batches, setBatches] = useState<any[]>([]);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [planDay, setPlanDay] = useState("");
+  const [confirming, setConfirming] = useState("");
+  const [showAllIssues, setShowAllIssues] = useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const loadBatches = async () => {
+    const { data } = await supabase
+      .from("plan_upload_batch")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setBatches(data || []);
+  };
+  const loadPlans = async () => {
+    const { data } = await supabase
+      .from("designated_plan")
+      .select("*")
+      .neq("status", "canceled")
+      .order("work_date", { ascending: true })
+      .limit(600);
+    setPlans(data || []);
+  };
+  useEffect(() => {
+    loadBatches();
+    loadPlans();
+    setPlanDay(todayLocalStr());
+  }, []);
+
+  const ensureXLSX = () =>
+    new Promise<any>((resolve, reject) => {
+      if ((window as any).XLSX) return resolve((window as any).XLSX);
+      const s = document.createElement("script");
+      s.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      s.onload = () => resolve((window as any).XLSX);
+      s.onerror = () => reject(new Error("엑셀 라이브러리 로드 실패 (인터넷 확인)"));
+      document.head.appendChild(s);
+    });
+
+  // ── 읽기 + 검사 (아무것도 저장하지 않음) ──
+  const analyze = async (file: File) => {
+    setBusy(true);
+    setMsg("");
+    setRep(null);
+    try {
+      const XLSX = await ensureXLSX();
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const lvSheet = wb.SheetNames.find((n: string) => n.includes("휴가"));
+      const dgSheet = wb.SheetNames.find((n: string) => n.includes("지정"));
+      if (!lvSheet && !dgSheet) throw new Error("「휴가계획」·「지정근무」 시트를 찾지 못했어요.");
+      const gridOf = (sn: string) =>
+        XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "" }) as any[][];
+
+      // 연·월 (제목에서)
+      let Y = 0;
+      let M = 0;
+      for (const sn of [lvSheet, dgSheet]) {
+        if (!sn) continue;
+        const g = gridOf(sn);
+        for (let r = 0; r < Math.min(g.length, 5); r++) {
+          const t = (g[r] || []).map((c: any) => String(c || "")).join(" ");
+          const mt = t.match(/(\d{4})\s*년\s*(\d{1,2})\s*월/);
+          if (mt) {
+            Y = Number(mt[1]);
+            M = Number(mt[2]);
+            break;
+          }
+        }
+        if (Y) break;
+      }
+      if (!Y) throw new Error("제목에서 「○○○○년 ○월」을 찾지 못했어요.");
+      const ymStr = `${Y}-${String(M).padStart(2, "0")}`;
+      const dstr = (d: number) => `${ymStr}-${String(d).padStart(2, "0")}`;
+      const lastDay = new Date(Y, M, 0).getDate();
+
+      // 시트 파싱 — 휴가는 (이름,코드) 쌍 / 지정근무는 이름만
+      const parseSheet = (sn: string, paired: boolean) => {
+        const g = gridOf(sn);
+        let hr = -1;
+        for (let r = 0; r < Math.min(g.length, 12); r++) {
+          if (String((g[r] || [])[0] || "").trim() === "일자") {
+            hr = r;
+            break;
+          }
+        }
+        if (hr < 0) return [];
+        const head = (g[hr] || []).map((c: any) => String(c || "").trim());
+        let endCol = head.indexOf("계");
+        if (endCol < 0) endCol = head.length;
+        const out: any[] = [];
+        let day = 0;
+        for (let r = hr + 1; r < g.length; r++) {
+          const row = g[r] || [];
+          const a = String(row[0] ?? "").trim();
+          if (a && /^\d+$/.test(a)) day = Number(a);
+          const sh = String(row[2] ?? "").trim();
+          if (!day || day > lastDay || (sh !== "주간" && sh !== "야간")) continue;
+          const step = paired ? 2 : 1;
+          for (let c = 3; c < endCol; c += step) {
+            const rawN = String(row[c] ?? "");
+            const rawC = paired ? String(row[c + 1] ?? "") : "";
+            const nm = rawN.trim();
+            const cd = rawC.trim();
+            if (!nm && !cd) continue;
+            out.push({
+              day,
+              shift: sh,
+              name: nm,
+              code: cd,
+              spaced: rawN !== nm || rawC !== cd,
+              cell: `${colName(c)}${r + 1}`,
+              codeCell: paired ? `${colName(c + 1)}${r + 1}` : "",
+            });
+          }
+        }
+        return out;
+      };
+      const lvRows = lvSheet ? parseSheet(lvSheet, true) : [];
+      const dgRows = dgSheet ? parseSheet(dgSheet, false) : [];
+      if (lvRows.length === 0 && dgRows.length === 0)
+        throw new Error("읽을 내용이 없어요. 「일자」 머리줄이 있는지 확인해주세요.");
+
+      // ── 대조용 자료 ──
+      const [mRes, rRes, hRes, swRes, sbRes, bRes, hols] = await Promise.all([
+        supabase
+          .from("members")
+          .select("id, name, employee_number, work_type, work_group, start_position, schedule_total, shift_team"),
+        supabase.from("schedule_rotation").select("*"),
+        supabase.from("kyobun_start_history").select("*"),
+        supabase.from("kyobun_swap").select("*").eq("status", "수락"),
+        supabase.from("shift_base").select("*").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("plan_upload_batch").select("*").eq("year_month", ymStr).order("created_at", { ascending: false }),
+        fetchHolidays(Y),
+      ]);
+      const mems = mRes.data || [];
+      const rotation = rRes.data || [];
+      const hist = hRes.data || [];
+      const swaps = swRes.data || [];
+      const sbase = sbRes.data || null;
+      const holList: string[] = (hols as any) || [];
+      const kyobunAll = mems.filter((m: any) => m.work_type === "교번" && m.start_position != null);
+      const byName = new Map<string, any[]>();
+      const allNames = new Set<string>();
+      mems.forEach((m: any) => {
+        const k = String(m.name || "").trim();
+        if (!k) return;
+        allNames.add(k);
+        if (!byName.has(k)) byName.set(k, []);
+        byName.get(k)!.push(m);
+      });
+
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const isHol = (d: Date) => {
+        const dw = d.getDay();
+        if (dw === 0 || dw === 6) return true;
+        return holList.includes(fmt(d));
+      };
+      const workOf = (m: any, day: number): any => {
+        const dt = new Date(dstr(day) + "T00:00:00");
+        if (m.work_type === "교번") return calcKyobunWork(m, dt, rotation, swaps, kyobunAll, hist);
+        if (m.work_type === "교대" && m.shift_team)
+          return { type: calcShiftWork(m.shift_team, dt, sbase), dia: "" };
+        return null;
+      };
+
+      // ── 지정근무를 부여할 수 있는 날인가 ──
+      //   회사는 「안 태우는 날」에 지정근무를 준다. 그래서 휴무일뿐 아니라
+      //   미영업 다이아(강제휴무 발생일)도 정상이다 — 빚 장부와 같은 규칙을 쓴다.
+      //     · 휴51 · 휴71 → 조건 없이 미영업
+      //     · 주간 26·27·28·29·40 이면서 그날이 휴일
+      //     · 야간 61·62·63·64 이면서 그날과 다음날이 휴일
+      const noOpDia = (w: any, dt: Date) => {
+        if (!w || !w.dia) return false;
+        const ds = String(w.dia).replace(/\s+/g, "");
+        if (ds === "휴51" || ds === "휴71") return true;
+        if (!/^\d+$/.test(ds)) return false;
+        const n = Number(ds);
+        const tm = new Date(dt);
+        tm.setDate(tm.getDate() + 1);
+        if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(dt)) return true;
+        if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(dt) && isHol(tm)) return true;
+        return false;
+      };
+      const canDesignate = (m: any, day: number) => {
+        const dt = new Date(dstr(day) + "T00:00:00");
+        const w = workOf(m, day);
+        if (!w || !w.type) return { ok: true, why: "" }; // 판정 불가 → 통과 (사람이 보게 둠)
+        if (w.type === "휴무") return { ok: true, why: "" };
+        if (noOpDia(w, dt)) return { ok: true, why: "" };
+        // 비번인데 전날 야간이 미영업이면 실제로 야간을 안 했으므로 비번도 없다
+        if (w.type === "비번" && day > 1) {
+          const y = new Date(dt);
+          y.setDate(y.getDate() - 1);
+          const wy = workOf(m, day - 1);
+          if (noOpDia(wy, y)) return { ok: true, why: "" };
+        }
+        return { ok: false, why: `${w.type}${w.dia ? " " + w.dia : ""}` };
+      };
+
+      const errs: any[] = [];
+      const warns: any[] = [];
+      const okLv: any[] = [];
+      const okDg: any[] = [];
+      const dgKeySet = new Set(dgRows.map((r: any) => `${r.name}|${r.day}`));
+      const lvKeySet = new Set(lvRows.map((r: any) => `${r.name}|${r.day}`));
+
+      const matchOne = (e: any, where: string) => {
+        if (!e.name) {
+          if (allNames.has(e.code))
+            errs.push({ d: e.day, t: `${where} ${e.codeCell || e.cell} — 「${e.code}」님 이름이 한 칸 밀려 들어갔고 휴가 코드가 없어요` });
+          else errs.push({ d: e.day, t: `${where} ${e.cell} — 코드만 있고 이름이 없어요 (「${e.code}」)` });
+          return null;
+        }
+        if (allNames.has(e.code)) {
+          errs.push({ d: e.day, t: `${where} ${e.codeCell || e.cell} — 코드칸에 이름이 들어갔어요 (「${e.code}」)` });
+          return null;
+        }
+        const cand = byName.get(e.name) || [];
+        if (cand.length === 0) {
+          errs.push({ d: e.day, t: `${where} ${e.cell} — 「${e.name}」을 명단에서 못 찾았어요` });
+          return null;
+        }
+        if (cand.length > 1) {
+          errs.push({ d: e.day, t: `${where} ${e.cell} — 「${e.name}」이 명단에 ${cand.length}명이에요 (동명이인)` });
+          return null;
+        }
+        if (e.spaced)
+          warns.push({ d: e.day, t: `${where} ${e.cell} — 「${e.name}」 앞뒤에 공백이 있었어요 (자동으로 지웠습니다)` });
+        return cand[0];
+      };
+
+      // ① 휴가
+      lvRows.forEach((e: any) => {
+        const m = matchOne(e, "휴가");
+        if (!m) return;
+        if (!e.code) {
+          errs.push({ d: e.day, t: `휴가 ${e.cell} — 「${e.name}」의 휴가 코드가 비어 있어요` });
+          return;
+        }
+        if (dgKeySet.has(`${e.name}|${e.day}`)) {
+          errs.push({ d: e.day, t: `${e.name} — 같은 날에 휴가와 지정근무가 함께 있어요` });
+          return;
+        }
+        if (!LEAVE_CODE_MAP[e.code])
+          warns.push({ d: e.day, t: `휴가 — 모르는 코드 「${e.code}」 (${e.name}) → 「기타휴가(${e.code})」로 저장돼요` });
+        const w = workOf(m, e.day);
+        if (w && (w.type === "휴무" || noOpDia(w, new Date(dstr(e.day) + "T00:00:00"))))
+          warns.push({ d: e.day, t: `${e.name} — 그날은 원래 안 태우는 날이에요 (${w.type}${w.dia ? " " + w.dia : ""}). 휴가로 등록해도 되는지 확인하세요` });
+        okLv.push({
+          employee_number: String(m.employee_number),
+          used_date: dstr(e.day),
+          leave_type: leaveTypeOf(e.code),
+          name: e.name,
+          code: e.code,
+        });
+      });
+
+      // ② 지정근무
+      dgRows.forEach((e: any) => {
+        const m = matchOne(e, "지정");
+        if (!m) return;
+        if (lvKeySet.has(`${e.name}|${e.day}`)) return; // 위에서 이미 오류로 잡음
+        if (m.work_type !== "교번" && m.work_type !== "교대") {
+          warns.push({ d: e.day, t: `${e.name} — 「${m.work_type || "?"}」 근무자예요. 지정근무 대상이 맞는지 확인하세요` });
+        } else {
+          const chk = canDesignate(m, e.day);
+          if (!chk.ok)
+            errs.push({ d: e.day, t: `지정 ${e.cell} — ${e.name}님은 그날 「${chk.why}」 근무예요 (휴무일도 미영업 다이아도 아님)` });
+        }
+        okDg.push({
+          employee_number: String(m.employee_number),
+          member_name: e.name,
+          work_date: dstr(e.day),
+          work_shift: e.shift,
+        });
+      });
+
+      // ③ 강제휴무 발생 vs 지정근무 부여 개수 대조 (교번만)
+      const owedBy = new Map<string, number>();
+      kyobunAll.forEach((m: any) => {
+        if (String(m.name || "").includes("결원")) return;
+        let n = 0;
+        for (let d = 1; d <= lastDay; d++) {
+          const dt = new Date(dstr(d) + "T00:00:00");
+          const w: any = calcKyobunWork(m, dt, rotation, swaps, kyobunAll, hist);
+          if (noOpDia(w, dt)) n += 1;
+        }
+        if (n > 0) owedBy.set(String(m.name), n);
+      });
+      const givenBy = new Map<string, number>();
+      dgRows.forEach((e: any) => {
+        if (!e.name) return;
+        givenBy.set(e.name, (givenBy.get(e.name) || 0) + 1);
+      });
+      const cmp: any[] = [];
+      const cmpNames = new Set<string>();
+      owedBy.forEach((_v, k) => cmpNames.add(k));
+      givenBy.forEach((_v, k) => cmpNames.add(k));
+      cmpNames.forEach((nm) => {
+        const o = owedBy.get(nm) || 0;
+        const g = givenBy.get(nm) || 0;
+        if (o !== g) cmp.push({ name: nm, owed: o, given: g });
+      });
+      cmp.sort((a, b) => b.owed - b.given - (a.owed - a.given));
+
+      const dupBatch = (bRes.data || []).filter((b: any) => b.status !== "canceled");
+      setRep({
+        ymStr,
+        Y,
+        M,
+        lastDay,
+        lvTotal: lvRows.length,
+        dgTotal: dgRows.length,
+        okLv,
+        okDg,
+        errs: errs.sort((a, b) => a.d - b.d),
+        warns: warns.sort((a, b) => a.d - b.d),
+        cmp,
+        dupBatch,
+        fileName: file.name,
+      });
+      setMsg("");
+    } catch (e: any) {
+      setMsg(e && e.message ? e.message : "파일을 읽지 못했어요.");
+    }
+    setBusy(false);
+  };
+
+  // ── 저장 (사람이 확인한 뒤에만) ──
+  const saveAll = async () => {
+    if (!rep) return;
+    setSaving(true);
+    const batchId = `${rep.ymStr}-${Date.now()}`;
+    let lvSaved = 0;
+    let dgSaved = 0;
+    let failMsg = "";
+    if (rep.okLv.length > 0) {
+      const rows = rep.okLv.map((r: any) => ({
+        employee_number: r.employee_number,
+        used_date: r.used_date,
+        leave_type: r.leave_type,
+        days: 1,
+        status: "사용",
+        source: "excel",
+        batch_id: batchId,
+      }));
+      for (let i = 0; i < rows.length; i += 200) {
+        const { error } = await supabase.from("leave_history").insert(rows.slice(i, i + 200));
+        if (error) {
+          failMsg = "휴가 저장 실패: " + error.message;
+          break;
+        }
+        lvSaved += rows.slice(i, i + 200).length;
+      }
+    }
+    if (!failMsg && rep.okDg.length > 0) {
+      const rows = rep.okDg.map((r: any) => ({
+        employee_number: r.employee_number,
+        member_name: r.member_name,
+        work_date: r.work_date,
+        work_shift: r.work_shift,
+        status: "plan",
+        batch_id: batchId,
+      }));
+      for (let i = 0; i < rows.length; i += 200) {
+        const { error } = await supabase.from("designated_plan").insert(rows.slice(i, i + 200));
+        if (error) {
+          failMsg = "지정근무 저장 실패: " + error.message;
+          break;
+        }
+        dgSaved += rows.slice(i, i + 200).length;
+      }
+    }
+    await supabase.from("plan_upload_batch").insert({
+      batch_id: batchId,
+      year_month: rep.ymStr,
+      kind: "both",
+      total_count: rep.lvTotal + rep.dgTotal,
+      saved_count: lvSaved + dgSaved,
+      uploaded_by: opName,
+      status: failMsg ? "partial" : "saved",
+      note: `휴가 ${lvSaved}건 · 지정근무(가안) ${dgSaved}건${failMsg ? " · " + failMsg : ""}`,
+    });
+    setSaving(false);
+    setRep(null);
+    if (fileRef.current) fileRef.current.value = "";
+    showToast(
+      failMsg ? failMsg : `저장 완료 — 휴가 ${lvSaved}건 · 지정근무 가안 ${dgSaved}건`,
+      failMsg ? "error" : "success"
+    );
+    loadBatches();
+    loadPlans();
+  };
+
+  // ── 배치 통째 취소 ──
+  const cancelBatch = async (b: any) => {
+    if (!window.confirm(`${b.year_month} 업로드분을 통째로 취소할까요?\n휴가는 「취소」 처리, 지정근무 가안은 삭제됩니다.\n(이미 확정한 지정근무는 그대로 남습니다)`)) return;
+    const e1 = await supabase
+      .from("leave_history")
+      .update({ status: "취소" })
+      .eq("batch_id", b.batch_id);
+    const e2 = await supabase
+      .from("designated_plan")
+      .update({ status: "canceled" })
+      .eq("batch_id", b.batch_id)
+      .eq("status", "plan");
+    await supabase.from("plan_upload_batch").update({ status: "canceled" }).eq("batch_id", b.batch_id);
+    if (e1.error || e2.error) showToast("일부 취소 실패: " + (e1.error?.message || e2.error?.message), "error");
+    else showToast("배치를 취소했어요", "success");
+    loadBatches();
+    loadPlans();
+  };
+
+  // ── 가안 → 확정 (여기서 처음으로 급여에 들어감) ──
+  const confirmPlan = async (p: any) => {
+    setConfirming(p.id);
+    const { data: dup } = await supabase
+      .from("work_adjust")
+      .select("id")
+      .eq("employee_number", String(p.employee_number))
+      .eq("work_date", p.work_date)
+      .limit(1);
+    if (dup && dup.length > 0) {
+      await supabase.from("designated_plan").update({ status: "confirmed", confirmed_at: new Date().toISOString(), confirmed_by: opName, memo: "기존 기록 있어 연동 생략" }).eq("id", p.id);
+      setConfirming("");
+      showToast("이미 그날 근무조정 기록이 있어 연동은 생략하고 확정만 했어요", "success");
+      loadPlans();
+      return;
+    }
+    const night = p.work_shift === "야간";
+    const { error } = await supabase.from("work_adjust").insert([
+      {
+        employee_number: String(p.employee_number),
+        adjust_type: "designated",
+        work_date: p.work_date,
+        work_shift: p.work_shift || "주간",
+        memo: "월간 계획 확정 (운용)",
+        is_night: night,
+        is_temp_dia: false,
+        source: "operator",
+        entered_by: opName,
+      },
+    ]);
+    if (error) {
+      setConfirming("");
+      showToast("확정 실패: " + error.message, "error");
+      return;
+    }
+    await supabase
+      .from("designated_plan")
+      .update({ status: "confirmed", confirmed_at: new Date().toISOString(), confirmed_by: opName })
+      .eq("id", p.id);
+    fetch("/.netlify/functions/send-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "📌 지정근무 확정",
+        message: `${String(p.work_date).slice(5).replace("-", "/")} 지정근무가 확정됐어요. 급여에 자동 반영됩니다.`,
+        type: "workadjust",
+        url: "/",
+        to: String(p.employee_number),
+      }),
+    }).catch(() => {});
+    setConfirming("");
+    showToast(`${p.member_name}님 지정근무를 확정했어요`, "success");
+    loadPlans();
+  };
+
+  const card: React.CSSProperties = {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    border: "1px solid #E9EDEC",
+  };
+  const ttl: React.CSSProperties = {
+    fontSize: 13,
+    fontWeight: 800,
+    color: OP_TEAL_DARK,
+    marginBottom: 12,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  };
+  const row: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "11px 0",
+    borderBottom: "1px solid #F3F4F6",
+  };
+
+  const todayStr = todayLocalStr();
+  const dayPlans = plans.filter((p) => String(p.work_date) === planDay);
+  const latePlans = plans.filter((p) => p.status === "plan" && String(p.work_date) < todayStr);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <button
+          onClick={onBack}
+          style={{ border: 0, background: "#F3F4F6", borderRadius: 11, padding: "10px 14px", fontSize: 12.5, fontWeight: 800, color: "#374151", fontFamily: "inherit", cursor: "pointer" }}
+        >
+          ‹ 뒤로
+        </button>
+        <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "#111827" }}>월간 계획 업로드</div>
+      </div>
+
+      <div
+        style={{
+          background: "#FEF3C7",
+          color: "#92400E",
+          borderRadius: 12,
+          padding: "10px 12px",
+          fontSize: 11.5,
+          fontWeight: 700,
+          lineHeight: 1.7,
+          marginBottom: 12,
+        }}
+      >
+        회사 「휴가계획 · 지정근무」 엑셀을 그대로 올리면 읽어서 검사합니다. <b>읽기만 하고 아직 저장하지 않습니다.</b>
+        <br />
+        휴가는 바로 등록(잔여일수는 건드리지 않음), <b>지정근무는 「가안」으로만</b> 들어가고 확정해야 급여에 반영됩니다.
+      </div>
+
+      {/* 파일 선택 */}
+      <div style={card}>
+        <div style={ttl}>① 파일 올리기</div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls"
+          onChange={(e) => {
+            const f = e.target.files && e.target.files[0];
+            if (f) analyze(f);
+          }}
+          style={{ width: "100%", fontSize: 13, fontFamily: "inherit" }}
+        />
+        {busy && (
+          <div style={{ marginTop: 10, fontSize: 12.5, color: OP_TEAL_DARK, fontWeight: 700 }}>
+            읽고 검사하는 중이에요… (근무표까지 대조하느라 10초쯤 걸릴 수 있어요)
+          </div>
+        )}
+        {msg && (
+          <div style={{ marginTop: 10, background: "#FFF1F2", color: "#E11D48", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, fontWeight: 700, lineHeight: 1.6 }}>
+            {msg}
+          </div>
+        )}
+      </div>
+
+      {/* 검사 결과 */}
+      {rep && (
+        <>
+          <div style={card}>
+            <div style={ttl}>
+              ② 검사 결과 — {rep.Y}년 {rep.M}월
+              <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
+                {rep.fileName}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              {[
+                ["읽은 줄", rep.lvTotal + rep.dgTotal, "#111827"],
+                ["오류", rep.errs.length, "#E11D48"],
+                ["확인 필요", rep.warns.length + rep.cmp.length, "#C2410C"],
+                ["등록 가능", rep.okLv.length + rep.okDg.length, "#059669"],
+              ].map(([k, v, c]: any) => (
+                <div key={k} style={{ flex: 1, background: "#F8FAFC", borderRadius: 12, padding: "11px 6px", textAlign: "center" }}>
+                  <div style={{ fontSize: 10.5, color: "#9CA3AF", fontWeight: 700 }}>{k}</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: c, marginTop: 3 }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.8 }}>
+              휴가 {rep.lvTotal}건 · 지정근무 {rep.dgTotal}건을 읽었어요.
+              <br />
+              오류로 표시된 줄은 <b>등록에서 자동으로 빠집니다.</b> 엑셀을 고쳐서 다시 올리시면 돼요.
+            </div>
+          </div>
+
+          {rep.dupBatch.length > 0 && (
+            <div style={{ ...card, border: "2px solid #FDA4AF", background: "#FFF1F2" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#9F1239", marginBottom: 6 }}>
+                ⚠️ {rep.ymStr} 업로드 기록이 이미 있어요 ({rep.dupBatch.length}건)
+              </div>
+              <div style={{ fontSize: 12, color: "#9F1239", lineHeight: 1.8 }}>
+                그대로 저장하면 <b>같은 내용이 두 번 들어갑니다.</b> 아래 「업로드 이력」에서 이전 배치를 먼저 취소하세요.
+              </div>
+            </div>
+          )}
+
+          {rep.errs.length > 0 && (
+            <div style={card}>
+              <div style={ttl}>
+                🔴 오류 — 이 줄은 등록되지 않아요
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#FFF1F2", color: "#E11D48", padding: "3px 9px", borderRadius: 20 }}>
+                  {rep.errs.length}건
+                </span>
+              </div>
+              {(showAllIssues ? rep.errs : rep.errs.slice(0, 12)).map((e: any, i: number) => (
+                <div key={i} style={{ ...row, borderBottom: 0, padding: "7px 0", alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#E11D48", flex: "none", width: 34 }}>{rep.M}/{e.d}</span>
+                  <span style={{ flex: 1, fontSize: 12.5, color: "#374151", lineHeight: 1.6 }}>{e.t}</span>
+                </div>
+              ))}
+              {rep.errs.length > 12 && !showAllIssues && (
+                <div onClick={() => setShowAllIssues(true)} style={{ textAlign: "center", padding: "10px 0 0", fontSize: 12, fontWeight: 800, color: OP_TEAL_DARK, cursor: "pointer" }}>
+                  나머지 {rep.errs.length - 12}건 더 보기 ▼
+                </div>
+              )}
+            </div>
+          )}
+
+          {rep.warns.length > 0 && (
+            <div style={card}>
+              <div style={ttl}>
+                🟡 확인 필요 — 등록은 됩니다
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#FFF7ED", color: "#C2410C", padding: "3px 9px", borderRadius: 20 }}>
+                  {rep.warns.length}건
+                </span>
+              </div>
+              {(showAllIssues ? rep.warns : rep.warns.slice(0, 12)).map((e: any, i: number) => (
+                <div key={i} style={{ ...row, borderBottom: 0, padding: "7px 0", alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#C2410C", flex: "none", width: 34 }}>{rep.M}/{e.d}</span>
+                  <span style={{ flex: 1, fontSize: 12.5, color: "#374151", lineHeight: 1.6 }}>{e.t}</span>
+                </div>
+              ))}
+              {rep.warns.length > 12 && !showAllIssues && (
+                <div onClick={() => setShowAllIssues(true)} style={{ textAlign: "center", padding: "10px 0 0", fontSize: 12, fontWeight: 800, color: OP_TEAL_DARK, cursor: "pointer" }}>
+                  나머지 {rep.warns.length - 12}건 더 보기 ▼
+                </div>
+              )}
+            </div>
+          )}
+
+          {rep.cmp.length > 0 && (
+            <div style={card}>
+              <div style={ttl}>
+                📊 강제휴무 대조
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "3px 9px", borderRadius: 20 }}>
+                  {rep.cmp.length}명 불일치
+                </span>
+              </div>
+              {rep.cmp.slice(0, 20).map((c: any) => {
+                const diff = c.owed - c.given;
+                return (
+                  <div key={c.name} style={row}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827" }}>{c.name}</div>
+                      <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
+                        {rep.M}월 발생 {c.owed}건 · 파일 부여 {c.given}건
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: diff > 0 ? "#E11D48" : "#0D9488" }}>
+                      {diff > 0 ? `${diff}건 부족` : `${-diff}건 초과`}
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
+                「부족」은 받아야 할 지정근무를 못 받았을 가능성입니다. 「초과」는 지난달 이월분을 갚는 중이면 정상입니다.
+                <br />
+                <b>이 숫자는 참고용이며 아무것도 자동으로 고치지 않습니다.</b> 회사 기준과 다를 수 있으니 반드시 사람이 확인하세요.
+              </div>
+            </div>
+          )}
+
+          <div style={{ ...card, display: "flex", gap: 8 }}>
+            <button
+              onClick={() => { setRep(null); if (fileRef.current) fileRef.current.value = ""; }}
+              style={{ flex: 1, border: 0, borderRadius: 12, background: "#F3F4F6", color: "#374151", fontSize: 13, fontWeight: 800, padding: "14px 0", fontFamily: "inherit", cursor: "pointer" }}
+            >
+              취소
+            </button>
+            <button
+              onClick={saveAll}
+              disabled={saving || rep.okLv.length + rep.okDg.length === 0}
+              style={{ flex: 2, border: 0, borderRadius: 12, background: OP_TEAL, color: "#fff", fontSize: 13, fontWeight: 800, padding: "14px 0", fontFamily: "inherit", cursor: "pointer", opacity: saving ? 0.5 : 1 }}
+            >
+              {saving ? "저장 중…" : `이상 없는 ${rep.okLv.length + rep.okDg.length}건 등록`}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* 지정근무 가안 → 확정 */}
+      {!rep && (
+        <>
+          {latePlans.length > 0 && (
+            <div style={{ ...card, border: "2px solid #FDA4AF" }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#9F1239", marginBottom: 6 }}>
+                ⚠️ 확정 안 된 지난 날짜 {latePlans.length}건
+              </div>
+              <div style={{ fontSize: 12, color: "#9F1239", lineHeight: 1.8, marginBottom: 8 }}>
+                확정하지 않으면 <b>급여에 들어가지 않습니다.</b> 실제로 근무한 날이면 확정해주세요.
+              </div>
+              {latePlans.slice(0, 10).map((p) => (
+                <div key={p.id} style={row}>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: "#E11D48", flex: "none", width: 44 }}>
+                    {String(p.work_date).slice(5).replace("-", "/")}
+                  </span>
+                  <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: "#111827" }}>
+                    {p.member_name}
+                    <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginLeft: 6 }}>{p.work_shift}</span>
+                  </div>
+                  <button
+                    onClick={() => confirmPlan(p)}
+                    disabled={confirming === p.id}
+                    style={{ border: 0, borderRadius: 10, background: "#E11D48", color: "#fff", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer", opacity: confirming === p.id ? 0.5 : 1 }}
+                  >
+                    확정
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={card}>
+            <div style={ttl}>
+              📌 지정근무 가안 — 날짜별 확정
+              <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
+                전체 {plans.filter((p) => p.status === "plan").length}건 대기
+              </span>
+            </div>
+            <input
+              type="date"
+              value={planDay}
+              onChange={(e) => setPlanDay(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none" }}
+            />
+            {dayPlans.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
+                그날 지정근무 계획이 없어요.
+              </div>
+            ) : (
+              dayPlans.map((p, i) => (
+                <div key={p.id} style={{ ...row, borderBottom: i === dayPlans.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: p.status === "confirmed" ? "#9CA3AF" : "#111827" }}>
+                      {p.member_name}
+                      <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginLeft: 6 }}>{p.work_shift}</span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
+                      {p.status === "confirmed"
+                        ? `확정됨 · ${p.confirmed_by || ""}`
+                        : "가안 — 확정해야 급여에 들어갑니다"}
+                    </div>
+                  </div>
+                  {p.status === "confirmed" ? (
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0D9488" }}>✓ 확정</span>
+                  ) : (
+                    <button
+                      onClick={() => confirmPlan(p)}
+                      disabled={confirming === p.id}
+                      style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer", opacity: confirming === p.id ? 0.5 : 1 }}
+                    >
+                      확정
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 업로드 이력 */}
+          <div style={card}>
+            <div style={ttl}>🗂 업로드 이력</div>
+            {batches.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
+                아직 업로드한 파일이 없어요.
+              </div>
+            ) : (
+              batches.map((b, i) => (
+                <div key={b.id} style={{ ...row, borderBottom: i === batches.length - 1 ? 0 : row.borderBottom }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: b.status === "canceled" ? "#C4C7CC" : "#111827" }}>
+                      {b.year_month}
+                      {b.status === "canceled" && (
+                        <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#F3F4F6", color: "#9CA3AF" }}>
+                          취소됨
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2, lineHeight: 1.5 }}>
+                      {b.note} · {String(b.created_at || "").slice(0, 10)} · {b.uploaded_by}
+                    </div>
+                  </div>
+                  {b.status !== "canceled" && (
+                    <button
+                      onClick={() => cancelBatch(b)}
+                      style={{ border: 0, borderRadius: 10, background: "#FFF1F2", color: "#E11D48", fontSize: 12, fontWeight: 800, padding: "9px 13px", fontFamily: "inherit", cursor: "pointer" }}
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
+              배치를 취소하면 그 업로드로 들어간 휴가는 「취소」 처리되고, 확정 전 지정근무 가안은 사라집니다.
+              <br />
+              <b>이미 확정한 지정근무는 남습니다</b> — 급여에 들어간 기록이라 함부로 지우지 않습니다.
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── 지정근무: 강제 휴무 → 지정근무 현황 (자동 집계 · 신청은 실데이터) ──
 function OperatorDesignated({ opName }: { opName: string }) {
   const [quickFor, setQuickFor] = useState<any>(null); // 명단에서 바로 신청할 사람
+  const [planOpen, setPlanOpen] = useState(false); // 월간 계획 업로드 화면
   const [applies, setApplies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [ledger, setLedger] = useState<any[]>([]);
@@ -18103,8 +18959,34 @@ function OperatorDesignated({ opName }: { opName: string }) {
   const remainTotal = viewLedger.reduce((s: number, l: any) => s + Math.max(0, l.owed + l.planned - l.paid), 0);
   const viewShown = cardFilter === "target" ? viewLedger.filter((l: any) => l.owed + l.planned - l.paid > 0) : viewLedger;
 
+  // 훅은 전부 위에서 선언됨 — 여기서 화면만 갈아끼운다
+  if (planOpen) return <MonthPlanUpload opName={opName} onBack={() => setPlanOpen(false)} />;
+
   return (
     <div>
+      <div
+        onClick={() => setPlanOpen(true)}
+        style={{
+          background: "#fff",
+          border: "1px solid #E9EDEC",
+          borderRadius: 16,
+          padding: "14px 16px",
+          marginBottom: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          cursor: "pointer",
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>📄 월간 계획 업로드</div>
+          <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>
+            회사 휴가계획·지정근무 엑셀 → 검사 후 등록
+          </div>
+        </div>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: OP_TEAL }}>열기 ›</span>
+      </div>
+
       <div
         style={{
           background: "#FEF3C7",
@@ -19173,6 +20055,7 @@ function OperatorRank() {
   const [excMemo, setExcMemo] = useState<Record<string, string>>({});
   const [rankReload, setRankReload] = useState(0);
   const [outOpen, setOutOpen] = useState(false);
+  const [nightOpen, setNightOpen] = useState(false);
   // ── 신규·전입 평균 부여 (2026-08-05) ──
   //   단독 발령 후 3개월이 되면 0이 아니라 그 시점 직원 평균값으로 시작한다 (노사 확정 규칙)
   //   야간 = 평균 개수(정수) → 주간 = 평균 합산점수 − 야간분 (소수 1자리)
@@ -20055,7 +20938,10 @@ function OperatorRank() {
   const dayBoard = rankNames
     .map((nm) => ({ name: nm, pts: rankScoreOf(nm).toFixed(1), note: `주간 ${rankDay[nm] || 0} · 야간 ${rankNight[nm] || 0}` }))
     .sort((a: any, b: any) => Number(a.pts) - Number(b.pts));
+  // 야간 개수판에서는 면제자를 뺀다 — 야간을 안 하니 영원히 0개라 순서판 앞자리를 전부 차지한다 (2026-08-05 확정)
+  const nightExcNames = rankNames.filter((nm) => nightExc[nm]);
   const nightBoard = rankNames
+    .filter((nm) => !nightExc[nm])
     .map((nm) => ({ name: nm, pts: rankNight[nm] || 0, note: `합산 ${rankScoreOf(nm).toFixed(1)}점` }))
     .sort((a: any, b: any) => (Number(a.pts) - Number(b.pts)) || (rankScoreOf(a.name) - rankScoreOf(b.name)));
   const list = board === "주간" ? dayBoard : nightBoard;
@@ -20145,6 +21031,44 @@ function OperatorRank() {
           </div>
         ))}
       </div>
+
+      {/* 🔸 야간 면제 명단 (야간 개수판에서만) */}
+      {board === "야간" && nightExcNames.length > 0 && (
+        <div style={card}>
+          <div
+            onClick={() => setNightOpen(!nightOpen)}
+            style={{ ...ttl, marginBottom: nightOpen ? 12 : 0, cursor: "pointer" }}
+          >
+            <span>🔸 야간 면제</span>
+            <span style={{ fontSize: 11, fontWeight: 700, background: "#FFF7ED", color: "#C2410C", padding: "3px 9px", borderRadius: 20 }}>
+              {nightExcNames.length}명 {nightOpen ? "▲" : "▼"}
+            </span>
+          </div>
+          {nightOpen && (
+            <>
+              {nightExcNames
+                .slice()
+                .sort((a, b) => rankScoreOf(a) - rankScoreOf(b))
+                .map((nm, i, arr) => (
+                  <div key={nm} style={{ ...row, borderBottom: i === arr.length - 1 ? 0 : row.borderBottom }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#9CA3AF" }}>{nm}</div>
+                      <div style={{ fontSize: 11.5, color: "#C4C7CC", fontWeight: 500, marginTop: 2 }}>
+                        주간 {rankDay[nm] || 0} · 야간 {rankNight[nm] || 0} · 합산 {rankScoreOf(nm).toFixed(1)}점
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#C2410C" }}>야간면제</div>
+                  </div>
+                ))}
+              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
+                야간을 하지 않아 개수가 늘지 않으므로 야간 개수판에서는 뺐습니다. <b>주간 점수판에는 정상으로 들어갑니다.</b>
+                <br />
+                면제를 해제하려면 아래 「충당 제외 관리」에서 [야간] 버튼을 끄면 됩니다.
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 🚫 순서판에서 빠진 사람 (유고 자동 · 제외 스위치) */}
       {outNames.length > 0 && (
