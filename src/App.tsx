@@ -19359,7 +19359,7 @@ function OperatorRank() {
       setRankNight(n);
     })();
   }, []);
-  const rankNames = [...new Set([...Object.keys(rankDay), ...Object.keys(rankNight)])].filter((nm) => !nm.includes("결원"));
+  const rankNames = Object.keys({ ...rankDay, ...rankNight }).filter((nm) => !nm.includes("결원")); // Set 전개는 CRA 빌드가 거부 (TS2569)
   const rankScoreOf = (nm: string) => (rankDay[nm] || 0) + (rankNight[nm] || 0) * 1.8;
   const dayBoard = rankNames
     .map((nm) => ({ name: nm, pts: rankScoreOf(nm).toFixed(1), note: `주간 ${rankDay[nm] || 0} · 야간 ${rankNight[nm] || 0}` }))
