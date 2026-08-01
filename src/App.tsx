@@ -17466,6 +17466,26 @@ function OperatorHome({ opName }: { opName: string }) {
   // ── 오늘 휴가·유고 전체 카드 (표시 전용 · 접이식 · 이미 로드된 opLeaves/opAbsences 사용) ──
   //   ※ offOpen 훅은 조건부 return 위(상단 훅 구역)에 선언되어 있음 — 여기서 선언하면 안 됨
   const offNameOf = (e: any) => { const m = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(e)); return m ? m.name : String(e); };
+  // 휴가 종류 한글 표기 (DB는 annual·promotedAnnual 같은 영문 키로 저장됨)
+  const OFF_LV_KO: Record<string, string> = {
+    annual: "연차",
+    tempAnnual: "가연차",
+    promotedAnnual: "촉진연차",
+    substitute: "대체휴가",
+    study: "학습휴가",
+    longService: "장기재직휴가",
+    petition: "청원휴가",
+  };
+  // 같은 사람이 같은 날 두 번 올라오는 것 방지 (엑셀을 두 번 올리면 줄이 두 개 생김)
+  const offLeaves = React.useMemo(() => {
+    const seen = new Set<string>();
+    return (opLeaves || []).filter((lv: any) => {
+      const k = String(lv.employee_number) + "|" + String(lv.leave_type || "");
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [opLeaves]);
   const offCard = (
     <div style={{ background: "#fff", borderRadius: 18, padding: "14px 16px", marginBottom: 14 }}>
       <div onClick={() => setOffOpen(!offOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
@@ -17475,7 +17495,7 @@ function OperatorHome({ opName }: { opName: string }) {
             <span style={{ background: "#F3F4F6", color: "#9CA3AF", borderRadius: 8, padding: "3px 8px" }}>없음</span>
           ) : (
             <>
-              <span style={{ background: "#EEF0FF", color: "#4F46E5", borderRadius: 8, padding: "3px 8px" }}>휴가 {opLeaves.length}</span>
+              <span style={{ background: "#EEF0FF", color: "#4F46E5", borderRadius: 8, padding: "3px 8px" }}>휴가 {offLeaves.length}</span>
               <span style={{ background: "#FFF1F2", color: "#E11D48", borderRadius: 8, padding: "3px 8px", marginLeft: 5 }}>유고 {opAbsences.length}</span>
             </>
           )}
@@ -17484,11 +17504,11 @@ function OperatorHome({ opName }: { opName: string }) {
       </div>
       {offOpen && (
         <div style={{ marginTop: 6 }}>
-          {opLeaves.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>휴가</div>}
-          {opLeaves.map((lv: any, i: number) => (
+          {offLeaves.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>휴가</div>}
+          {offLeaves.map((lv: any, i: number) => (
             <div key={"lv" + i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
               <span style={{ fontWeight: 700 }}>{offNameOf(lv.employee_number)}</span>
-              <span style={{ color: "#4F46E5", fontSize: 12, fontWeight: 700 }}>{lv.leave_type || "휴가"}</span>
+              <span style={{ color: "#4F46E5", fontSize: 12, fontWeight: 700 }}>{OFF_LV_KO[lv.leave_type] || lv.leave_type || "휴가"}</span>
             </div>
           ))}
           {opAbsences.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>유고</div>}
