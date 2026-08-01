@@ -295,8 +295,33 @@ function isStandbyDia(dia: any): boolean {
   return s.startsWith("대기") || /^대\d/.test(s);
 }
 
-function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
-  if (!member || rotationData.length === 0) return null;
+// ── 미영업(운휴) 다이아 판정 — 2026-08-01 ──
+// 회사가 그날 아예 안 태우는 다이아. 근무표에는 번호가 있지만 실제 운행이 없어
+// ① 그 사람은 강제휴무가 되고 ② 그 자리는 채울 필요가 없다.
+//   · 휴51 · 휴71 → 조건 없이 미영업
+//   · 주간 26·27·28·29·40 이면서 그날이 휴일
+//   · 야간 61·62·63·64 이면서 그날과 다음날이 휴일
+// 판정을 이 함수 한 곳에만 두어 운용 홈 빈 자리·지정근무 빚 장부·월간 계획 검사가 어긋나지 않게 한다.
+function isNoOpDia(work: any, date: Date, holidays: string[] = []): boolean {
+  if (!work || !work.dia || !date) return false;
+  const s = String(work.dia).replace(/\s+/g, "");
+  if (s === "휴51" || s === "휴71") return true;
+  if (!/^\d+$/.test(s)) return false;
+  const n = Number(s);
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const isHol = (d: Date) => {
+    const w = d.getDay();
+    return w === 0 || w === 6 || holidays.includes(fmt(d));
+  };
+  const tm = new Date(date);
+  tm.setDate(tm.getDate() + 1);
+  if (work.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(date)) return true;
+  if (work.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(date) && isHol(tm)) return true;
+  return false;
+}
+
+function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {  if (!member || rotationData.length === 0) return null;
 
   const calc = (mem: any) => {
     if (!mem) return null;
@@ -15475,6 +15500,18 @@ function OperatorHome({ opName }: { opName: string }) {
   );
   const isBibeon = (m: any) =>
     bibeonEmps.has(String(m.employee_number)) || bibeonNames.has(String(m.name));
+  // 전날 무슨 다이아를 충당했는지 (사번·이름 둘 다로 조회) → 빈 자리에 "7/31 야간 87 충당"으로 표시
+  const bibeonInfo = React.useMemo(() => {
+    const byEmp = new Map<string, any>();
+    const byName = new Map<string, any>();
+    prevNightFills.forEach((r: any) => {
+      const info = { dia: String(r.dia_no || ""), via: String(r.via || "") };
+      if (r.employee_number) byEmp.set(String(r.employee_number), info);
+      if (r.filled_name) byName.set(String(r.filled_name), info);
+    });
+    return (m: any) => byEmp.get(String(m.employee_number)) || byName.get(String(m.name)) || null;
+  }, [prevNightFills]);
+
 
   // 그 날짜의 지정근무 신청자 (실데이터 · chungdang_apply)
   const [desigApplies, setDesigApplies] = useState<any[]>([]);
@@ -15682,14 +15719,16 @@ function OperatorHome({ opName }: { opName: string }) {
         ? calcTongsangWork(m, target, opHolidays || [])
         : calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
     const list: any[] = [];
+    const noOp: string[] = []; // 운휴(미영업)라 채우지 않는 다이아 — 사라진 게 아니라 뺀 것임을 화면에 알림
     reasonByEmp.forEach((reason, emp) => {
-      const m = byEmp.get(emp);
+      const m: any = byEmp.get(emp);
       if (!m) return;
       const w: any = workOf(m);
       if (!w) return;
       // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
       if (isStandbyDia(w.dia)) return;
       if (w.type !== "주간" && w.type !== "야간") return;
+      if (isNoOpDia(w, target, opHolidays || [])) { noOp.push(String(w.dia)); return; } // 운휴 = 탈 열차가 없어 충당 자체가 불필요
       list.push({ dia: String(w.dia), name: m.name, reason, region: m.work_group });
     });
     // ② 결원(공석) — 사람이 없는 자리. 근무표에 이미 등록됨. 운전 다이아에 걸리면 빈 자리.
@@ -15699,6 +15738,7 @@ function OperatorHome({ opName }: { opName: string }) {
       if (!w) return;
       if (isStandbyDia(w.dia)) return; // 대기 결원은 대기 뱃지에서 처리
       if (w.type !== "주간" && w.type !== "야간") return;
+      if (isNoOpDia(w, target, opHolidays || [])) { noOp.push(String(w.dia)); return; }
       list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
     });
     // ②-1 통상 결원 — 통상 51~54 자리의 결원도 운전 다이아면 빈 자리
@@ -15718,15 +15758,25 @@ function OperatorHome({ opName }: { opName: string }) {
       if (!w) return;
       if (isStandbyDia(w.dia)) return; // 대기는 대기 카드에서 회색 처리
       if (w.type !== "주간" && w.type !== "야간") return;
+      if (isNoOpDia(w, target, opHolidays || [])) { noOp.push(String(w.dia)); return; }
       if (list.some((x) => x.dia === String(w.dia))) return;
-      list.push({ dia: String(w.dia), name: m.name, reason: "충당비번", region: m.work_group });
+      const bi = bibeonInfo(m);
+      list.push({
+        dia: String(w.dia),
+        name: m.name,
+        reason: "충당비번",
+        region: m.work_group,
+        prevDia: bi ? bi.dia : "",
+        prevVia: bi ? bi.via : "",
+      });
     });
     list.sort(
       (a, b) =>
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
     );
+    (list as any).noOpDias = noOp;
     return list;
-  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills]);
+  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills, bibeonInfo]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -17112,6 +17162,13 @@ function OperatorHome({ opName }: { opName: string }) {
     </div>
   );
 
+  // 전날 날짜 라벨 (7/31 처럼) — 충당비번 사유 표시용
+  const prevDayLabel = (() => {
+    const p = new Date(target);
+    p.setDate(p.getDate() - 1);
+    return `${p.getMonth() + 1}/${p.getDate()}`;
+  })();
+
   const emptyCard = (
     <div style={card}>
       <div style={ttl}>
@@ -17167,6 +17224,10 @@ function OperatorHome({ opName }: { opName: string }) {
                   <span style={{ color: OP_TEAL_DARK, fontWeight: 800 }}>
                     → {a.name} ({a.via})
                   </span>
+                ) : e.reason === "충당비번" && e.prevDia ? (
+                  <span>
+                    {prevDayLabel} 야간 <b style={{ color: "#E11D48", fontWeight: 800 }}>{e.prevDia} {e.prevVia || "충당"}</b> → 오늘 비번
+                  </span>
                 ) : (
                   e.reason
                 )}
@@ -17219,6 +17280,13 @@ function OperatorHome({ opName }: { opName: string }) {
           </div>
         );
       })}
+      {(empty as any).noOpDias && (empty as any).noOpDias.length > 0 && (
+        <div style={{ marginTop: 10, background: "#F8FAFC", border: "1px dashed #E2E8F0", borderRadius: 12, padding: "10px 13px", fontSize: 11.5, color: "#64748B", fontWeight: 600, lineHeight: 1.7 }}>
+          🚫 운휴(미영업) {(empty as any).noOpDias.length}건은 목록에서 뺐어요 — 다이아 {(empty as any).noOpDias.join(" · ")}
+          <br />
+          그날 열차가 안 다니는 다이아라 채울 자리가 없습니다. 채워야 하는 자리가 여기 있으면 알려주세요.
+        </div>
+      )}
     </div>
   );
 
@@ -18063,18 +18131,8 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       //     · 휴51 · 휴71 → 조건 없이 미영업
       //     · 주간 26·27·28·29·40 이면서 그날이 휴일
       //     · 야간 61·62·63·64 이면서 그날과 다음날이 휴일
-      const noOpDia = (w: any, dt: Date) => {
-        if (!w || !w.dia) return false;
-        const ds = String(w.dia).replace(/\s+/g, "");
-        if (ds === "휴51" || ds === "휴71") return true;
-        if (!/^\d+$/.test(ds)) return false;
-        const n = Number(ds);
-        const tm = new Date(dt);
-        tm.setDate(tm.getDate() + 1);
-        if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(dt)) return true;
-        if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(dt) && isHol(tm)) return true;
-        return false;
-      };
+      //   판정은 전역 isNoOpDia 한 곳만 본다 (운용 홈 빈 자리·빚 장부와 미러링)
+      const noOpDia = (w: any, dt: Date) => isNoOpDia(w, dt, holList);
       const canDesignate = (m: any, day: number) => {
         const dt = new Date(dstr(day) + "T00:00:00");
         const w = workOf(m, day);
@@ -18712,7 +18770,11 @@ function OperatorDesignated({ opName }: { opName: string }) {
   const [ledgerLoading, setLedgerLoading] = useState(true);
   const [baseDate, setBaseDate] = useState("");
   const [baseLoaded, setBaseLoaded] = useState(false);
-  const [monthSel, setMonthSel] = useState("전체");
+  // 기본값 = 이번 달 (매번 쓰는 화면이라 바로 보이게. 다른 달은 탭으로 검색) — 2026-08-01
+  const [monthSel, setMonthSel] = useState(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [cardFilter, setCardFilter] = useState<"" | "target">(""); // 카드 터치 → 대상자만 보기
   const appliesRef = React.useRef<HTMLDivElement | null>(null); // 신청됨 카드 → 예정 목록 스크롤
   const [searchName, setSearchName] = useState("");
@@ -19108,7 +19170,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
                   onClick={() => setQuickFor({ id: l.id, name: l.name })}
                   style={{ marginLeft: 8, border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
                 >
-                  신청
+                  지정
                 </button>
               )}
             </div>
@@ -19125,9 +19187,9 @@ function OperatorDesignated({ opName }: { opName: string }) {
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>불러오는 중…</div>
         ) : applies.length === 0 ? (
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
-            아직 신청이 없습니다.
+            아직 지정한 근무가 없습니다.
             <br />
-            신청함에서 대리 입력하면 여기 뜹니다.
+            위 명단에서 [지정]을 누르면 여기 뜹니다.
           </div>
         ) : (
           applies.map((it, i) => (
@@ -19462,7 +19524,7 @@ function QuickApplyModal({
         style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 380 }}
       >
         <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
-          {member.name} · {APPLY_KINDS[kind]} 신청
+          {member.name} · {APPLY_KINDS[kind]} {kind === "designated" ? "지정" : "신청"}
         </div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4, marginBottom: 14 }}>
           대리 입력 · {opName}
@@ -19490,7 +19552,7 @@ function QuickApplyModal({
             disabled={saving || !workDate}
             style={{ flex: 2, border: 0, borderRadius: 12, background: saving || !workDate ? "#E5E7EB" : OP_TEAL, color: saving || !workDate ? "#9CA3AF" : "#fff", fontSize: 13.5, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: saving || !workDate ? "default" : "pointer" }}
           >
-            {saving ? "저장 중…" : "신청 입력"}
+            {saving ? "저장 중…" : kind === "designated" ? "지정 저장" : "신청 입력"}
           </button>
         </div>
       </div>
