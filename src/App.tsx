@@ -16503,18 +16503,18 @@ function OperatorHome({ opName }: { opName: string }) {
             })
           )}
 
-          {opLeaves.length > 0 && (
+          {offLeaves.length > 0 && (
             <>
               <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", margin: "16px 0 8px" }}>
-                이 날짜 앱 휴가 ({opLeaves.length})
+                이 날짜 앱 휴가 ({offLeaves.length})
               </div>
-              {opLeaves.map((lv: any, i: number) => {
+              {offLeaves.map((lv: any, i: number) => {
                 const m = (opAllMembers.length ? opAllMembers : opMembers).find(
                   (x: any) => String(x.employee_number) === String(lv.employee_number)
                 );
                 const LVN: Record<string, string> = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체휴가", study: "학습휴가", longService: "장기재직", petition: "청원휴가" };
                 return (
-                  <div key={"oplv" + i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === opLeaves.length - 1 ? 0 : "1px solid #F5F5F7" }}>
+                  <div key={"oplv" + i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === offLeaves.length - 1 ? 0 : "1px solid #F5F5F7" }}>
                     <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 7px", borderRadius: 6, background: "#EEF0FF", color: "#4F46E5", flex: "none" }}>앱 휴가</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{m ? m.name : lv.employee_number}</div>
@@ -18412,9 +18412,36 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
     const batchId = `${rep.ymStr}-${Date.now()}`;
     let lvSaved = 0;
     let dgSaved = 0;
+    let lvSkip = 0;
+    let dgSkip = 0;
     let failMsg = "";
+    // ── 중복 방지 (2026-08-01): 같은 파일을 두 번 올려도 이미 있는 건 건너뛰고 새 것만 넣는다 ──
+    //   경고만으로는 부족 — 사람이 지나치면 그대로 이중 등록 사고가 난다 (실제 발생)
+    //   기준: 휴가 = 사번+날짜 / 지정근무 = 사람+날짜+종류. 취소된 건 다시 넣을 수 있게 제외하고 본다.
+    const [exLv, exDg] = await Promise.all([
+      supabase
+        .from("leave_history")
+        .select("employee_number, used_date")
+        .gte("used_date", `${rep.ymStr}-01`)
+        .lte("used_date", `${rep.ymStr}-${String(rep.lastDay).padStart(2, "0")}`)
+        .neq("status", "취소"),
+      supabase
+        .from("chungdang_apply")
+        .select("member_id, work_date")
+        .eq("kind", "designated")
+        .gte("work_date", `${rep.ymStr}-01`)
+        .lte("work_date", `${rep.ymStr}-${String(rep.lastDay).padStart(2, "0")}`)
+        .neq("status", "canceled"),
+    ]);
+    const hasLv = new Set((exLv.data || []).map((r: any) => String(r.employee_number) + "|" + String(r.used_date)));
+    const hasDg = new Set((exDg.data || []).map((r: any) => String(r.member_id) + "|" + String(r.work_date)));
     if (rep.okLv.length > 0) {
-      const rows = rep.okLv.map((r: any) => ({
+      const rows = rep.okLv
+        .filter((r: any) => {
+          if (hasLv.has(String(r.employee_number) + "|" + String(r.used_date))) { lvSkip += 1; return false; }
+          return true;
+        })
+        .map((r: any) => ({
         employee_number: r.employee_number,
         used_date: r.used_date,
         leave_type: r.leave_type,
@@ -18435,7 +18462,12 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
     if (!failMsg && rep.okDg.length > 0) {
       // 지정근무는 기존 신청함(chungdang_apply) 한 곳으로 모은다 — 엑셀·앱 신청·운용 지정이 같은 줄에 서고
       // 운용기관사가 1차/2차 확정을 하면 그때 work_adjust(급여)로 간다. (2026-08-01 확정)
-      const rows = rep.okDg.map((r: any) => ({
+      const rows = rep.okDg
+        .filter((r: any) => {
+          if (hasDg.has(String(r.member_id) + "|" + String(r.work_date))) { dgSkip += 1; return false; }
+          return true;
+        })
+        .map((r: any) => ({
         member_id: r.member_id,
         member_name: r.member_name,
         kind: "designated",
@@ -18460,13 +18492,13 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       saved_count: lvSaved + dgSaved,
       uploaded_by: opName,
       status: failMsg ? "partial" : "saved",
-      note: `휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건${failMsg ? " · " + failMsg : ""}`,
+      note: `휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건${lvSkip + dgSkip > 0 ? ` · 이미 있어 건너뜀 ${lvSkip + dgSkip}건` : ""}${failMsg ? " · " + failMsg : ""}`,
     });
     setSaving(false);
     setRep(null);
     if (fileRef.current) fileRef.current.value = "";
     showToast(
-      failMsg ? failMsg : `저장 완료 — 휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건`,
+      failMsg ? failMsg : `저장 완료 — 휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건${lvSkip + dgSkip > 0 ? ` (이미 있어 건너뜀 ${lvSkip + dgSkip}건)` : ""}`,
       failMsg ? "error" : "success"
     );
     loadBatches();
