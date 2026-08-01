@@ -15168,6 +15168,7 @@ function OperatorHome({ opName }: { opName: string }) {
   const [openVacant, setOpenVacant] = useState<string | null>(null);
   // 유고 입력 화면 상태
   const [showAbsence, setShowAbsence] = useState(false);
+  const [offOpen, setOffOpen] = useState(false); // 오늘 휴가·유고 카드 접이식 (훅은 조건부 return 위에 있어야 함)
   const [absSearch, setAbsSearch] = useState("");
   const [absSel, setAbsSel] = useState<any>(null);
   const [absReason, setAbsReason] = useState("휴가"); // 휴가/휴직/병가/기타
@@ -17395,7 +17396,7 @@ function OperatorHome({ opName }: { opName: string }) {
   });
 
   // ── 오늘 휴가·유고 전체 카드 (표시 전용 · 접이식 · 이미 로드된 opLeaves/opAbsences 사용) ──
-  const [offOpen, setOffOpen] = useState(false);
+  //   ※ offOpen 훅은 조건부 return 위(상단 훅 구역)에 선언되어 있음 — 여기서 선언하면 안 됨
   const offNameOf = (e: any) => { const m = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(e)); return m ? m.name : String(e); };
   const offCard = (
     <div style={{ background: "#fff", borderRadius: 18, padding: "14px 16px", marginBottom: 14 }}>
