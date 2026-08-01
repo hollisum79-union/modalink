@@ -18215,12 +18215,35 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       });
 
       // ③ 강제휴무 발생 vs 지정근무 부여 개수 대조 (교번만)
+      // 그 달의 휴가·유고 — 강제휴무날이 휴가·유고 기간에 들어 있으면 지정근무가 발생하지 않는다
+      //   (빚 장부와 같은 규칙. 휴직·병가·공로연수처럼 긴 기간도 전부 덮는다)
+      const monEnd = dstr(lastDay);
+      const [lvRes, abRes] = await Promise.all([
+        supabase.from("leave_history").select("employee_number, used_date").gte("used_date", dstr(1)).lte("used_date", monEnd).neq("status", "취소"),
+        supabase.from("operator_absence").select("employee_number, work_date, end_date").lte("work_date", monEnd).gte("end_date", dstr(1)),
+      ]);
+      const offSet = new Set<string>();
+      (lvRes.data || []).forEach((r: any) => offSet.add(String(r.employee_number) + "|" + String(r.used_date)));
+      const absRanges = new Map<string, { s: string; e: string }[]>();
+      (abRes.data || []).forEach((r: any) => {
+        const k = String(r.employee_number);
+        if (!absRanges.has(k)) absRanges.set(k, []);
+        absRanges.get(k)!.push({ s: String(r.work_date), e: String(r.end_date || r.work_date) });
+      });
+      const isOff = (emp: string, ds2: string) => {
+        if (offSet.has(emp + "|" + ds2)) return true;
+        const rs = absRanges.get(emp);
+        return !!rs && rs.some((r) => r.s <= ds2 && ds2 <= r.e);
+      };
       const owedBy = new Map<string, number>();
       kyobunAll.forEach((m: any) => {
         if (String(m.name || "").includes("결원")) return;
+        const emp = String(m.employee_number);
         let n = 0;
         for (let d = 1; d <= lastDay; d++) {
-          const dt = new Date(dstr(d) + "T00:00:00");
+          const ds2 = dstr(d);
+          if (isOff(emp, ds2)) continue; // 휴가·유고 기간 → 강제휴무 발생 안 함
+          const dt = new Date(ds2 + "T00:00:00");
           const w: any = calcKyobunWork(m, dt, rotation, swaps, kyobunAll, hist);
           if (noOpDia(w, dt)) n += 1;
         }
@@ -18520,10 +18543,15 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
               <div style={ttl}>
                 📊 강제휴무 대조
                 <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "3px 9px", borderRadius: 20 }}>
-                  {rep.cmp.length}명 불일치
+                  부족 {rep.cmp.filter((c: any) => c.owed > c.given).length}명 · 더 부여 {rep.cmp.filter((c: any) => c.owed < c.given).length}명
                 </span>
               </div>
-              {rep.cmp.slice(0, 20).map((c: any) => {
+              {rep.cmp.filter((c: any) => c.owed > c.given).length === 0 && (
+                <div style={{ background: "#F0FDFA", color: "#0F766E", borderRadius: 11, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.7, marginBottom: 10 }}>
+                  ✅ 「부족」은 없습니다 — 받아야 할 지정근무를 못 받은 사람은 없어요.
+                </div>
+              )}
+              {rep.cmp.slice(0, 30).map((c: any) => {
                 const diff = c.owed - c.given;
                 return (
                   <div key={c.name} style={row}>
@@ -18533,14 +18561,18 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
                         {rep.M}월 발생 {c.owed}건 · 파일 부여 {c.given}건
                       </div>
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: diff > 0 ? "#E11D48" : "#0D9488" }}>
-                      {diff > 0 ? `${diff}건 부족` : `${-diff}건 초과`}
+                    <div style={{ fontSize: 12, fontWeight: 800, color: diff > 0 ? "#E11D48" : "#94A3B8" }}>
+                      {diff > 0 ? `${diff}건 부족` : `${-diff}건 더 부여`}
                     </div>
                   </div>
                 );
               })}
               <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
-                「부족」은 받아야 할 지정근무를 못 받았을 가능성입니다. 「초과」는 지난달 이월분을 갚는 중이면 정상입니다.
+                <b style={{ color: "#E11D48" }}>부족</b> = 받아야 할 지정근무를 못 받았을 가능성. 이것만 회사에 확인하시면 됩니다.
+                <br />
+                <b>더 부여</b> = 대개 정상입니다. ① 교번 <b>연 96휴일</b>을 넘긴 만큼 지정근무로 채우는 경우 ② 지난달 이월분을 갚는 경우.
+                <br />
+                휴가·휴직·병가·공로연수 기간에 걸린 날은 강제휴무가 발생하지 않으므로 이미 빼고 셌습니다.
                 <br />
                 <b>이 숫자는 참고용이며 아무것도 자동으로 고치지 않습니다.</b> 회사 기준과 다를 수 있으니 반드시 사람이 확인하세요.
               </div>
@@ -19543,6 +19575,43 @@ function OperatorApply({ opName }: { opName: string }) {
     load();
   };
 
+  // ── 날짜 변경 (2026-08-01) ──
+  //   지정근무는 강제휴무를 갚는 근무라 없앨 수 없다. 사정이 생기면 "취소"가 아니라 "날짜를 옮기는" 것이 맞다.
+  //   같은 달 안이 원칙(당월 이행) — 달을 넘기면 경고만 하고 막지는 않는다.
+  const [moveItem, setMoveItem] = useState<any>(null);
+  const [moveDate, setMoveDate] = useState("");
+  const [moveSaving, setMoveSaving] = useState(false);
+  const openMove = (it: any) => {
+    setMoveItem(it);
+    setMoveDate(String(it.work_date));
+  };
+  const saveMove = async () => {
+    if (!moveItem || !moveDate) return;
+    if (moveDate === String(moveItem.work_date)) return showToast("날짜가 그대로예요", "error");
+    setMoveSaving(true);
+    const { data: mem } = await supabase
+      .from("members")
+      .select("employee_number")
+      .eq("id", moveItem.member_id)
+      .maybeSingle();
+    if (mem?.employee_number) {
+      const bad = await checkAdjustDate(mem.employee_number, moveDate, moveItem.kind === "support" ? "support" : "designated");
+      if (bad) {
+        setMoveSaving(false);
+        return showToast(bad, "error");
+      }
+    }
+    const { error } = await supabase
+      .from("chungdang_apply")
+      .update({ work_date: moveDate, via: `${moveItem.via || ""} → 변경 ${opName}`.trim() })
+      .eq("id", moveItem.id);
+    setMoveSaving(false);
+    if (error) return showToast("변경 실패: " + error.message, "error");
+    setMoveItem(null);
+    showToast(`${moveItem.member_name}님 날짜를 ${moveDate.slice(5).replace("-", "/")}로 옮겼어요`);
+    load();
+  };
+
   const card: React.CSSProperties = {
     background: "#fff",
     borderRadius: 16,
@@ -19919,12 +19988,20 @@ function OperatorApply({ opName }: { opName: string }) {
                   </div>
                   {statusBadge(it.status)}
                   {it.status === "applied" && (
-                    <button
-                      onClick={() => cancelItem(it)}
-                      style={{ border: 0, borderRadius: 9, background: "#F3F4F6", color: "#6B7280", fontSize: 11.5, fontWeight: 800, padding: "7px 11px", fontFamily: "inherit", cursor: "pointer" }}
-                    >
-                      취소
-                    </button>
+                    <>
+                      <button
+                        onClick={() => openMove(it)}
+                        style={{ border: 0, borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", fontSize: 11.5, fontWeight: 800, padding: "7px 11px", fontFamily: "inherit", cursor: "pointer" }}
+                      >
+                        날짜 변경
+                      </button>
+                      <button
+                        onClick={() => cancelItem(it)}
+                        style={{ border: 0, borderRadius: 9, background: "#F3F4F6", color: "#6B7280", fontSize: 11.5, fontWeight: 800, padding: "7px 11px", fontFamily: "inherit", cursor: "pointer" }}
+                      >
+                        취소
+                      </button>
+                    </>
                   )}
                 </div>
               ))
@@ -19932,6 +20009,53 @@ function OperatorApply({ opName }: { opName: string }) {
           </div>
         );
       })}
+      {/* 날짜 변경 팝업 — 지정근무는 없앨 수 없는 근무라 "옮기기"가 기본 */}
+      {moveItem && (
+        <div
+          onClick={() => setMoveItem(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.5)", display: "grid", placeItems: "center", padding: 20, zIndex: 200 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 340 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 3 }}>
+              {moveItem.member_name}님 날짜 변경
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+              {APPLY_KINDS[moveItem.kind] || moveItem.kind} · 지금 {String(moveItem.work_date).slice(5).replace("-", "/")}
+            </div>
+            <input
+              type="date"
+              value={moveDate}
+              onChange={(e) => setMoveDate(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "12px 13px", fontSize: 14, fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none" }}
+            />
+            {moveDate.slice(0, 7) !== String(moveItem.work_date).slice(0, 7) && (
+              <div style={{ background: "#FEF3C7", color: "#92400E", borderRadius: 11, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.7, marginBottom: 10 }}>
+                ⚠️ 달을 넘깁니다. 지정근무는 <b>발생한 달 안에 이행</b>이 원칙이라, 원래 달은 「미이행」으로 빨갛게 남습니다.
+              </div>
+            )}
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, marginBottom: 14 }}>
+              지정근무는 강제휴무를 갚는 근무라 없어지지 않습니다. 사정이 생기면 날짜만 옮기세요.
+              <br />
+              그날 넣을 수 없는 날이면 저장할 때 이유를 알려드립니다.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setMoveItem(null)}
+                style={{ flex: 1, border: 0, borderRadius: 12, background: "#F3F4F6", color: "#374151", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer" }}
+              >
+                닫기
+              </button>
+              <button
+                onClick={saveMove}
+                disabled={moveSaving}
+                style={{ flex: 1, border: 0, borderRadius: 12, background: OP_TEAL, color: "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", opacity: moveSaving ? 0.5 : 1 }}
+              >
+                {moveSaving ? "저장 중…" : "날짜 옮기기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={() => setFormOpen(true)}
