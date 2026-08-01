@@ -15194,6 +15194,44 @@ function OperatorHome({ opName }: { opName: string }) {
   // 유고 입력 화면 상태
   const [showAbsence, setShowAbsence] = useState(false);
   const [offOpen, setOffOpen] = useState(false); // 오늘 휴가·유고 카드 접이식 (훅은 조건부 return 위에 있어야 함)
+  // 앱 휴가 취소 처리 (2026-08-01) — 본인이 사업소에 전화로 취소했는데 앱에서 안 지운 경우
+  //   지우지 않고 status="취소"로 바꾼다 (append-only). 잔여일수는 건드리지 않음 — 복구 여부는 추후 결정
+  const [cancelLv, setCancelLv] = useState<any>(null);
+  const [cancelWhy, setCancelWhy] = useState("");
+  const [cancelSaving, setCancelSaving] = useState(false);
+  const doCancelLeave = async () => {
+    if (!cancelLv) return;
+    setCancelSaving(true);
+    const { error } = await supabase
+      .from("leave_history")
+      .update({
+        status: "취소",
+        cancel_reason: cancelWhy || "운용기관사 취소 처리",
+        canceled_by: opName,
+        canceled_at: new Date().toISOString(),
+      })
+      .eq("id", cancelLv.id);
+    setCancelSaving(false);
+    if (error) return showToast("취소 실패: " + error.message, "error");
+    const nm = (opAllMembers.length ? opAllMembers : opMembers).find(
+      (x: any) => String(x.employee_number) === String(cancelLv.employee_number)
+    );
+    fetch("/.netlify/functions/send-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "🏖 휴가 취소 처리",
+        message: `${String(cancelLv.used_date).slice(5).replace("-", "/")} 휴가가 취소 처리됐어요. 확인이 필요하면 지회로 문의하세요.`,
+        type: "leave",
+        url: "/",
+        to: String(cancelLv.employee_number),
+      }),
+    }).catch(() => {});
+    setCancelLv(null);
+    setCancelWhy("");
+    setOpLeaves((prev: any[]) => prev.filter((x: any) => x.id !== cancelLv.id));
+    showToast(`${nm ? nm.name : ""}님 휴가를 취소 처리했어요 (기록은 남습니다)`, "success");
+  };
   const [absSearch, setAbsSearch] = useState("");
   const [absSel, setAbsSel] = useState<any>(null);
   const [absReason, setAbsReason] = useState("휴가"); // 휴가/휴직/병가/기타
@@ -15533,12 +15571,24 @@ function OperatorHome({ opName }: { opName: string }) {
     (async () => {
       const { data } = await supabase
         .from("leave_history")
-        .select("employee_number, leave_type, used_date, status")
+        .select("id, employee_number, leave_type, used_date, status")
         .eq("used_date", targetStr)
         .neq("status", "취소");
       setOpLeaves(data || []);
     })();
   }, [targetStr]);
+
+  // 같은 사람이 같은 날 두 번 올라오는 것 방지 (엑셀을 두 번 올리면 줄이 두 개 생김)
+  //   ※ 훅이므로 반드시 조건부 return 위에 있어야 한다 (아래쪽에 두면 [채우기] 팝업에서 흰 화면)
+  const offLeaves = React.useMemo(() => {
+    const seen = new Set<string>();
+    return (opLeaves || []).filter((lv: any) => {
+      const k = String(lv.employee_number) + "|" + String(lv.leave_type || "");
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [opLeaves]);
 
   // 그 날짜의 직접 입력 결근 (실데이터 · operator_absence)
   const [opAbsences, setOpAbsences] = useState<any[]>([]);
@@ -16469,15 +16519,72 @@ function OperatorHome({ opName }: { opName: string }) {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{m ? m.name : lv.employee_number}</div>
                       <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
-                        {LVN[lv.leave_type] || lv.leave_type} · 본인이 앱에서 신청 — 여기선 삭제 불가
+                        {LVN[lv.leave_type] || lv.leave_type} · 본인이 앱에서 신청
                       </div>
                     </div>
+                    <button
+                      onClick={() => setCancelLv(lv)}
+                      style={{ border: 0, borderRadius: 10, background: "#FFF1F2", color: "#E11D48", fontSize: 12, fontWeight: 800, padding: "9px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
+                    >
+                      취소 처리
+                    </button>
                   </div>
                 );
               })}
+              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
+                본인이 사업소에 전화로 취소했는데 앱에서 안 지운 경우에 씁니다.
+                <br />
+                <b>지우지 않고 「취소」 상태로 바꿉니다</b> — 기록은 남고, 본인에게 알림이 갑니다. 잔여일수는 건드리지 않습니다.
+              </div>
             </>
           )}
         </div>
+
+        {/* 앱 휴가 취소 확인 팝업 */}
+        {cancelLv && (
+          <div
+            onClick={() => setCancelLv(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.5)", display: "grid", placeItems: "center", padding: 20, zIndex: 300 }}
+          >
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 340 }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 3 }}>휴가를 취소 처리할까요?</div>
+              <div style={{ fontSize: 12.5, color: "#6B7280", marginBottom: 12 }}>
+                {(() => {
+                  const m = (opAllMembers.length ? opAllMembers : opMembers).find(
+                    (x: any) => String(x.employee_number) === String(cancelLv.employee_number)
+                  );
+                  return `${m ? m.name : cancelLv.employee_number} · ${cancelLv.used_date}`;
+                })()}
+              </div>
+              <input
+                value={cancelWhy}
+                onChange={(e) => setCancelWhy(e.target.value)}
+                placeholder="사유 (예: 본인이 사업소에 전화로 취소)"
+                style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 10, outline: "none", WebkitAppearance: "none", appearance: "none" }}
+              />
+              <div style={{ background: "#FFF7ED", color: "#9A3412", borderRadius: 11, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.7, marginBottom: 14 }}>
+                기록은 지우지 않고 「취소」 상태로만 바꿉니다. 본인에게 알림이 갑니다.
+                <br />
+                잔여일수는 건드리지 않습니다.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setCancelLv(null)}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: "#F3F4F6", color: "#374151", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  닫기
+                </button>
+                <button
+                  onClick={doCancelLeave}
+                  disabled={cancelSaving}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: "#E11D48", color: "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", opacity: cancelSaving ? 0.5 : 1 }}
+                >
+                  {cancelSaving ? "처리 중…" : "취소 처리"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -17476,16 +17583,6 @@ function OperatorHome({ opName }: { opName: string }) {
     longService: "장기재직휴가",
     petition: "청원휴가",
   };
-  // 같은 사람이 같은 날 두 번 올라오는 것 방지 (엑셀을 두 번 올리면 줄이 두 개 생김)
-  const offLeaves = React.useMemo(() => {
-    const seen = new Set<string>();
-    return (opLeaves || []).filter((lv: any) => {
-      const k = String(lv.employee_number) + "|" + String(lv.leave_type || "");
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-  }, [opLeaves]);
   const offCard = (
     <div style={{ background: "#fff", borderRadius: 18, padding: "14px 16px", marginBottom: 14 }}>
       <div onClick={() => setOffOpen(!offOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
