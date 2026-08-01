@@ -19352,6 +19352,8 @@ function QuickApplyModal({
 }) {
   const [workDate, setWorkDate] = useState("");
   const [saving, setSaving] = useState(false);
+  // 지정근무가 왜 생겼는지 — 강제휴무(미영업 다이아)와 96휴일 초과는 별개 장부다 (2026-08-01)
+  const [reason, setReason] = useState("강제휴무");
 
   const save = async () => {
     if (!workDate) return showToast("날짜를 선택하세요", "error");
@@ -19393,6 +19395,7 @@ function QuickApplyModal({
       kind,
       work_date: workDate,
       via: opName,
+      reason: kind === "designated" ? reason : null,
     });
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
@@ -19416,6 +19419,37 @@ function QuickApplyModal({
         <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4, marginBottom: 14 }}>
           대리 입력 · {opName}
         </div>
+        {kind === "designated" && (
+          <>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 6 }}>왜 생긴 지정근무인가요</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {["강제휴무", "96휴일초과"].map((r) => (
+                <div
+                  key={r}
+                  onClick={() => setReason(r)}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    padding: "11px 0",
+                    borderRadius: 11,
+                    border: reason === r ? "1.5px solid #6366F1" : "1.5px solid #E5E7EB",
+                    background: reason === r ? "#EEF0FF" : "#fff",
+                    color: reason === r ? "#4F46E5" : "#9CA3AF",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {r === "강제휴무" ? "강제휴무" : "96휴일 초과"}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.6, marginTop: -8, marginBottom: 14 }}>
+              강제휴무 = 미영업 다이아로 못 나온 날을 갚는 근무 · 96휴일 초과 = 연 96휴일을 넘긴 만큼 채우는 근무.
+              둘은 <b>따로 관리</b>합니다.
+            </div>
+          </>
+        )}
         <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 6 }}>근무 날짜</div>
         <input
           type="date"
@@ -19454,6 +19488,7 @@ function OperatorApply({ opName }: { opName: string }) {
   const [calOpen, setCalOpen] = useState(false);
   const [calYm, setCalYm] = useState<[number, number]>([_now.getFullYear(), _now.getMonth()]);
   const [pickDate, setPickDate] = useState<string>("");
+  const [inboxQ, setInboxQ] = useState(""); // 이름 검색
   const [formOpen, setFormOpen] = useState(false);
   const [kind, setKind] = useState("designated");
   const [workDate, setWorkDate] = useState("");
@@ -19838,6 +19873,17 @@ function OperatorApply({ opName }: { opName: string }) {
 
   return (
     <div>
+      {/* 이름 검색 — 100건 넘어가면 눈으로 찾기 힘들어서 (2026-08-01) */}
+      <input
+        value={inboxQ}
+        onChange={(e) => setInboxQ(e.target.value)}
+        placeholder="🔍 이름으로 찾기"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E9EDEC", borderRadius: 12, padding: "11px 13px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 10, outline: "none", WebkitAppearance: "none", appearance: "none" }}
+      />
+
       {/* 달력 조회 */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
         <button
@@ -19924,7 +19970,12 @@ function OperatorApply({ opName }: { opName: string }) {
 
       {(["designated", "support", "no_holiday_fill"] as const).map((k) => {
         const list = items
-          .filter((it) => it.kind === k && (!pickDate || String(it.work_date) === pickDate))
+          .filter(
+            (it) =>
+              it.kind === k &&
+              (!pickDate || String(it.work_date) === pickDate) &&
+              (!inboxQ.trim() || String(it.member_name || "").includes(inboxQ.trim()))
+          )
           .slice()
           .sort((x, y) => String(x.work_date).localeCompare(String(y.work_date)));
         const active = list.filter((it) => it.status !== "canceled").length;
@@ -19984,6 +20035,11 @@ function OperatorApply({ opName }: { opName: string }) {
                     </div>
                     <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
                       {it.via === "app" || it.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${it.via}`}
+                      {it.kind === "designated" && it.reason === "96휴일초과" && (
+                        <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#EEF0FF", color: "#4F46E5" }}>
+                          96휴일 초과
+                        </span>
+                      )}
                     </div>
                   </div>
                   {statusBadge(it.status)}
