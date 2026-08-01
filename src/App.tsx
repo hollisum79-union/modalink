@@ -17916,9 +17916,10 @@ function OperatorHist() {
 }
 
 // ── 월간 계획 업로드 (휴가계획 · 지정근무 엑셀) — 2026-08-05 ──
-//   원칙: ① 휴가는 leave_history(잔여일수 차감 안 함) ② 지정근무는 designated_plan에 "가안"
-//        ③ 확정해야 급여(work_adjust)에 들어감 ④ 검사는 경고만, 절대 자동으로 고치지 않음
-//        ⑤ 배치(batch_id) 단위로 통째 취소 가능
+//   원칙: ① 휴가는 leave_history(잔여일수 차감 안 함)
+//        ② 지정근무는 기존 신청함(chungdang_apply)으로 — 엑셀·앱 신청·운용 지정이 한 줄에 서고
+//           운용기관사가 1차/2차 확정을 하면 그때 work_adjust(급여)로 간다
+//        ③ 검사는 경고만, 절대 자동으로 고치지 않음 ④ 배치(batch_id) 단위로 통째 취소 가능
 const LEAVE_CODE_MAP: Record<string, string> = {
   연: "annual",
   촉: "promotedAnnual",
@@ -17958,9 +17959,6 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
   const [rep, setRep] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [batches, setBatches] = useState<any[]>([]);
-  const [plans, setPlans] = useState<any[]>([]);
-  const [planDay, setPlanDay] = useState("");
-  const [confirming, setConfirming] = useState("");
   const [showAllIssues, setShowAllIssues] = useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
@@ -17972,19 +17970,8 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       .limit(20);
     setBatches(data || []);
   };
-  const loadPlans = async () => {
-    const { data } = await supabase
-      .from("designated_plan")
-      .select("*")
-      .neq("status", "canceled")
-      .order("work_date", { ascending: true })
-      .limit(600);
-    setPlans(data || []);
-  };
   useEffect(() => {
     loadBatches();
-    loadPlans();
-    setPlanDay(todayLocalStr());
   }, []);
 
   const ensureXLSX = () =>
@@ -18220,7 +18207,7 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
             errs.push({ d: e.day, t: `지정 ${e.cell} — ${e.name}님은 그날 「${chk.why}」 근무예요 (휴무일도 미영업 다이아도 아님)` });
         }
         okDg.push({
-          employee_number: String(m.employee_number),
+          member_id: m.id,
           member_name: e.name,
           work_date: dstr(e.day),
           work_shift: e.shift,
@@ -18306,16 +18293,18 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       }
     }
     if (!failMsg && rep.okDg.length > 0) {
+      // 지정근무는 기존 신청함(chungdang_apply) 한 곳으로 모은다 — 엑셀·앱 신청·운용 지정이 같은 줄에 서고
+      // 운용기관사가 1차/2차 확정을 하면 그때 work_adjust(급여)로 간다. (2026-08-01 확정)
       const rows = rep.okDg.map((r: any) => ({
-        employee_number: r.employee_number,
+        member_id: r.member_id,
         member_name: r.member_name,
+        kind: "designated",
         work_date: r.work_date,
-        work_shift: r.work_shift,
-        status: "plan",
+        via: "엑셀",
         batch_id: batchId,
       }));
       for (let i = 0; i < rows.length; i += 200) {
-        const { error } = await supabase.from("designated_plan").insert(rows.slice(i, i + 200));
+        const { error } = await supabase.from("chungdang_apply").insert(rows.slice(i, i + 200));
         if (error) {
           failMsg = "지정근무 저장 실패: " + error.message;
           break;
@@ -18331,91 +18320,34 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       saved_count: lvSaved + dgSaved,
       uploaded_by: opName,
       status: failMsg ? "partial" : "saved",
-      note: `휴가 ${lvSaved}건 · 지정근무(가안) ${dgSaved}건${failMsg ? " · " + failMsg : ""}`,
+      note: `휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건${failMsg ? " · " + failMsg : ""}`,
     });
     setSaving(false);
     setRep(null);
     if (fileRef.current) fileRef.current.value = "";
     showToast(
-      failMsg ? failMsg : `저장 완료 — 휴가 ${lvSaved}건 · 지정근무 가안 ${dgSaved}건`,
+      failMsg ? failMsg : `저장 완료 — 휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건`,
       failMsg ? "error" : "success"
     );
     loadBatches();
-    loadPlans();
   };
 
   // ── 배치 통째 취소 ──
   const cancelBatch = async (b: any) => {
-    if (!window.confirm(`${b.year_month} 업로드분을 통째로 취소할까요?\n휴가는 「취소」 처리, 지정근무 가안은 삭제됩니다.\n(이미 확정한 지정근무는 그대로 남습니다)`)) return;
+    if (!window.confirm(`${b.year_month} 업로드분을 통째로 취소할까요?\n휴가와 지정근무가 「취소」 처리됩니다.\n(이미 확정해 급여에 들어간 것은 그대로 남습니다)`)) return;
     const e1 = await supabase
       .from("leave_history")
       .update({ status: "취소" })
       .eq("batch_id", b.batch_id);
     const e2 = await supabase
-      .from("designated_plan")
+      .from("chungdang_apply")
       .update({ status: "canceled" })
       .eq("batch_id", b.batch_id)
-      .eq("status", "plan");
+      .eq("status", "applied");
     await supabase.from("plan_upload_batch").update({ status: "canceled" }).eq("batch_id", b.batch_id);
     if (e1.error || e2.error) showToast("일부 취소 실패: " + (e1.error?.message || e2.error?.message), "error");
     else showToast("배치를 취소했어요", "success");
     loadBatches();
-    loadPlans();
-  };
-
-  // ── 가안 → 확정 (여기서 처음으로 급여에 들어감) ──
-  const confirmPlan = async (p: any) => {
-    setConfirming(p.id);
-    const { data: dup } = await supabase
-      .from("work_adjust")
-      .select("id")
-      .eq("employee_number", String(p.employee_number))
-      .eq("work_date", p.work_date)
-      .limit(1);
-    if (dup && dup.length > 0) {
-      await supabase.from("designated_plan").update({ status: "confirmed", confirmed_at: new Date().toISOString(), confirmed_by: opName, memo: "기존 기록 있어 연동 생략" }).eq("id", p.id);
-      setConfirming("");
-      showToast("이미 그날 근무조정 기록이 있어 연동은 생략하고 확정만 했어요", "success");
-      loadPlans();
-      return;
-    }
-    const night = p.work_shift === "야간";
-    const { error } = await supabase.from("work_adjust").insert([
-      {
-        employee_number: String(p.employee_number),
-        adjust_type: "designated",
-        work_date: p.work_date,
-        work_shift: p.work_shift || "주간",
-        memo: "월간 계획 확정 (운용)",
-        is_night: night,
-        is_temp_dia: false,
-        source: "operator",
-        entered_by: opName,
-      },
-    ]);
-    if (error) {
-      setConfirming("");
-      showToast("확정 실패: " + error.message, "error");
-      return;
-    }
-    await supabase
-      .from("designated_plan")
-      .update({ status: "confirmed", confirmed_at: new Date().toISOString(), confirmed_by: opName })
-      .eq("id", p.id);
-    fetch("/.netlify/functions/send-push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: "📌 지정근무 확정",
-        message: `${String(p.work_date).slice(5).replace("-", "/")} 지정근무가 확정됐어요. 급여에 자동 반영됩니다.`,
-        type: "workadjust",
-        url: "/",
-        to: String(p.employee_number),
-      }),
-    }).catch(() => {});
-    setConfirming("");
-    showToast(`${p.member_name}님 지정근무를 확정했어요`, "success");
-    loadPlans();
   };
 
   const card: React.CSSProperties = {
@@ -18443,8 +18375,6 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
   };
 
   const todayStr = todayLocalStr();
-  const dayPlans = plans.filter((p) => String(p.work_date) === planDay);
-  const latePlans = plans.filter((p) => p.status === "plan" && String(p.work_date) < todayStr);
 
   return (
     <div>
@@ -18472,7 +18402,7 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       >
         회사 「휴가계획 · 지정근무」 엑셀을 그대로 올리면 읽어서 검사합니다. <b>읽기만 하고 아직 저장하지 않습니다.</b>
         <br />
-        휴가는 바로 등록(잔여일수는 건드리지 않음), <b>지정근무는 「가안」으로만</b> 들어가고 확정해야 급여에 반영됩니다.
+        휴가는 바로 등록(잔여일수는 건드리지 않음), <b>지정근무는 신청함으로</b> 들어갑니다. 확정해야 급여에 반영됩니다.
       </div>
 
       {/* 파일 선택 */}
@@ -18635,84 +18565,9 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
         </>
       )}
 
-      {/* 지정근무 가안 → 확정 */}
+      {/* 업로드 이력 · 배치 취소 */}
       {!rep && (
         <>
-          {latePlans.length > 0 && (
-            <div style={{ ...card, border: "2px solid #FDA4AF" }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#9F1239", marginBottom: 6 }}>
-                ⚠️ 확정 안 된 지난 날짜 {latePlans.length}건
-              </div>
-              <div style={{ fontSize: 12, color: "#9F1239", lineHeight: 1.8, marginBottom: 8 }}>
-                확정하지 않으면 <b>급여에 들어가지 않습니다.</b> 실제로 근무한 날이면 확정해주세요.
-              </div>
-              {latePlans.slice(0, 10).map((p) => (
-                <div key={p.id} style={row}>
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: "#E11D48", flex: "none", width: 44 }}>
-                    {String(p.work_date).slice(5).replace("-", "/")}
-                  </span>
-                  <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: "#111827" }}>
-                    {p.member_name}
-                    <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginLeft: 6 }}>{p.work_shift}</span>
-                  </div>
-                  <button
-                    onClick={() => confirmPlan(p)}
-                    disabled={confirming === p.id}
-                    style={{ border: 0, borderRadius: 10, background: "#E11D48", color: "#fff", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer", opacity: confirming === p.id ? 0.5 : 1 }}
-                  >
-                    확정
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={card}>
-            <div style={ttl}>
-              📌 지정근무 가안 — 날짜별 확정
-              <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
-                전체 {plans.filter((p) => p.status === "plan").length}건 대기
-              </span>
-            </div>
-            <input
-              type="date"
-              value={planDay}
-              onChange={(e) => setPlanDay(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none" }}
-            />
-            {dayPlans.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
-                그날 지정근무 계획이 없어요.
-              </div>
-            ) : (
-              dayPlans.map((p, i) => (
-                <div key={p.id} style={{ ...row, borderBottom: i === dayPlans.length - 1 ? 0 : row.borderBottom }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: p.status === "confirmed" ? "#9CA3AF" : "#111827" }}>
-                      {p.member_name}
-                      <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginLeft: 6 }}>{p.work_shift}</span>
-                    </div>
-                    <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
-                      {p.status === "confirmed"
-                        ? `확정됨 · ${p.confirmed_by || ""}`
-                        : "가안 — 확정해야 급여에 들어갑니다"}
-                    </div>
-                  </div>
-                  {p.status === "confirmed" ? (
-                    <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0D9488" }}>✓ 확정</span>
-                  ) : (
-                    <button
-                      onClick={() => confirmPlan(p)}
-                      disabled={confirming === p.id}
-                      style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer", opacity: confirming === p.id ? 0.5 : 1 }}
-                    >
-                      확정
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
 
           {/* 업로드 이력 */}
           <div style={card}>
@@ -18749,9 +18604,9 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
               ))
             )}
             <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
-              배치를 취소하면 그 업로드로 들어간 휴가는 「취소」 처리되고, 확정 전 지정근무 가안은 사라집니다.
+              배치를 취소하면 그 업로드로 들어간 휴가와 지정근무가 「취소」 처리됩니다.
               <br />
-              <b>이미 확정한 지정근무는 남습니다</b> — 급여에 들어간 기록이라 함부로 지우지 않습니다.
+              <b>이미 확정해 급여에 들어간 기록은 남습니다</b> — 함부로 지우지 않습니다.
             </div>
           </div>
         </>
