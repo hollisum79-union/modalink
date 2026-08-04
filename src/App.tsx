@@ -15982,9 +15982,20 @@ function OperatorHome({ opName }: { opName: string }) {
     { label: "2차 확정", ...stampInfo(lastStamp(targetStr, "2차")) },
   ];
   // ── 22시 잠금: 근무 당일 22시부터 이 날짜는 수정 불가 (야간 급휴가 대응 시간까지 열어둠) ──
+  //   단, 도입 초기에는 운용 협조가 안 돼 지회장이 지난 날짜를 수기로 몰아 입력하는 상황이라
+  //   op_settings.lock_disabled = "true" 인 동안은 잠그지 않는다 (2026-08-05 · 정착되면 끄기)
+  const [lockDisabled, setLockDisabled] = useState(false);
+  useEffect(() => {
+    supabase
+      .from("op_settings")
+      .select("value")
+      .eq("key", "lock_disabled")
+      .maybeSingle()
+      .then(({ data }) => setLockDisabled(String(data?.value || "") === "true"));
+  }, []);
   const lockTime = new Date(target);
   lockTime.setHours(22, 0, 0, 0);
-  const isLocked = Date.now() >= lockTime.getTime();
+  const isLocked = !lockDisabled && Date.now() >= lockTime.getTime();
 
   const usedNames = Object.values(assigned).map((a) => a.name);
 
@@ -17712,7 +17723,7 @@ function OperatorHome({ opName }: { opName: string }) {
         cursor: confirmOff ? "default" : "pointer",
       }}
     >
-      {isLocked ? "🔒 22시 잠금 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : `${nextStage} 확정`}
+      {isLocked ? "🔒 22시 잠금 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : lockDisabled ? `${nextStage} 확정 (잠금 해제 중)` : `${nextStage} 확정`}
     </button>
   );
 
