@@ -19672,6 +19672,70 @@ function OperatorApply({ opName }: { opName: string }) {
     load();
   }, []);
 
+  // ── 교번교체 직권 등록 (2026-08-05) ──
+  //   당사자끼리 구두로 합의했는데 앱 조작이 어렵거나, 운용 협조가 안 돼 지회장이 수기 정리하는 경우.
+  //   수락 절차 없이 status="수락"으로 바로 넣되, 양쪽 모두에게 푸시로 알린다 (몰래 바뀌는 일 방지).
+  const [swOpen, setSwOpen] = useState(false);
+  const [swA, setSwA] = useState<any>(null);
+  const [swB, setSwB] = useState<any>(null);
+  const [swQA, setSwQA] = useState("");
+  const [swQB, setSwQB] = useState("");
+  const [swPA, setSwPA] = useState<any[]>([]);
+  const [swPB, setSwPB] = useState<any[]>([]);
+  const [swStart, setSwStart] = useState("");
+  const [swEnd, setSwEnd] = useState("");
+  const [swSaving, setSwSaving] = useState(false);
+  const swSearch = async (text: string, side: "A" | "B") => {
+    if (side === "A") { setSwQA(text); setSwA(null); } else { setSwQB(text); setSwB(null); }
+    if (!text.trim()) { side === "A" ? setSwPA([]) : setSwPB([]); return; }
+    const { data } = await supabase
+      .from("members")
+      .select("id, name, employee_number, work_type")
+      .eq("work_type", "교번")
+      .or(`name.ilike.%${text.trim()}%,employee_number.ilike.%${text.trim()}%`)
+      .limit(6);
+    const rows = (data || []).filter((m: any) => !String(m.name || "").includes("결원"));
+    side === "A" ? setSwPA(rows) : setSwPB(rows);
+  };
+  const swSave = async () => {
+    if (!swA || !swB) return showToast("두 사람을 모두 선택하세요", "error");
+    if (String(swA.employee_number) === String(swB.employee_number)) return showToast("같은 사람끼리는 교체할 수 없어요", "error");
+    if (!swStart) return showToast("시작 날짜를 선택하세요", "error");
+    const end = swEnd || swStart;
+    if (end < swStart) return showToast("끝 날짜가 시작보다 빠를 수 없어요", "error");
+    setSwSaving(true);
+    const { error } = await supabase.from("kyobun_swap").insert([{
+      swap_date: swStart,
+      swap_end: end,
+      a_employee_number: String(swA.employee_number),
+      a_name: swA.name,
+      b_employee_number: String(swB.employee_number),
+      b_name: swB.name,
+      status: "수락",
+      via: `직권 · ${opName}`,
+    }]);
+    setSwSaving(false);
+    if (error) return showToast("등록 실패: " + error.message, "error");
+    const rangeTxt = swStart === end ? swStart.slice(5).replace("-", "/") : `${swStart.slice(5).replace("-", "/")}~${end.slice(5).replace("-", "/")}`;
+    [swA, swB].forEach((m, idx) => {
+      const other = idx === 0 ? swB : swA;
+      fetch("/.netlify/functions/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "🔁 교번교체 직권 등록",
+          message: `${rangeTxt} ${other.name}님과의 교번교체가 운용기관사 직권으로 등록됐어요. 본인 동의 없이 등록됐다면 지회로 문의하세요.`,
+          type: "swap",
+          url: "/",
+          to: String(m.employee_number),
+        }),
+      }).catch(() => {});
+    });
+    showToast(`${swA.name} ↔ ${swB.name} 교체를 등록했어요 (양쪽에 알림 발송)`);
+    setSwOpen(false);
+    setSwA(null); setSwB(null); setSwQA(""); setSwQB(""); setSwStart(""); setSwEnd("");
+  };
+
   const searchPeople = async (text: string) => {
     setQ(text);
     setPicked(null);
@@ -20033,6 +20097,93 @@ function OperatorApply({ opName }: { opName: string }) {
 
   return (
     <div>
+      {/* 🔁 교번교체 직권 등록 */}
+      <div style={{ background: "#fff", border: "1px solid #E9EDEC", borderRadius: 16, padding: "14px 16px", marginBottom: 12 }}>
+        <div
+          onClick={() => setSwOpen(!swOpen)}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+        >
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "#111827" }}>🔁 교번교체 직권 등록</div>
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, marginTop: 2 }}>
+              당사자 합의를 운용이 대신 입력 · 양쪽에 알림
+            </div>
+          </div>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: OP_TEAL }}>{swOpen ? "접기 ▲" : "열기 ▼"}</span>
+        </div>
+        {swOpen && (
+          <div style={{ marginTop: 12 }}>
+            {([["A", swA, swQA, swPA], ["B", swB, swQB, swPB]] as const).map(([side, sel, q2, pool]) => (
+              <div key={side} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 5 }}>
+                  {side === "A" ? "첫 번째 사람" : "두 번째 사람"}
+                </div>
+                {sel ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#EEF0FF", borderRadius: 11, padding: "10px 12px" }}>
+                    <div style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: "#4F46E5" }}>
+                      {sel.name} <span style={{ fontSize: 11, color: "#818CF8", fontWeight: 600 }}>{sel.employee_number}</span>
+                    </div>
+                    <button
+                      onClick={() => (side === "A" ? (setSwA(null), setSwQA("")) : (setSwB(null), setSwQB("")))}
+                      style={{ border: 0, background: "transparent", color: "#818CF8", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      다시 선택
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      value={q2}
+                      onChange={(e) => swSearch(e.target.value, side)}
+                      placeholder="이름 또는 사번 (교번 근무자만)"
+                      autoCapitalize="off" autoCorrect="off" spellCheck={false}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "10px 12px", fontSize: 13.5, fontFamily: "inherit", outline: "none", WebkitAppearance: "none", appearance: "none" }}
+                    />
+                    {pool.length > 0 && (
+                      <div style={{ border: "1px solid #EEF0FF", borderRadius: 11, marginTop: 5, overflow: "hidden" }}>
+                        {pool.map((m: any) => (
+                          <div
+                            key={m.id}
+                            onClick={() => (side === "A" ? (setSwA(m), setSwPA([])) : (setSwB(m), setSwPB([])))}
+                            style={{ padding: "10px 12px", fontSize: 13, fontWeight: 700, color: "#374151", borderBottom: "1px solid #F5F5F7", cursor: "pointer", background: "#fff" }}
+                          >
+                            {m.name} <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500 }}>{m.employee_number}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 5 }}>시작 (당일이면 이것만)</div>
+                <input type="date" value={swStart} onChange={(e) => setSwStart(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "10px 11px", fontSize: 13, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 5 }}>끝 (기간일 때만)</div>
+                <input type="date" value={swEnd} min={swStart || undefined} onChange={(e) => setSwEnd(e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "10px 11px", fontSize: 13, fontFamily: "inherit", WebkitAppearance: "none", appearance: "none" }} />
+              </div>
+            </div>
+            <div style={{ background: "#FFF7ED", color: "#9A3412", borderRadius: 11, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.7, marginBottom: 10 }}>
+              수락 절차 없이 바로 「수락」 상태로 들어갑니다. <b>두 사람 모두에게 알림</b>이 가고, 「직권 · {opName}」로 기록됩니다.
+              <br />
+              반드시 당사자 합의를 먼저 받고 입력하세요. 잘못 넣었으면 본인들 교체 이력에서 취소할 수 있습니다.
+            </div>
+            <button
+              onClick={swSave}
+              disabled={swSaving || !swA || !swB || !swStart}
+              style={{ width: "100%", border: 0, borderRadius: 12, background: swSaving || !swA || !swB || !swStart ? "#E5E7EB" : OP_TEAL, color: swSaving || !swA || !swB || !swStart ? "#9CA3AF" : "#fff", fontSize: 13.5, fontWeight: 800, padding: "13px 0", fontFamily: "inherit", cursor: "pointer" }}
+            >
+              {swSaving ? "등록 중…" : "직권 등록 (양쪽에 알림)"}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* 이름 검색 — 100건 넘어가면 눈으로 찾기 힘들어서 (2026-08-01) */}
       <input
         value={inboxQ}
