@@ -295,8 +295,33 @@ function isStandbyDia(dia: any): boolean {
   return s.startsWith("대기") || /^대\d/.test(s);
 }
 
-function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {
-  if (!member || rotationData.length === 0) return null;
+// ── 미영업(운휴) 다이아 판정 — 2026-08-01 ──
+// 회사가 그날 아예 안 태우는 다이아. 근무표에는 번호가 있지만 실제 운행이 없어
+// ① 그 사람은 강제휴무가 되고 ② 그 자리는 채울 필요가 없다.
+//   · 휴51 · 휴71 → 조건 없이 미영업
+//   · 주간 26·27·28·29·40 이면서 그날이 휴일
+//   · 야간 61·62·63·64 이면서 그날과 다음날이 휴일
+// 판정을 이 함수 한 곳에만 두어 운용 홈 빈 자리·지정근무 빚 장부·월간 계획 검사가 어긋나지 않게 한다.
+function isNoOpDia(work: any, date: Date, holidays: string[] = []): boolean {
+  if (!work || !work.dia || !date) return false;
+  const s = String(work.dia).replace(/\s+/g, "");
+  if (s === "휴51" || s === "휴71") return true;
+  if (!/^\d+$/.test(s)) return false;
+  const n = Number(s);
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const isHol = (d: Date) => {
+    const w = d.getDay();
+    return w === 0 || w === 6 || holidays.includes(fmt(d));
+  };
+  const tm = new Date(date);
+  tm.setDate(tm.getDate() + 1);
+  if (work.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(date)) return true;
+  if (work.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(date) && isHol(tm)) return true;
+  return false;
+}
+
+function calcKyobunWork(member: any, date: Date, rotationData: any[], swapData: any[] = [], allMembers: any[] = [], startHistory: any[] = []) {  if (!member || rotationData.length === 0) return null;
 
   const calc = (mem: any) => {
     if (!mem) return null;
@@ -15168,6 +15193,45 @@ function OperatorHome({ opName }: { opName: string }) {
   const [openVacant, setOpenVacant] = useState<string | null>(null);
   // 유고 입력 화면 상태
   const [showAbsence, setShowAbsence] = useState(false);
+  const [offOpen, setOffOpen] = useState(false); // 오늘 휴가·유고 카드 접이식 (훅은 조건부 return 위에 있어야 함)
+  // 앱 휴가 취소 처리 (2026-08-01) — 본인이 사업소에 전화로 취소했는데 앱에서 안 지운 경우
+  //   지우지 않고 status="취소"로 바꾼다 (append-only). 잔여일수는 건드리지 않음 — 복구 여부는 추후 결정
+  const [cancelLv, setCancelLv] = useState<any>(null);
+  const [cancelWhy, setCancelWhy] = useState("");
+  const [cancelSaving, setCancelSaving] = useState(false);
+  const doCancelLeave = async () => {
+    if (!cancelLv) return;
+    setCancelSaving(true);
+    const { error } = await supabase
+      .from("leave_history")
+      .update({
+        status: "취소",
+        cancel_reason: cancelWhy || "운용기관사 취소 처리",
+        canceled_by: opName,
+        canceled_at: new Date().toISOString(),
+      })
+      .eq("id", cancelLv.id);
+    setCancelSaving(false);
+    if (error) return showToast("취소 실패: " + error.message, "error");
+    const nm = (opAllMembers.length ? opAllMembers : opMembers).find(
+      (x: any) => String(x.employee_number) === String(cancelLv.employee_number)
+    );
+    fetch("/.netlify/functions/send-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "🏖 휴가 취소 처리",
+        message: `${String(cancelLv.used_date).slice(5).replace("-", "/")} 휴가가 취소 처리됐어요. 확인이 필요하면 지회로 문의하세요.`,
+        type: "leave",
+        url: "/",
+        to: String(cancelLv.employee_number),
+      }),
+    }).catch(() => {});
+    setCancelLv(null);
+    setCancelWhy("");
+    setOpLeaves((prev: any[]) => prev.filter((x: any) => x.id !== cancelLv.id));
+    showToast(`${nm ? nm.name : ""}님 휴가를 취소 처리했어요 (기록은 남습니다)`, "success");
+  };
   const [absSearch, setAbsSearch] = useState("");
   const [absSel, setAbsSel] = useState<any>(null);
   const [absReason, setAbsReason] = useState("휴가"); // 휴가/휴직/병가/기타
@@ -15474,6 +15538,18 @@ function OperatorHome({ opName }: { opName: string }) {
   );
   const isBibeon = (m: any) =>
     bibeonEmps.has(String(m.employee_number)) || bibeonNames.has(String(m.name));
+  // 전날 무슨 다이아를 충당했는지 (사번·이름 둘 다로 조회) → 빈 자리에 "7/31 야간 87 충당"으로 표시
+  const bibeonInfo = React.useMemo(() => {
+    const byEmp = new Map<string, any>();
+    const byName = new Map<string, any>();
+    prevNightFills.forEach((r: any) => {
+      const info = { dia: String(r.dia_no || ""), via: String(r.via || "") };
+      if (r.employee_number) byEmp.set(String(r.employee_number), info);
+      if (r.filled_name) byName.set(String(r.filled_name), info);
+    });
+    return (m: any) => byEmp.get(String(m.employee_number)) || byName.get(String(m.name)) || null;
+  }, [prevNightFills]);
+
 
   // 그 날짜의 지정근무 신청자 (실데이터 · chungdang_apply)
   const [desigApplies, setDesigApplies] = useState<any[]>([]);
@@ -15495,12 +15571,24 @@ function OperatorHome({ opName }: { opName: string }) {
     (async () => {
       const { data } = await supabase
         .from("leave_history")
-        .select("employee_number, leave_type, used_date, status")
+        .select("id, employee_number, leave_type, used_date, status")
         .eq("used_date", targetStr)
         .neq("status", "취소");
       setOpLeaves(data || []);
     })();
   }, [targetStr]);
+
+  // 같은 사람이 같은 날 두 번 올라오는 것 방지 (엑셀을 두 번 올리면 줄이 두 개 생김)
+  //   ※ 훅이므로 반드시 조건부 return 위에 있어야 한다 (아래쪽에 두면 [채우기] 팝업에서 흰 화면)
+  const offLeaves = React.useMemo(() => {
+    const seen = new Set<string>();
+    return (opLeaves || []).filter((lv: any) => {
+      const k = String(lv.employee_number) + "|" + String(lv.leave_type || "");
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }, [opLeaves]);
 
   // 그 날짜의 직접 입력 결근 (실데이터 · operator_absence)
   const [opAbsences, setOpAbsences] = useState<any[]>([]);
@@ -15681,14 +15769,16 @@ function OperatorHome({ opName }: { opName: string }) {
         ? calcTongsangWork(m, target, opHolidays || [])
         : calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
     const list: any[] = [];
+    const noOp: string[] = []; // 운휴(미영업)라 채우지 않는 다이아 — 사라진 게 아니라 뺀 것임을 화면에 알림
     reasonByEmp.forEach((reason, emp) => {
-      const m = byEmp.get(emp);
+      const m: any = byEmp.get(emp);
       if (!m) return;
       const w: any = workOf(m);
       if (!w) return;
       // 실제 운전 다이아만 빈 자리 (대기·비번·휴무는 원래 근무가 아니라 결원 아님)
       if (isStandbyDia(w.dia)) return;
       if (w.type !== "주간" && w.type !== "야간") return;
+      if (isNoOpDia(w, target, opHolidays || [])) { noOp.push(String(w.dia)); return; } // 운휴 = 탈 열차가 없어 충당 자체가 불필요
       list.push({ dia: String(w.dia), name: m.name, reason, region: m.work_group });
     });
     // ② 결원(공석) — 사람이 없는 자리. 근무표에 이미 등록됨. 운전 다이아에 걸리면 빈 자리.
@@ -15698,6 +15788,7 @@ function OperatorHome({ opName }: { opName: string }) {
       if (!w) return;
       if (isStandbyDia(w.dia)) return; // 대기 결원은 대기 뱃지에서 처리
       if (w.type !== "주간" && w.type !== "야간") return;
+      if (isNoOpDia(w, target, opHolidays || [])) { noOp.push(String(w.dia)); return; }
       list.push({ dia: String(w.dia), name: m.name, reason: "결원", region: m.work_group });
     });
     // ②-1 통상 결원 — 통상 51~54 자리의 결원도 운전 다이아면 빈 자리
@@ -15717,15 +15808,25 @@ function OperatorHome({ opName }: { opName: string }) {
       if (!w) return;
       if (isStandbyDia(w.dia)) return; // 대기는 대기 카드에서 회색 처리
       if (w.type !== "주간" && w.type !== "야간") return;
+      if (isNoOpDia(w, target, opHolidays || [])) { noOp.push(String(w.dia)); return; }
       if (list.some((x) => x.dia === String(w.dia))) return;
-      list.push({ dia: String(w.dia), name: m.name, reason: "충당비번", region: m.work_group });
+      const bi = bibeonInfo(m);
+      list.push({
+        dia: String(w.dia),
+        name: m.name,
+        reason: "충당비번",
+        region: m.work_group,
+        prevDia: bi ? bi.dia : "",
+        prevVia: bi ? bi.via : "",
+      });
     });
     list.sort(
       (a, b) =>
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
     );
+    (list as any).noOpDias = noOp;
     return list;
-  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills]);
+  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills, bibeonInfo]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -15881,9 +15982,20 @@ function OperatorHome({ opName }: { opName: string }) {
     { label: "2차 확정", ...stampInfo(lastStamp(targetStr, "2차")) },
   ];
   // ── 22시 잠금: 근무 당일 22시부터 이 날짜는 수정 불가 (야간 급휴가 대응 시간까지 열어둠) ──
+  //   단, 도입 초기에는 운용 협조가 안 돼 지회장이 지난 날짜를 수기로 몰아 입력하는 상황이라
+  //   op_settings.lock_disabled = "true" 인 동안은 잠그지 않는다 (2026-08-05 · 정착되면 끄기)
+  const [lockDisabled, setLockDisabled] = useState(false);
+  useEffect(() => {
+    supabase
+      .from("op_settings")
+      .select("value")
+      .eq("key", "lock_disabled")
+      .maybeSingle()
+      .then(({ data }) => setLockDisabled(String(data?.value || "") === "true"));
+  }, []);
   const lockTime = new Date(target);
   lockTime.setHours(22, 0, 0, 0);
-  const isLocked = Date.now() >= lockTime.getTime();
+  const isLocked = !lockDisabled && Date.now() >= lockTime.getTime();
 
   const usedNames = Object.values(assigned).map((a) => a.name);
 
@@ -16402,31 +16514,88 @@ function OperatorHome({ opName }: { opName: string }) {
             })
           )}
 
-          {opLeaves.length > 0 && (
+          {offLeaves.length > 0 && (
             <>
               <div style={{ fontSize: 12, fontWeight: 800, color: "#6B7280", margin: "16px 0 8px" }}>
-                이 날짜 앱 휴가 ({opLeaves.length})
+                이 날짜 앱 휴가 ({offLeaves.length})
               </div>
-              {opLeaves.map((lv: any, i: number) => {
+              {offLeaves.map((lv: any, i: number) => {
                 const m = (opAllMembers.length ? opAllMembers : opMembers).find(
                   (x: any) => String(x.employee_number) === String(lv.employee_number)
                 );
                 const LVN: Record<string, string> = { annual: "연차", tempAnnual: "가연차", promotedAnnual: "촉진연차", substitute: "대체휴가", study: "학습휴가", longService: "장기재직", petition: "청원휴가" };
                 return (
-                  <div key={"oplv" + i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === opLeaves.length - 1 ? 0 : "1px solid #F5F5F7" }}>
+                  <div key={"oplv" + i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: i === offLeaves.length - 1 ? 0 : "1px solid #F5F5F7" }}>
                     <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 7px", borderRadius: 6, background: "#EEF0FF", color: "#4F46E5", flex: "none" }}>앱 휴가</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 700 }}>{m ? m.name : lv.employee_number}</div>
                       <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
-                        {LVN[lv.leave_type] || lv.leave_type} · 본인이 앱에서 신청 — 여기선 삭제 불가
+                        {LVN[lv.leave_type] || lv.leave_type} · 본인이 앱에서 신청
                       </div>
                     </div>
+                    <button
+                      onClick={() => setCancelLv(lv)}
+                      style={{ border: 0, borderRadius: 10, background: "#FFF1F2", color: "#E11D48", fontSize: 12, fontWeight: 800, padding: "9px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
+                    >
+                      취소 처리
+                    </button>
                   </div>
                 );
               })}
+              <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
+                본인이 사업소에 전화로 취소했는데 앱에서 안 지운 경우에 씁니다.
+                <br />
+                <b>지우지 않고 「취소」 상태로 바꿉니다</b> — 기록은 남고, 본인에게 알림이 갑니다. 잔여일수는 건드리지 않습니다.
+              </div>
             </>
           )}
         </div>
+
+        {/* 앱 휴가 취소 확인 팝업 */}
+        {cancelLv && (
+          <div
+            onClick={() => setCancelLv(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.5)", display: "grid", placeItems: "center", padding: 20, zIndex: 300 }}
+          >
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 340 }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 3 }}>휴가를 취소 처리할까요?</div>
+              <div style={{ fontSize: 12.5, color: "#6B7280", marginBottom: 12 }}>
+                {(() => {
+                  const m = (opAllMembers.length ? opAllMembers : opMembers).find(
+                    (x: any) => String(x.employee_number) === String(cancelLv.employee_number)
+                  );
+                  return `${m ? m.name : cancelLv.employee_number} · ${cancelLv.used_date}`;
+                })()}
+              </div>
+              <input
+                value={cancelWhy}
+                onChange={(e) => setCancelWhy(e.target.value)}
+                placeholder="사유 (예: 본인이 사업소에 전화로 취소)"
+                style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 10, outline: "none", WebkitAppearance: "none", appearance: "none" }}
+              />
+              <div style={{ background: "#FFF7ED", color: "#9A3412", borderRadius: 11, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.7, marginBottom: 14 }}>
+                기록은 지우지 않고 「취소」 상태로만 바꿉니다. 본인에게 알림이 갑니다.
+                <br />
+                잔여일수는 건드리지 않습니다.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setCancelLv(null)}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: "#F3F4F6", color: "#374151", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer" }}
+                >
+                  닫기
+                </button>
+                <button
+                  onClick={doCancelLeave}
+                  disabled={cancelSaving}
+                  style={{ flex: 1, border: 0, borderRadius: 12, background: "#E11D48", color: "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", opacity: cancelSaving ? 0.5 : 1 }}
+                >
+                  {cancelSaving ? "처리 중…" : "취소 처리"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -17111,6 +17280,13 @@ function OperatorHome({ opName }: { opName: string }) {
     </div>
   );
 
+  // 전날 날짜 라벨 (7/31 처럼) — 충당비번 사유 표시용
+  const prevDayLabel = (() => {
+    const p = new Date(target);
+    p.setDate(p.getDate() - 1);
+    return `${p.getMonth() + 1}/${p.getDate()}`;
+  })();
+
   const emptyCard = (
     <div style={card}>
       <div style={ttl}>
@@ -17166,6 +17342,10 @@ function OperatorHome({ opName }: { opName: string }) {
                   <span style={{ color: OP_TEAL_DARK, fontWeight: 800 }}>
                     → {a.name} ({a.via})
                   </span>
+                ) : e.reason === "충당비번" && e.prevDia ? (
+                  <span>
+                    {prevDayLabel} 야간 <b style={{ color: "#E11D48", fontWeight: 800 }}>{e.prevDia} {e.prevVia || "충당"}</b> → 오늘 비번
+                  </span>
                 ) : (
                   e.reason
                 )}
@@ -17218,6 +17398,13 @@ function OperatorHome({ opName }: { opName: string }) {
           </div>
         );
       })}
+      {(empty as any).noOpDias && (empty as any).noOpDias.length > 0 && (
+        <div style={{ marginTop: 10, background: "#F8FAFC", border: "1px dashed #E2E8F0", borderRadius: 12, padding: "10px 13px", fontSize: 11.5, color: "#64748B", fontWeight: 600, lineHeight: 1.7 }}>
+          🚫 운휴(미영업) {(empty as any).noOpDias.length}건은 목록에서 뺐어요 — 다이아 {(empty as any).noOpDias.join(" · ")}
+          <br />
+          그날 열차가 안 다니는 다이아라 채울 자리가 없습니다. 채워야 하는 자리가 여기 있으면 알려주세요.
+        </div>
+      )}
     </div>
   );
 
@@ -17395,8 +17582,18 @@ function OperatorHome({ opName }: { opName: string }) {
   });
 
   // ── 오늘 휴가·유고 전체 카드 (표시 전용 · 접이식 · 이미 로드된 opLeaves/opAbsences 사용) ──
-  const [offOpen, setOffOpen] = useState(false);
+  //   ※ offOpen 훅은 조건부 return 위(상단 훅 구역)에 선언되어 있음 — 여기서 선언하면 안 됨
   const offNameOf = (e: any) => { const m = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(e)); return m ? m.name : String(e); };
+  // 휴가 종류 한글 표기 (DB는 annual·promotedAnnual 같은 영문 키로 저장됨)
+  const OFF_LV_KO: Record<string, string> = {
+    annual: "연차",
+    tempAnnual: "가연차",
+    promotedAnnual: "촉진연차",
+    substitute: "대체휴가",
+    study: "학습휴가",
+    longService: "장기재직휴가",
+    petition: "청원휴가",
+  };
   const offCard = (
     <div style={{ background: "#fff", borderRadius: 18, padding: "14px 16px", marginBottom: 14 }}>
       <div onClick={() => setOffOpen(!offOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
@@ -17406,7 +17603,7 @@ function OperatorHome({ opName }: { opName: string }) {
             <span style={{ background: "#F3F4F6", color: "#9CA3AF", borderRadius: 8, padding: "3px 8px" }}>없음</span>
           ) : (
             <>
-              <span style={{ background: "#EEF0FF", color: "#4F46E5", borderRadius: 8, padding: "3px 8px" }}>휴가 {opLeaves.length}</span>
+              <span style={{ background: "#EEF0FF", color: "#4F46E5", borderRadius: 8, padding: "3px 8px" }}>휴가 {offLeaves.length}</span>
               <span style={{ background: "#FFF1F2", color: "#E11D48", borderRadius: 8, padding: "3px 8px", marginLeft: 5 }}>유고 {opAbsences.length}</span>
             </>
           )}
@@ -17415,11 +17612,11 @@ function OperatorHome({ opName }: { opName: string }) {
       </div>
       {offOpen && (
         <div style={{ marginTop: 6 }}>
-          {opLeaves.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>휴가</div>}
-          {opLeaves.map((lv: any, i: number) => (
+          {offLeaves.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>휴가</div>}
+          {offLeaves.map((lv: any, i: number) => (
             <div key={"lv" + i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid #F3F4F6", fontSize: 13 }}>
               <span style={{ fontWeight: 700 }}>{offNameOf(lv.employee_number)}</span>
-              <span style={{ color: "#4F46E5", fontSize: 12, fontWeight: 700 }}>{lv.leave_type || "휴가"}</span>
+              <span style={{ color: "#4F46E5", fontSize: 12, fontWeight: 700 }}>{OFF_LV_KO[lv.leave_type] || lv.leave_type || "휴가"}</span>
             </div>
           ))}
           {opAbsences.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", padding: "8px 0 2px" }}>유고</div>}
@@ -17526,7 +17723,7 @@ function OperatorHome({ opName }: { opName: string }) {
         cursor: confirmOff ? "default" : "pointer",
       }}
     >
-      {isLocked ? "🔒 22시 잠금 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : `${nextStage} 확정`}
+      {isLocked ? "🔒 22시 잠금 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : lockDisabled ? `${nextStage} 확정 (잠금 해제 중)` : `${nextStage} 확정`}
     </button>
   );
 
@@ -17847,9 +18044,10 @@ function OperatorHist() {
 }
 
 // ── 월간 계획 업로드 (휴가계획 · 지정근무 엑셀) — 2026-08-05 ──
-//   원칙: ① 휴가는 leave_history(잔여일수 차감 안 함) ② 지정근무는 designated_plan에 "가안"
-//        ③ 확정해야 급여(work_adjust)에 들어감 ④ 검사는 경고만, 절대 자동으로 고치지 않음
-//        ⑤ 배치(batch_id) 단위로 통째 취소 가능
+//   원칙: ① 휴가는 leave_history(잔여일수 차감 안 함)
+//        ② 지정근무는 기존 신청함(chungdang_apply)으로 — 엑셀·앱 신청·운용 지정이 한 줄에 서고
+//           운용기관사가 1차/2차 확정을 하면 그때 work_adjust(급여)로 간다
+//        ③ 검사는 경고만, 절대 자동으로 고치지 않음 ④ 배치(batch_id) 단위로 통째 취소 가능
 const LEAVE_CODE_MAP: Record<string, string> = {
   연: "annual",
   촉: "promotedAnnual",
@@ -17889,9 +18087,6 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
   const [rep, setRep] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [batches, setBatches] = useState<any[]>([]);
-  const [plans, setPlans] = useState<any[]>([]);
-  const [planDay, setPlanDay] = useState("");
-  const [confirming, setConfirming] = useState("");
   const [showAllIssues, setShowAllIssues] = useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
@@ -17903,19 +18098,8 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       .limit(20);
     setBatches(data || []);
   };
-  const loadPlans = async () => {
-    const { data } = await supabase
-      .from("designated_plan")
-      .select("*")
-      .neq("status", "canceled")
-      .order("work_date", { ascending: true })
-      .limit(600);
-    setPlans(data || []);
-  };
   useEffect(() => {
     loadBatches();
-    loadPlans();
-    setPlanDay(todayLocalStr());
   }, []);
 
   const ensureXLSX = () =>
@@ -18062,18 +18246,8 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       //     · 휴51 · 휴71 → 조건 없이 미영업
       //     · 주간 26·27·28·29·40 이면서 그날이 휴일
       //     · 야간 61·62·63·64 이면서 그날과 다음날이 휴일
-      const noOpDia = (w: any, dt: Date) => {
-        if (!w || !w.dia) return false;
-        const ds = String(w.dia).replace(/\s+/g, "");
-        if (ds === "휴51" || ds === "휴71") return true;
-        if (!/^\d+$/.test(ds)) return false;
-        const n = Number(ds);
-        const tm = new Date(dt);
-        tm.setDate(tm.getDate() + 1);
-        if (w.type === "주간" && [26, 27, 28, 29, 40].includes(n) && isHol(dt)) return true;
-        if (w.type === "야간" && [61, 62, 63, 64].includes(n) && isHol(dt) && isHol(tm)) return true;
-        return false;
-      };
+      //   판정은 전역 isNoOpDia 한 곳만 본다 (운용 홈 빈 자리·빚 장부와 미러링)
+      const noOpDia = (w: any, dt: Date) => isNoOpDia(w, dt, holList);
       const canDesignate = (m: any, day: number) => {
         const dt = new Date(dstr(day) + "T00:00:00");
         const w = workOf(m, day);
@@ -18161,7 +18335,7 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
             errs.push({ d: e.day, t: `지정 ${e.cell} — ${e.name}님은 그날 「${chk.why}」 근무예요 (휴무일도 미영업 다이아도 아님)` });
         }
         okDg.push({
-          employee_number: String(m.employee_number),
+          member_id: m.id,
           member_name: e.name,
           work_date: dstr(e.day),
           work_shift: e.shift,
@@ -18169,12 +18343,35 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       });
 
       // ③ 강제휴무 발생 vs 지정근무 부여 개수 대조 (교번만)
+      // 그 달의 휴가·유고 — 강제휴무날이 휴가·유고 기간에 들어 있으면 지정근무가 발생하지 않는다
+      //   (빚 장부와 같은 규칙. 휴직·병가·공로연수처럼 긴 기간도 전부 덮는다)
+      const monEnd = dstr(lastDay);
+      const [lvRes, abRes] = await Promise.all([
+        supabase.from("leave_history").select("employee_number, used_date").gte("used_date", dstr(1)).lte("used_date", monEnd).neq("status", "취소"),
+        supabase.from("operator_absence").select("employee_number, work_date, end_date").lte("work_date", monEnd).gte("end_date", dstr(1)),
+      ]);
+      const offSet = new Set<string>();
+      (lvRes.data || []).forEach((r: any) => offSet.add(String(r.employee_number) + "|" + String(r.used_date)));
+      const absRanges = new Map<string, { s: string; e: string }[]>();
+      (abRes.data || []).forEach((r: any) => {
+        const k = String(r.employee_number);
+        if (!absRanges.has(k)) absRanges.set(k, []);
+        absRanges.get(k)!.push({ s: String(r.work_date), e: String(r.end_date || r.work_date) });
+      });
+      const isOff = (emp: string, ds2: string) => {
+        if (offSet.has(emp + "|" + ds2)) return true;
+        const rs = absRanges.get(emp);
+        return !!rs && rs.some((r) => r.s <= ds2 && ds2 <= r.e);
+      };
       const owedBy = new Map<string, number>();
       kyobunAll.forEach((m: any) => {
         if (String(m.name || "").includes("결원")) return;
+        const emp = String(m.employee_number);
         let n = 0;
         for (let d = 1; d <= lastDay; d++) {
-          const dt = new Date(dstr(d) + "T00:00:00");
+          const ds2 = dstr(d);
+          if (isOff(emp, ds2)) continue; // 휴가·유고 기간 → 강제휴무 발생 안 함
+          const dt = new Date(ds2 + "T00:00:00");
           const w: any = calcKyobunWork(m, dt, rotation, swaps, kyobunAll, hist);
           if (noOpDia(w, dt)) n += 1;
         }
@@ -18226,9 +18423,36 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
     const batchId = `${rep.ymStr}-${Date.now()}`;
     let lvSaved = 0;
     let dgSaved = 0;
+    let lvSkip = 0;
+    let dgSkip = 0;
     let failMsg = "";
+    // ── 중복 방지 (2026-08-01): 같은 파일을 두 번 올려도 이미 있는 건 건너뛰고 새 것만 넣는다 ──
+    //   경고만으로는 부족 — 사람이 지나치면 그대로 이중 등록 사고가 난다 (실제 발생)
+    //   기준: 휴가 = 사번+날짜 / 지정근무 = 사람+날짜+종류. 취소된 건 다시 넣을 수 있게 제외하고 본다.
+    const [exLv, exDg] = await Promise.all([
+      supabase
+        .from("leave_history")
+        .select("employee_number, used_date")
+        .gte("used_date", `${rep.ymStr}-01`)
+        .lte("used_date", `${rep.ymStr}-${String(rep.lastDay).padStart(2, "0")}`)
+        .neq("status", "취소"),
+      supabase
+        .from("chungdang_apply")
+        .select("member_id, work_date")
+        .eq("kind", "designated")
+        .gte("work_date", `${rep.ymStr}-01`)
+        .lte("work_date", `${rep.ymStr}-${String(rep.lastDay).padStart(2, "0")}`)
+        .neq("status", "canceled"),
+    ]);
+    const hasLv = new Set((exLv.data || []).map((r: any) => String(r.employee_number) + "|" + String(r.used_date)));
+    const hasDg = new Set((exDg.data || []).map((r: any) => String(r.member_id) + "|" + String(r.work_date)));
     if (rep.okLv.length > 0) {
-      const rows = rep.okLv.map((r: any) => ({
+      const rows = rep.okLv
+        .filter((r: any) => {
+          if (hasLv.has(String(r.employee_number) + "|" + String(r.used_date))) { lvSkip += 1; return false; }
+          return true;
+        })
+        .map((r: any) => ({
         employee_number: r.employee_number,
         used_date: r.used_date,
         leave_type: r.leave_type,
@@ -18247,16 +18471,23 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       }
     }
     if (!failMsg && rep.okDg.length > 0) {
-      const rows = rep.okDg.map((r: any) => ({
-        employee_number: r.employee_number,
+      // 지정근무는 기존 신청함(chungdang_apply) 한 곳으로 모은다 — 엑셀·앱 신청·운용 지정이 같은 줄에 서고
+      // 운용기관사가 1차/2차 확정을 하면 그때 work_adjust(급여)로 간다. (2026-08-01 확정)
+      const rows = rep.okDg
+        .filter((r: any) => {
+          if (hasDg.has(String(r.member_id) + "|" + String(r.work_date))) { dgSkip += 1; return false; }
+          return true;
+        })
+        .map((r: any) => ({
+        member_id: r.member_id,
         member_name: r.member_name,
+        kind: "designated",
         work_date: r.work_date,
-        work_shift: r.work_shift,
-        status: "plan",
+        via: "엑셀",
         batch_id: batchId,
       }));
       for (let i = 0; i < rows.length; i += 200) {
-        const { error } = await supabase.from("designated_plan").insert(rows.slice(i, i + 200));
+        const { error } = await supabase.from("chungdang_apply").insert(rows.slice(i, i + 200));
         if (error) {
           failMsg = "지정근무 저장 실패: " + error.message;
           break;
@@ -18272,91 +18503,34 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       saved_count: lvSaved + dgSaved,
       uploaded_by: opName,
       status: failMsg ? "partial" : "saved",
-      note: `휴가 ${lvSaved}건 · 지정근무(가안) ${dgSaved}건${failMsg ? " · " + failMsg : ""}`,
+      note: `휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건${lvSkip + dgSkip > 0 ? ` · 이미 있어 건너뜀 ${lvSkip + dgSkip}건` : ""}${failMsg ? " · " + failMsg : ""}`,
     });
     setSaving(false);
     setRep(null);
     if (fileRef.current) fileRef.current.value = "";
     showToast(
-      failMsg ? failMsg : `저장 완료 — 휴가 ${lvSaved}건 · 지정근무 가안 ${dgSaved}건`,
+      failMsg ? failMsg : `저장 완료 — 휴가 ${lvSaved}건 · 지정근무 ${dgSaved}건${lvSkip + dgSkip > 0 ? ` (이미 있어 건너뜀 ${lvSkip + dgSkip}건)` : ""}`,
       failMsg ? "error" : "success"
     );
     loadBatches();
-    loadPlans();
   };
 
   // ── 배치 통째 취소 ──
   const cancelBatch = async (b: any) => {
-    if (!window.confirm(`${b.year_month} 업로드분을 통째로 취소할까요?\n휴가는 「취소」 처리, 지정근무 가안은 삭제됩니다.\n(이미 확정한 지정근무는 그대로 남습니다)`)) return;
+    if (!window.confirm(`${b.year_month} 업로드분을 통째로 취소할까요?\n휴가와 지정근무가 「취소」 처리됩니다.\n(이미 확정해 급여에 들어간 것은 그대로 남습니다)`)) return;
     const e1 = await supabase
       .from("leave_history")
       .update({ status: "취소" })
       .eq("batch_id", b.batch_id);
     const e2 = await supabase
-      .from("designated_plan")
+      .from("chungdang_apply")
       .update({ status: "canceled" })
       .eq("batch_id", b.batch_id)
-      .eq("status", "plan");
+      .eq("status", "applied");
     await supabase.from("plan_upload_batch").update({ status: "canceled" }).eq("batch_id", b.batch_id);
     if (e1.error || e2.error) showToast("일부 취소 실패: " + (e1.error?.message || e2.error?.message), "error");
     else showToast("배치를 취소했어요", "success");
     loadBatches();
-    loadPlans();
-  };
-
-  // ── 가안 → 확정 (여기서 처음으로 급여에 들어감) ──
-  const confirmPlan = async (p: any) => {
-    setConfirming(p.id);
-    const { data: dup } = await supabase
-      .from("work_adjust")
-      .select("id")
-      .eq("employee_number", String(p.employee_number))
-      .eq("work_date", p.work_date)
-      .limit(1);
-    if (dup && dup.length > 0) {
-      await supabase.from("designated_plan").update({ status: "confirmed", confirmed_at: new Date().toISOString(), confirmed_by: opName, memo: "기존 기록 있어 연동 생략" }).eq("id", p.id);
-      setConfirming("");
-      showToast("이미 그날 근무조정 기록이 있어 연동은 생략하고 확정만 했어요", "success");
-      loadPlans();
-      return;
-    }
-    const night = p.work_shift === "야간";
-    const { error } = await supabase.from("work_adjust").insert([
-      {
-        employee_number: String(p.employee_number),
-        adjust_type: "designated",
-        work_date: p.work_date,
-        work_shift: p.work_shift || "주간",
-        memo: "월간 계획 확정 (운용)",
-        is_night: night,
-        is_temp_dia: false,
-        source: "operator",
-        entered_by: opName,
-      },
-    ]);
-    if (error) {
-      setConfirming("");
-      showToast("확정 실패: " + error.message, "error");
-      return;
-    }
-    await supabase
-      .from("designated_plan")
-      .update({ status: "confirmed", confirmed_at: new Date().toISOString(), confirmed_by: opName })
-      .eq("id", p.id);
-    fetch("/.netlify/functions/send-push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: "📌 지정근무 확정",
-        message: `${String(p.work_date).slice(5).replace("-", "/")} 지정근무가 확정됐어요. 급여에 자동 반영됩니다.`,
-        type: "workadjust",
-        url: "/",
-        to: String(p.employee_number),
-      }),
-    }).catch(() => {});
-    setConfirming("");
-    showToast(`${p.member_name}님 지정근무를 확정했어요`, "success");
-    loadPlans();
   };
 
   const card: React.CSSProperties = {
@@ -18384,8 +18558,6 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
   };
 
   const todayStr = todayLocalStr();
-  const dayPlans = plans.filter((p) => String(p.work_date) === planDay);
-  const latePlans = plans.filter((p) => p.status === "plan" && String(p.work_date) < todayStr);
 
   return (
     <div>
@@ -18413,7 +18585,7 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
       >
         회사 「휴가계획 · 지정근무」 엑셀을 그대로 올리면 읽어서 검사합니다. <b>읽기만 하고 아직 저장하지 않습니다.</b>
         <br />
-        휴가는 바로 등록(잔여일수는 건드리지 않음), <b>지정근무는 「가안」으로만</b> 들어가고 확정해야 급여에 반영됩니다.
+        휴가는 바로 등록(잔여일수는 건드리지 않음), <b>지정근무는 신청함으로</b> 들어갑니다. 확정해야 급여에 반영됩니다.
       </div>
 
       {/* 파일 선택 */}
@@ -18531,10 +18703,15 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
               <div style={ttl}>
                 📊 강제휴무 대조
                 <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF3C7", color: "#92400E", padding: "3px 9px", borderRadius: 20 }}>
-                  {rep.cmp.length}명 불일치
+                  부족 {rep.cmp.filter((c: any) => c.owed > c.given).length}명 · 더 부여 {rep.cmp.filter((c: any) => c.owed < c.given).length}명
                 </span>
               </div>
-              {rep.cmp.slice(0, 20).map((c: any) => {
+              {rep.cmp.filter((c: any) => c.owed > c.given).length === 0 && (
+                <div style={{ background: "#F0FDFA", color: "#0F766E", borderRadius: 11, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.7, marginBottom: 10 }}>
+                  ✅ 「부족」은 없습니다 — 받아야 할 지정근무를 못 받은 사람은 없어요.
+                </div>
+              )}
+              {rep.cmp.slice(0, 30).map((c: any) => {
                 const diff = c.owed - c.given;
                 return (
                   <div key={c.name} style={row}>
@@ -18544,14 +18721,18 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
                         {rep.M}월 발생 {c.owed}건 · 파일 부여 {c.given}건
                       </div>
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: diff > 0 ? "#E11D48" : "#0D9488" }}>
-                      {diff > 0 ? `${diff}건 부족` : `${-diff}건 초과`}
+                    <div style={{ fontSize: 12, fontWeight: 800, color: diff > 0 ? "#E11D48" : "#94A3B8" }}>
+                      {diff > 0 ? `${diff}건 부족` : `${-diff}건 더 부여`}
                     </div>
                   </div>
                 );
               })}
               <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
-                「부족」은 받아야 할 지정근무를 못 받았을 가능성입니다. 「초과」는 지난달 이월분을 갚는 중이면 정상입니다.
+                <b style={{ color: "#E11D48" }}>부족</b> = 받아야 할 지정근무를 못 받았을 가능성. 이것만 회사에 확인하시면 됩니다.
+                <br />
+                <b>더 부여</b> = 대개 정상입니다. ① 교번 <b>연 96휴일</b>을 넘긴 만큼 지정근무로 채우는 경우 ② 지난달 이월분을 갚는 경우.
+                <br />
+                휴가·휴직·병가·공로연수 기간에 걸린 날은 강제휴무가 발생하지 않으므로 이미 빼고 셌습니다.
                 <br />
                 <b>이 숫자는 참고용이며 아무것도 자동으로 고치지 않습니다.</b> 회사 기준과 다를 수 있으니 반드시 사람이 확인하세요.
               </div>
@@ -18576,84 +18757,9 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
         </>
       )}
 
-      {/* 지정근무 가안 → 확정 */}
+      {/* 업로드 이력 · 배치 취소 */}
       {!rep && (
         <>
-          {latePlans.length > 0 && (
-            <div style={{ ...card, border: "2px solid #FDA4AF" }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#9F1239", marginBottom: 6 }}>
-                ⚠️ 확정 안 된 지난 날짜 {latePlans.length}건
-              </div>
-              <div style={{ fontSize: 12, color: "#9F1239", lineHeight: 1.8, marginBottom: 8 }}>
-                확정하지 않으면 <b>급여에 들어가지 않습니다.</b> 실제로 근무한 날이면 확정해주세요.
-              </div>
-              {latePlans.slice(0, 10).map((p) => (
-                <div key={p.id} style={row}>
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: "#E11D48", flex: "none", width: 44 }}>
-                    {String(p.work_date).slice(5).replace("-", "/")}
-                  </span>
-                  <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: "#111827" }}>
-                    {p.member_name}
-                    <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginLeft: 6 }}>{p.work_shift}</span>
-                  </div>
-                  <button
-                    onClick={() => confirmPlan(p)}
-                    disabled={confirming === p.id}
-                    style={{ border: 0, borderRadius: 10, background: "#E11D48", color: "#fff", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer", opacity: confirming === p.id ? 0.5 : 1 }}
-                  >
-                    확정
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={card}>
-            <div style={ttl}>
-              📌 지정근무 가안 — 날짜별 확정
-              <span style={{ fontSize: 11, fontWeight: 700, background: "#CCFBF1", color: OP_TEAL_DARK, padding: "3px 9px", borderRadius: 20 }}>
-                전체 {plans.filter((p) => p.status === "plan").length}건 대기
-              </span>
-            </div>
-            <input
-              type="date"
-              value={planDay}
-              onChange={(e) => setPlanDay(e.target.value)}
-              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none" }}
-            />
-            {dayPlans.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
-                그날 지정근무 계획이 없어요.
-              </div>
-            ) : (
-              dayPlans.map((p, i) => (
-                <div key={p.id} style={{ ...row, borderBottom: i === dayPlans.length - 1 ? 0 : row.borderBottom }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: p.status === "confirmed" ? "#9CA3AF" : "#111827" }}>
-                      {p.member_name}
-                      <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, marginLeft: 6 }}>{p.work_shift}</span>
-                    </div>
-                    <div style={{ fontSize: 11.5, color: "#9CA3AF", marginTop: 2 }}>
-                      {p.status === "confirmed"
-                        ? `확정됨 · ${p.confirmed_by || ""}`
-                        : "가안 — 확정해야 급여에 들어갑니다"}
-                    </div>
-                  </div>
-                  {p.status === "confirmed" ? (
-                    <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0D9488" }}>✓ 확정</span>
-                  ) : (
-                    <button
-                      onClick={() => confirmPlan(p)}
-                      disabled={confirming === p.id}
-                      style={{ border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "9px 14px", fontFamily: "inherit", cursor: "pointer", opacity: confirming === p.id ? 0.5 : 1 }}
-                    >
-                      확정
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
 
           {/* 업로드 이력 */}
           <div style={card}>
@@ -18690,9 +18796,9 @@ function MonthPlanUpload({ opName, onBack }: { opName: string; onBack: () => voi
               ))
             )}
             <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, paddingTop: 10 }}>
-              배치를 취소하면 그 업로드로 들어간 휴가는 「취소」 처리되고, 확정 전 지정근무 가안은 사라집니다.
+              배치를 취소하면 그 업로드로 들어간 휴가와 지정근무가 「취소」 처리됩니다.
               <br />
-              <b>이미 확정한 지정근무는 남습니다</b> — 급여에 들어간 기록이라 함부로 지우지 않습니다.
+              <b>이미 확정해 급여에 들어간 기록은 남습니다</b> — 함부로 지우지 않습니다.
             </div>
           </div>
         </>
@@ -18711,7 +18817,11 @@ function OperatorDesignated({ opName }: { opName: string }) {
   const [ledgerLoading, setLedgerLoading] = useState(true);
   const [baseDate, setBaseDate] = useState("");
   const [baseLoaded, setBaseLoaded] = useState(false);
-  const [monthSel, setMonthSel] = useState("전체");
+  // 기본값 = 이번 달 (매번 쓰는 화면이라 바로 보이게. 다른 달은 탭으로 검색) — 2026-08-01
+  const [monthSel, setMonthSel] = useState(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [cardFilter, setCardFilter] = useState<"" | "target">(""); // 카드 터치 → 대상자만 보기
   const appliesRef = React.useRef<HTMLDivElement | null>(null); // 신청됨 카드 → 예정 목록 스크롤
   const [searchName, setSearchName] = useState("");
@@ -19107,7 +19217,7 @@ function OperatorDesignated({ opName }: { opName: string }) {
                   onClick={() => setQuickFor({ id: l.id, name: l.name })}
                   style={{ marginLeft: 8, border: 0, borderRadius: 10, background: OP_TEAL, color: "#fff", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer", flex: "none" }}
                 >
-                  신청
+                  지정
                 </button>
               )}
             </div>
@@ -19124,9 +19234,9 @@ function OperatorDesignated({ opName }: { opName: string }) {
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5 }}>불러오는 중…</div>
         ) : applies.length === 0 ? (
           <div style={{ textAlign: "center", padding: "22px 0", color: "#C4C7CC", fontSize: 12.5, lineHeight: 1.7 }}>
-            아직 신청이 없습니다.
+            아직 지정한 근무가 없습니다.
             <br />
-            신청함에서 대리 입력하면 여기 뜹니다.
+            위 명단에서 [지정]을 누르면 여기 뜹니다.
           </div>
         ) : (
           applies.map((it, i) => (
@@ -19402,6 +19512,8 @@ function QuickApplyModal({
 }) {
   const [workDate, setWorkDate] = useState("");
   const [saving, setSaving] = useState(false);
+  // 지정근무가 왜 생겼는지 — 강제휴무(미영업 다이아)와 96휴일 초과는 별개 장부다 (2026-08-01)
+  const [reason, setReason] = useState("강제휴무");
 
   const save = async () => {
     if (!workDate) return showToast("날짜를 선택하세요", "error");
@@ -19443,6 +19555,7 @@ function QuickApplyModal({
       kind,
       work_date: workDate,
       via: opName,
+      reason: kind === "designated" ? reason : null,
     });
     setSaving(false);
     if (error) return showToast("저장 실패: " + error.message, "error");
@@ -19461,11 +19574,42 @@ function QuickApplyModal({
         style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 380 }}
       >
         <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
-          {member.name} · {APPLY_KINDS[kind]} 신청
+          {member.name} · {APPLY_KINDS[kind]} {kind === "designated" ? "지정" : "신청"}
         </div>
         <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4, marginBottom: 14 }}>
           대리 입력 · {opName}
         </div>
+        {kind === "designated" && (
+          <>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 6 }}>왜 생긴 지정근무인가요</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {["강제휴무", "96휴일초과"].map((r) => (
+                <div
+                  key={r}
+                  onClick={() => setReason(r)}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    padding: "11px 0",
+                    borderRadius: 11,
+                    border: reason === r ? "1.5px solid #6366F1" : "1.5px solid #E5E7EB",
+                    background: reason === r ? "#EEF0FF" : "#fff",
+                    color: reason === r ? "#4F46E5" : "#9CA3AF",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {r === "강제휴무" ? "강제휴무" : "96휴일 초과"}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", lineHeight: 1.6, marginTop: -8, marginBottom: 14 }}>
+              강제휴무 = 미영업 다이아로 못 나온 날을 갚는 근무 · 96휴일 초과 = 연 96휴일을 넘긴 만큼 채우는 근무.
+              둘은 <b>따로 관리</b>합니다.
+            </div>
+          </>
+        )}
         <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 6 }}>근무 날짜</div>
         <input
           type="date"
@@ -19489,7 +19633,7 @@ function QuickApplyModal({
             disabled={saving || !workDate}
             style={{ flex: 2, border: 0, borderRadius: 12, background: saving || !workDate ? "#E5E7EB" : OP_TEAL, color: saving || !workDate ? "#9CA3AF" : "#fff", fontSize: 13.5, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: saving || !workDate ? "default" : "pointer" }}
           >
-            {saving ? "저장 중…" : "신청 입력"}
+            {saving ? "저장 중…" : kind === "designated" ? "지정 저장" : "신청 입력"}
           </button>
         </div>
       </div>
@@ -19504,6 +19648,7 @@ function OperatorApply({ opName }: { opName: string }) {
   const [calOpen, setCalOpen] = useState(false);
   const [calYm, setCalYm] = useState<[number, number]>([_now.getFullYear(), _now.getMonth()]);
   const [pickDate, setPickDate] = useState<string>("");
+  const [inboxQ, setInboxQ] = useState(""); // 이름 검색
   const [formOpen, setFormOpen] = useState(false);
   const [kind, setKind] = useState("designated");
   const [workDate, setWorkDate] = useState("");
@@ -19622,6 +19767,43 @@ function OperatorApply({ opName }: { opName: string }) {
       return;
     }
     showToast("취소됨 (기록은 남습니다)");
+    load();
+  };
+
+  // ── 날짜 변경 (2026-08-01) ──
+  //   지정근무는 강제휴무를 갚는 근무라 없앨 수 없다. 사정이 생기면 "취소"가 아니라 "날짜를 옮기는" 것이 맞다.
+  //   같은 달 안이 원칙(당월 이행) — 달을 넘기면 경고만 하고 막지는 않는다.
+  const [moveItem, setMoveItem] = useState<any>(null);
+  const [moveDate, setMoveDate] = useState("");
+  const [moveSaving, setMoveSaving] = useState(false);
+  const openMove = (it: any) => {
+    setMoveItem(it);
+    setMoveDate(String(it.work_date));
+  };
+  const saveMove = async () => {
+    if (!moveItem || !moveDate) return;
+    if (moveDate === String(moveItem.work_date)) return showToast("날짜가 그대로예요", "error");
+    setMoveSaving(true);
+    const { data: mem } = await supabase
+      .from("members")
+      .select("employee_number")
+      .eq("id", moveItem.member_id)
+      .maybeSingle();
+    if (mem?.employee_number) {
+      const bad = await checkAdjustDate(mem.employee_number, moveDate, moveItem.kind === "support" ? "support" : "designated");
+      if (bad) {
+        setMoveSaving(false);
+        return showToast(bad, "error");
+      }
+    }
+    const { error } = await supabase
+      .from("chungdang_apply")
+      .update({ work_date: moveDate, via: `${moveItem.via || ""} → 변경 ${opName}`.trim() })
+      .eq("id", moveItem.id);
+    setMoveSaving(false);
+    if (error) return showToast("변경 실패: " + error.message, "error");
+    setMoveItem(null);
+    showToast(`${moveItem.member_name}님 날짜를 ${moveDate.slice(5).replace("-", "/")}로 옮겼어요`);
     load();
   };
 
@@ -19851,6 +20033,17 @@ function OperatorApply({ opName }: { opName: string }) {
 
   return (
     <div>
+      {/* 이름 검색 — 100건 넘어가면 눈으로 찾기 힘들어서 (2026-08-01) */}
+      <input
+        value={inboxQ}
+        onChange={(e) => setInboxQ(e.target.value)}
+        placeholder="🔍 이름으로 찾기"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E9EDEC", borderRadius: 12, padding: "11px 13px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 10, outline: "none", WebkitAppearance: "none", appearance: "none" }}
+      />
+
       {/* 달력 조회 */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
         <button
@@ -19937,7 +20130,12 @@ function OperatorApply({ opName }: { opName: string }) {
 
       {(["designated", "support", "no_holiday_fill"] as const).map((k) => {
         const list = items
-          .filter((it) => it.kind === k && (!pickDate || String(it.work_date) === pickDate))
+          .filter(
+            (it) =>
+              it.kind === k &&
+              (!pickDate || String(it.work_date) === pickDate) &&
+              (!inboxQ.trim() || String(it.member_name || "").includes(inboxQ.trim()))
+          )
           .slice()
           .sort((x, y) => String(x.work_date).localeCompare(String(y.work_date)));
         const active = list.filter((it) => it.status !== "canceled").length;
@@ -19997,16 +20195,29 @@ function OperatorApply({ opName }: { opName: string }) {
                     </div>
                     <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
                       {it.via === "app" || it.via === "본인" ? "본인 신청 (앱)" : `대리 입력 · ${it.via}`}
+                      {it.kind === "designated" && it.reason === "96휴일초과" && (
+                        <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: "#EEF0FF", color: "#4F46E5" }}>
+                          96휴일 초과
+                        </span>
+                      )}
                     </div>
                   </div>
                   {statusBadge(it.status)}
                   {it.status === "applied" && (
-                    <button
-                      onClick={() => cancelItem(it)}
-                      style={{ border: 0, borderRadius: 9, background: "#F3F4F6", color: "#6B7280", fontSize: 11.5, fontWeight: 800, padding: "7px 11px", fontFamily: "inherit", cursor: "pointer" }}
-                    >
-                      취소
-                    </button>
+                    <>
+                      <button
+                        onClick={() => openMove(it)}
+                        style={{ border: 0, borderRadius: 9, background: "#EEF0FF", color: "#4F46E5", fontSize: 11.5, fontWeight: 800, padding: "7px 11px", fontFamily: "inherit", cursor: "pointer" }}
+                      >
+                        날짜 변경
+                      </button>
+                      <button
+                        onClick={() => cancelItem(it)}
+                        style={{ border: 0, borderRadius: 9, background: "#F3F4F6", color: "#6B7280", fontSize: 11.5, fontWeight: 800, padding: "7px 11px", fontFamily: "inherit", cursor: "pointer" }}
+                      >
+                        취소
+                      </button>
+                    </>
                   )}
                 </div>
               ))
@@ -20014,6 +20225,53 @@ function OperatorApply({ opName }: { opName: string }) {
           </div>
         );
       })}
+      {/* 날짜 변경 팝업 — 지정근무는 없앨 수 없는 근무라 "옮기기"가 기본 */}
+      {moveItem && (
+        <div
+          onClick={() => setMoveItem(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.5)", display: "grid", placeItems: "center", padding: 20, zIndex: 200 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 20, width: "100%", maxWidth: 340 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 3 }}>
+              {moveItem.member_name}님 날짜 변경
+            </div>
+            <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+              {APPLY_KINDS[moveItem.kind] || moveItem.kind} · 지금 {String(moveItem.work_date).slice(5).replace("-", "/")}
+            </div>
+            <input
+              type="date"
+              value={moveDate}
+              onChange={(e) => setMoveDate(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "12px 13px", fontSize: 14, fontFamily: "inherit", marginBottom: 10, WebkitAppearance: "none", appearance: "none" }}
+            />
+            {moveDate.slice(0, 7) !== String(moveItem.work_date).slice(0, 7) && (
+              <div style={{ background: "#FEF3C7", color: "#92400E", borderRadius: 11, padding: "10px 12px", fontSize: 11.5, fontWeight: 700, lineHeight: 1.7, marginBottom: 10 }}>
+                ⚠️ 달을 넘깁니다. 지정근무는 <b>발생한 달 안에 이행</b>이 원칙이라, 원래 달은 「미이행」으로 빨갛게 남습니다.
+              </div>
+            )}
+            <div style={{ fontSize: 11.5, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, marginBottom: 14 }}>
+              지정근무는 강제휴무를 갚는 근무라 없어지지 않습니다. 사정이 생기면 날짜만 옮기세요.
+              <br />
+              그날 넣을 수 없는 날이면 저장할 때 이유를 알려드립니다.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setMoveItem(null)}
+                style={{ flex: 1, border: 0, borderRadius: 12, background: "#F3F4F6", color: "#374151", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer" }}
+              >
+                닫기
+              </button>
+              <button
+                onClick={saveMove}
+                disabled={moveSaving}
+                style={{ flex: 1, border: 0, borderRadius: 12, background: OP_TEAL, color: "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", opacity: moveSaving ? 0.5 : 1 }}
+              >
+                {moveSaving ? "저장 중…" : "날짜 옮기기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={() => setFormOpen(true)}
