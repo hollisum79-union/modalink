@@ -15941,22 +15941,25 @@ function OperatorHome({ opName }: { opName: string }) {
       const dayC: Record<string, number> = {};
       const nightC: Record<string, number> = {};
       const took = new Set<string>();
+      const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
       (base || []).forEach((r: any) => {
         if (took.has(r.name)) return; // 같은 이름은 최신 기준일 것만
         took.add(r.name);
+        baseOf.set(String(r.name), String(r.base_date));
         dayC[r.name] = Number(r.day_cnt) || 0;
         nightC[r.name] = Number(r.night_cnt) || 0;
       });
-      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
       // 기준일 이후 앱 기록 누적 (이중 카운트 방지: 기준일 이전 기록은 이미 엑셀 점수에 포함)
+      //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
       const { data: adds } = await supabase
         .from("work_adjust")
         .select("employee_number, work_shift, work_date")
-        .eq("adjust_type", "holiday_fill")
-        .gt("work_date", maxBase);
+        .eq("adjust_type", "holiday_fill");
       (adds || []).forEach((r: any) => {
         const mm = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(r.employee_number));
         if (!mm || !mm.name) return;
+        const myBase = baseOf.get(String(mm.name)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+        if (!(String(r.work_date) > myBase)) return;
         if (r.work_shift === "야간") nightC[mm.name] = (nightC[mm.name] || 0) + 1;
         else dayC[mm.name] = (dayC[mm.name] || 0) + 1;
       });
@@ -20793,18 +20796,19 @@ function OperatorRank() {
     const d: Record<string, number> = {};
     const n: Record<string, number> = {};
     const took = new Set<string>();
+    const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
     base.forEach((r: any) => {
       if (took.has(r.name)) return;
       took.add(r.name);
+      baseOf.set(String(r.name), String(r.base_date));
       d[r.name] = Number(r.day_cnt) || 0;
       n[r.name] = Number(r.night_cnt) || 0;
     });
-    const maxBase = base.length ? String(base[0].base_date) : "1970-01-01";
+    //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
     const { data: adds } = await supabase
       .from("work_adjust")
-      .select("employee_number, work_shift")
-      .eq("adjust_type", adjType)
-      .gt("work_date", maxBase);
+      .select("employee_number, work_shift, work_date")
+      .eq("adjust_type", adjType);
     const nameOf = new Map<string, string>();
     mems.forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
     const memberNames = new Set(mems.map((m: any) => String(m.name)));
@@ -20813,6 +20817,8 @@ function OperatorRank() {
     (adds || []).forEach((r: any) => {
       const nm = nameOf.get(String(r.employee_number));
       if (!nm) return;
+      const myBase = baseOf.get(String(nm)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+      if (!(String(r.work_date) > myBase)) return;
       if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
       else d[nm] = (d[nm] || 0) + 1;
     });
@@ -20906,18 +20912,19 @@ function OperatorRank() {
       const d: Record<string, number> = {};
       const n: Record<string, number> = {};
       const took = new Set<string>();
+      const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
       (base || []).forEach((r: any) => {
         if (took.has(r.name)) return;
         took.add(r.name);
+        baseOf.set(String(r.name), String(r.base_date));
         d[r.name] = Number(r.day_cnt) || 0;
         n[r.name] = Number(r.night_cnt) || 0;
       });
-      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
+      //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
       const { data: adds } = await supabase
         .from("work_adjust")
-        .select("employee_number, work_shift")
-        .eq("adjust_type", "holiday_fill")
-        .gt("work_date", maxBase);
+        .select("employee_number, work_shift, work_date")
+        .eq("adjust_type", "holiday_fill");
       const { data: mems } = await supabase
         .from("members")
         .select("employee_number, name, fill_excluded, fill_excluded_reason, night_fill_excluded");
@@ -20930,6 +20937,8 @@ function OperatorRank() {
       (adds || []).forEach((r: any) => {
         const nm = nameOf.get(String(r.employee_number));
         if (!nm) return;
+        const myBase = baseOf.get(String(nm)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+        if (!(String(r.work_date) > myBase)) return;
         if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
         else d[nm] = (d[nm] || 0) + 1;
       });
@@ -38128,18 +38137,19 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       const d: Record<string, number> = {};
       const n: Record<string, number> = {};
       const took = new Set<string>();
+      const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
       base.forEach((r: any) => {
         if (took.has(r.name)) return; // 같은 이름은 최신 기준일 것만
         took.add(r.name);
+        baseOf.set(String(r.name), String(r.base_date));
         d[r.name] = Number(r.day_cnt) || 0;
         n[r.name] = Number(r.night_cnt) || 0;
       });
-      const maxBase = base.length ? String(base[0].base_date) : "1970-01-01";
+      //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
       const { data: adds } = await supabase
         .from("work_adjust")
         .select("employee_number, work_shift, work_date")
-        .eq("adjust_type", adjType)
-        .gt("work_date", maxBase);
+        .eq("adjust_type", adjType);
       const nameOf = new Map<string, string>();
       mems.forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
       // 명부에만 있고 사업소 명단에 없는 사람(전출·퇴사)은 순위에서 빼기 — 순서판과 동일
@@ -38150,6 +38160,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       (adds || []).forEach((r: any) => {
         const nm = nameOf.get(String(r.employee_number));
         if (!nm) return;
+        const myBase = baseOf.get(String(nm)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+        if (!(String(r.work_date) > myBase)) return;
         if (String(r.employee_number) === String(user.employee_number)) myAppCount += 1;
         if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
         else d[nm] = (d[nm] || 0) + 1;
@@ -38184,7 +38196,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
         score: scoreOf(my),
         rank: idx >= 0 ? idx + 1 : null,
         total: sorted.length,
-        baseDate: base.length ? maxBase : "",
+        baseDate: baseOf.get(my) || "",
         appCount: myAppCount,
         outWhy: outSet.has(my) ? "제외" : "",
       });
