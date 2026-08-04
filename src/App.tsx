@@ -15561,11 +15561,57 @@ function OperatorHome({ opName }: { opName: string }) {
         .eq("kind", "designated")
         .eq("status", "applied")
         .eq("work_date", targetStr);
-      setDesigApplies(data || []);
+      // 같은 사람이 두 줄이면(중복 업로드 흔적) 한 줄만 보여준다 — 배정은 어차피 사람 단위
+      const seen = new Set<string>();
+      setDesigApplies(
+        (data || []).filter((r: any) => {
+          const k = String(r.member_id || r.member_name);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+      );
     })();
   }, [targetStr]);
 
   // 그 날짜의 휴가자 (실데이터 · leave_history) → 빈 자리 계산 재료
+  // ── 임시 다이아 고정 자리 (2026-08-05) ──
+  //   회사가 교번표 밖으로 돌리는 임시 다이아. 등록하면 요일 규칙(평일/주말·공휴일/매일)에 따라
+  //   빈 자리에 매일 자동으로 나타난다. 시간·키로수는 temp_dia 카탈로그 값을 그대로 쓴다(급여 연동).
+  const [extraSlots, setExtraSlots] = useState<any[]>([]);
+  const [tempCatalog, setTempCatalog] = useState<any[]>([]);
+  const [slotReload, setSlotReload] = useState(0);
+  const [slotOpen, setSlotOpen] = useState(false);
+  const [slotPick, setSlotPick] = useState("");
+  const [slotDays, setSlotDays] = useState("평일");
+  const [slotSaving, setSlotSaving] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const [sl, td] = await Promise.all([
+        supabase.from("extra_slot").select("*").order("dia_no", { ascending: true }),
+        supabase.from("temp_dia").select("*").eq("kind", "임시").order("dia_no", { ascending: true }),
+      ]);
+      setExtraSlots(sl.data || []);
+      setTempCatalog(td.data || []);
+    })();
+  }, [slotReload]);
+  // 그날 떠야 하는 임시 자리 — 평일 = 월~금 중 공휴일 아님 / 주말·공휴일 = 토·일 + 공휴일 (미영업 판정과 같은 달력)
+  const isHolLike = (d: Date) => {
+    const w = d.getDay();
+    if (w === 0 || w === 6) return true;
+    const f = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return (opHolidays || []).includes(f);
+  };
+  const todaysExtraSlots = React.useMemo(() => {
+    const hol = isHolLike(target);
+    return (extraSlots || []).filter((sl: any) => {
+      if (!sl.active) return false;
+      if (sl.days === "매일") return true;
+      if (sl.days === "평일") return !hol;
+      return hol; // 주말·공휴일
+    });
+  }, [extraSlots, targetStr, opHolidays]);
+
   const [opLeaves, setOpLeaves] = useState<any[]>([]);
   useEffect(() => {
     (async () => {
@@ -15824,9 +15870,15 @@ function OperatorHome({ opName }: { opName: string }) {
       (a, b) =>
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
     );
+    // 임시 다이아 고정 자리 — 요일 규칙에 맞는 날마다 항상 나타난다 (충당하면 그날 완료, 다음날 다시)
+    todaysExtraSlots.forEach((sl: any) => {
+      const nm = "임시" + sl.dia_no;
+      if (list.some((x) => x.dia === nm)) return;
+      list.push({ dia: nm, name: nm, reason: "임시 자리 · " + sl.days, region: sl.region || "대공원", isExtra: true });
+    });
     (list as any).noOpDias = noOp;
     return list;
-  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills, bibeonInfo]);
+  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills, bibeonInfo, todaysExtraSlots]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -16781,16 +16833,23 @@ function OperatorHome({ opName }: { opName: string }) {
         if (dup && dup.length > 0) {
           linkMsg = " · 본인 기록이 이미 있어 연동 생략(기존 우선)";
         } else {
-          const shiftKind = Number(fillDia) >= 60 ? "야간" : "주간";
+          // 임시 자리(임시12 등)면 temp_dia 카탈로그의 시간·키로수를 붙여 저장 → 급여·심야·무사고주행키로 자동 (2026-08-05)
+          const extraNo = String(fillDia).startsWith("임시") ? Number(String(fillDia).replace("임시", "")) : null;
+          const cat = extraNo != null ? tempCatalog.find((t: any) => Number(t.dia_no) === extraNo) : null;
+          const shiftKind = (extraNo != null ? extraNo : Number(fillDia)) >= 60 ? "야간" : "주간";
           const { error: waErr } = await supabase.from("work_adjust").insert([
             {
               employee_number: String(emp),
               adjust_type: adjType,
               work_date: targetStr,
               work_shift: shiftKind,
-              memo: `다이아 ${fillDia}번 (운용 배정)`,
+              memo: extraNo != null ? `임시${extraNo} 다이아 (운용 배정)` : `다이아 ${fillDia}번 (운용 배정)`,
               is_night: shiftKind === "야간",
-              is_temp_dia: false,
+              is_temp_dia: extraNo != null,
+              temp_start_time: cat ? String(cat.start_time || "").slice(0, 5) || null : null,
+              temp_work_hours: cat ? Number(cat.work_hours) || 0 : null,
+              temp_night_hours: cat ? Number(cat.night_hours) || 0 : null,
+              temp_distance_km: cat ? Number(cat.distance_km) || 0 : null,
               source: "operator",
               entered_by: opName,
             },
@@ -17336,6 +17395,11 @@ function OperatorHome({ opName }: { opName: string }) {
                 >
                   {e.region}
                 </span>
+                {e.isExtra && (
+                  <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 5, background: "#FDF2F8", color: "#BE185D" }}>
+                    임시
+                  </span>
+                )}
               </div>
               <div style={meta}>
                 {a ? (
@@ -17405,6 +17469,107 @@ function OperatorHome({ opName }: { opName: string }) {
           그날 열차가 안 다니는 다이아라 채울 자리가 없습니다. 채워야 하는 자리가 여기 있으면 알려주세요.
         </div>
       )}
+
+      {/* ➕ 임시 자리 관리 — 등록하면 요일 규칙대로 빈 자리에 매일 자동 표시 */}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+        <div onClick={() => setSlotOpen(!slotOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: "#BE185D" }}>➕ 임시 자리 관리</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: "#9CA3AF" }}>
+            {extraSlots.filter((x: any) => x.active).length}개 운영 중 {slotOpen ? "▲" : "▼"}
+          </span>
+        </div>
+        {slotOpen && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 5 }}>다이아 선택 (관리자 → 임시·변형에 등록된 것)</div>
+            <select
+              value={slotPick}
+              onChange={(e) => setSlotPick(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 8, background: "#fff" }}
+            >
+              <option value="">다이아를 고르세요</option>
+              {tempCatalog
+                .filter((t: any) => !extraSlots.some((sl: any) => sl.active && Number(sl.dia_no) === Number(t.dia_no)))
+                .map((t: any) => (
+                  <option key={t.id} value={String(t.dia_no)}>
+                    임시{t.dia_no} · {t.is_night ? "야간" : "주간"} · 인정 {Number(t.work_hours || 0).toFixed(1)}h · {Number(t.distance_km || 0)}km
+                  </option>
+                ))}
+            </select>
+            {tempCatalog.length === 0 && (
+              <div style={{ fontSize: 11.5, color: "#E11D48", fontWeight: 700, marginBottom: 8 }}>
+                등록된 임시 다이아가 없어요. 관리자 → 다이아 관리 → 임시·변형에서 시간표를 먼저 등록하세요.
+              </div>
+            )}
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 5 }}>언제 뜨나요</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {["평일", "주말·공휴일", "매일"].map((d) => (
+                <div
+                  key={d}
+                  onClick={() => setSlotDays(d)}
+                  style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, border: slotDays === d ? "1.5px solid #BE185D" : "1.5px solid #E5E7EB", background: slotDays === d ? "#FDF2F8" : "#fff", fontSize: 12, fontWeight: 800, color: slotDays === d ? "#BE185D" : "#9CA3AF", cursor: "pointer" }}
+                >
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, marginBottom: 8 }}>
+              평일 = 월~금 중 공휴일 아닌 날 · 주말·공휴일 = 토·일 + 공휴일. 등록하면 그 규칙에 맞는 날마다 빈 자리에 자동으로 나타나고, 채우면 그날 완료 · 다음날 다시 나타납니다.
+            </div>
+            <button
+              onClick={async () => {
+                if (!slotPick) return showToast("다이아를 고르세요", "error");
+                setSlotSaving(true);
+                const { error } = await supabase.from("extra_slot").insert({
+                  dia_no: Number(slotPick),
+                  days: slotDays,
+                  region: "대공원",
+                  active: true,
+                  created_by: opName,
+                });
+                setSlotSaving(false);
+                if (error) return showToast("등록 실패: " + error.message, "error");
+                showToast(`임시${slotPick} 자리를 등록했어요 — ${slotDays} 빈 자리에 자동 표시됩니다`, "success");
+                setSlotPick("");
+                setSlotReload((v) => v + 1);
+              }}
+              disabled={slotSaving || !slotPick}
+              style={{ width: "100%", border: 0, borderRadius: 11, background: slotSaving || !slotPick ? "#E5E7EB" : "#BE185D", color: slotSaving || !slotPick ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", marginBottom: 10 }}
+            >
+              {slotSaving ? "등록 중…" : "등록"}
+            </button>
+            {extraSlots.filter((x: any) => x.active).map((sl: any) => {
+              const cat = tempCatalog.find((t: any) => Number(t.dia_no) === Number(sl.dia_no));
+              return (
+                <div key={sl.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "1px solid #F5F5F7" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: "#BE185D" }}>
+                      임시{sl.dia_no}
+                      <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: sl.days === "평일" ? "#F0FDF4" : sl.days === "매일" ? "#EEF0FF" : "#FEF3C7", color: sl.days === "평일" ? "#15803D" : sl.days === "매일" ? "#4F46E5" : "#92400E" }}>
+                        {sl.days}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                      {cat ? `인정 ${Number(cat.work_hours || 0).toFixed(1)}h · 심야 ${Number(cat.night_hours || 0).toFixed(1)}h · ${Number(cat.distance_km || 0)}km` : "⚠️ 카탈로그에 시간표 없음"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm(`임시${sl.dia_no} 자리를 중지할까요?\n오늘부터 빈 자리에 안 나옵니다. 이미 배정된 날은 그대로 남습니다.`)) return;
+                      const { error } = await supabase.from("extra_slot").update({ active: false }).eq("id", sl.id);
+                      if (error) return showToast("중지 실패: " + error.message, "error");
+                      showToast(`임시${sl.dia_no} 자리를 중지했어요`);
+                      setSlotReload((v) => v + 1);
+                    }}
+                    style={{ border: 0, borderRadius: 10, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer" }}
+                  >
+                    중지
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 
