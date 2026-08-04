@@ -20463,6 +20463,7 @@ function OperatorRank() {
   const [excSaving, setExcSaving] = useState("");
   const [excMemo, setExcMemo] = useState<Record<string, string>>({});
   const [rankReload, setRankReload] = useState(0);
+  const [boardQ, setBoardQ] = useState(""); // 순서판 이름 검색 (주간·야간 공용) — 순위 번호는 전체 기준 유지
   const [outOpen, setOutOpen] = useState(false);
   const [nightOpen, setNightOpen] = useState(false);
   // ── 신규·전입 평균 부여 (2026-08-05) ──
@@ -21353,7 +21354,11 @@ function OperatorRank() {
     .filter((nm) => !nightExc[nm])
     .map((nm) => ({ name: nm, pts: rankNight[nm] || 0, note: `합산 ${rankScoreOf(nm).toFixed(1)}점` }))
     .sort((a: any, b: any) => (Number(a.pts) - Number(b.pts)) || (rankScoreOf(a.name) - rankScoreOf(b.name)));
-  const list = board === "주간" ? dayBoard : nightBoard;
+  const fullList = board === "주간" ? dayBoard : nightBoard;
+  // 순위 번호를 먼저 매기고 → 검색으로 거른다. 걸러도 원래 순위가 그대로 보인다.
+  const list = fullList
+    .map((m: any, i: number) => ({ ...m, rank: i + 1 }))
+    .filter((m: any) => !boardQ.trim() || m.name.includes(boardQ.trim()));
   const unit = board === "주간" ? "점" : "개";
 
   return (
@@ -21397,6 +21402,17 @@ function OperatorRank() {
         ))}
       </div>
 
+      {/* 이름 검색 — 155명 중에서 한 사람 찾기. 걸러도 원래 순위 번호는 그대로 */}
+      <input
+        value={boardQ}
+        onChange={(e) => setBoardQ(e.target.value)}
+        placeholder="🔍 이름으로 찾기 (순위는 전체 기준)"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E9EDEC", borderRadius: 12, padding: "11px 13px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 12, outline: "none", background: "#fff", WebkitAppearance: "none", appearance: "none" }}
+      />
+
       <div style={card}>
         <div style={ttl}>
           {board} 충당 순서
@@ -21404,15 +21420,20 @@ function OperatorRank() {
             {board === "주간" ? "점수 낮은 순" : "개수 적은 순"}
           </span>
         </div>
-        {list.map((m, i) => (
+        {list.length === 0 && (
+          <div style={{ textAlign: "center", padding: "26px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            검색 결과가 없습니다.
+          </div>
+        )}
+        {list.map((m: any, i) => (
           <div key={m.name} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
             <div
               style={{
                 width: 26,
                 height: 26,
                 borderRadius: 9,
-                background: i === 0 ? OP_TEAL : "#F1F5F4",
-                color: i === 0 ? "#fff" : "#4B5563",
+                background: m.rank === 1 ? OP_TEAL : "#F1F5F4",
+                color: m.rank === 1 ? "#fff" : "#4B5563",
                 display: "grid",
                 placeItems: "center",
                 fontSize: 12,
@@ -21420,7 +21441,7 @@ function OperatorRank() {
                 flex: "none",
               }}
             >
-              {i + 1}
+              {m.rank}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
