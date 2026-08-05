@@ -43898,29 +43898,37 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const bd = me.base_distance_date || "";
       let sum = 0;
       if (bd) {
-        const { data: adj } = await supabase
-          .from("work_adjust")
-          .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
-          .eq("employee_number", user.employee_number)
-          .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
-          .gt("work_date", bd);
-       const { data: lvData } = await supabase
-          .from("leave_history")
-          .select("used_date")
-          .eq("employee_number", user.employee_number)
-          .neq("status", "취소")
-          .gt("used_date", bd);
-       const { data: swapData } = await supabase
-          .from("kyobun_swap")
-          .select("*")
-          .eq("status", "수락")
-          .or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`);
-        const { data: allMembers } = await supabase
-          .from("members")
-          .select("employee_number, work_group, start_position, schedule_total");
-        const { data: shData } = await supabase
-          .from("kyobun_start_history")
-          .select("member_id, effective_date, start_position");
+        // 다섯은 서로 무관 → 동시에 요청 (순차 5회 왕복 → 1회 · 로그인 체감속도 2026-08-05)
+        const [adjRes, lvRes2, swapRes2, memRes2, shRes2] = await Promise.all([
+          supabase
+            .from("work_adjust")
+            .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
+            .eq("employee_number", user.employee_number)
+            .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+            .gt("work_date", bd),
+          supabase
+            .from("leave_history")
+            .select("used_date")
+            .eq("employee_number", user.employee_number)
+            .neq("status", "취소")
+            .gt("used_date", bd),
+          supabase
+            .from("kyobun_swap")
+            .select("*")
+            .eq("status", "수락")
+            .or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`),
+          supabase
+            .from("members")
+            .select("employee_number, work_group, start_position, schedule_total"),
+          supabase
+            .from("kyobun_start_history")
+            .select("member_id, effective_date, start_position"),
+        ]);
+        const adj = adjRes.data;
+        const lvData = lvRes2.data;
+        const swapData = swapRes2.data;
+        const allMembers = memRes2.data;
+        const shData = shRes2.data;
         const leaveDates = new Set((lvData || []).map((r: any) => r.used_date));
         const adjustByDate: any = {};
         const tempKmByDate: any = {};
@@ -44068,19 +44076,22 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     if (screen !== "home") return;
     const loadHomeWork = async () => {
       const t0 = performance.now();
-      const { data: rot } = await supabase
-        .from("schedule_rotation")
-        .select("*")
-        .in("group_name", ["대공원 114", "도봉 41"])
-        .order("position");
+      // 셋은 서로 무관 → 동시에 요청 (순차 3회 왕복 → 1회 · 로그인 체감속도 2026-08-05)
+      const _n = new Date();
+      const _td = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}-${String(_n.getDate()).padStart(2, "0")}`;
+      const [rotRes, diaRes, taRes] = await Promise.all([
+        supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]).order("position"),
+        supabase.from("kyobun_dia").select("*"),
+        user?.employee_number
+          ? supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated", "support"]).eq("work_date", _td)
+          : Promise.resolve({ data: null }),
+      ]);
+      const rot = rotRes.data;
+      const dia = diaRes.data;
       if (rot) setHomeRotation(rot);
-
-     const { data: dia } = await supabase.from("kyobun_dia").select("*");
       if (dia) setHomeDia(dia);
       if (user?.employee_number) {
-        const _n = new Date();
-        const _td = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}-${String(_n.getDate()).padStart(2, "0")}`;
-        const { data: _ta } = await supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated", "support"]).eq("work_date", _td);
+        const _ta: any = taRes.data;
         setHomeTodayAdjust(_ta && _ta.length > 0 ? _ta[0] : null);
       }
 
