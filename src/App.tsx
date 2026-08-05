@@ -16017,7 +16017,8 @@ function OperatorHome({ opName }: { opName: string }) {
     { label: "1차 확정", ...stampInfo(lastStamp(targetStr, "1차")) },
     { label: "2차 확정", ...stampInfo(lastStamp(targetStr, "2차")) },
   ];
-  // ── 22시 잠금: 근무 당일 22시부터 이 날짜는 수정 불가 (야간 급휴가 대응 시간까지 열어둠) ──
+  // ── 잠금: 근무 다음날 09시부터 이 날짜는 수정 불가 (2026-08-05 변경 · 이전엔 당일 22시) ──
+  //   야간 근무가 자정을 넘겨 끝나므로, 근무가 끝난 뒤 아침에 정리할 시간을 준다.
   //   단, 도입 초기에는 운용 협조가 안 돼 지회장이 지난 날짜를 수기로 몰아 입력하는 상황이라
   //   op_settings.lock_disabled = "true" 인 동안은 잠그지 않는다 (2026-08-05 · 정착되면 끄기)
   const [lockDisabled, setLockDisabled] = useState(false);
@@ -16030,7 +16031,8 @@ function OperatorHome({ opName }: { opName: string }) {
       .then(({ data }) => setLockDisabled(String(data?.value || "") === "true"));
   }, []);
   const lockTime = new Date(target);
-  lockTime.setHours(22, 0, 0, 0);
+  lockTime.setDate(lockTime.getDate() + 1); // 근무 다음날
+  lockTime.setHours(9, 0, 0, 0);
   const isLocked = !lockDisabled && Date.now() >= lockTime.getTime();
 
   const usedNames = Object.values(assigned).map((a) => a.name);
@@ -16789,7 +16791,7 @@ function OperatorHome({ opName }: { opName: string }) {
       );
 
     const pick = async (name: string, via: string, emp?: string) => {
-      if (isLocked) return showToast("🔒 22시 잠금 — 이 날짜는 더 이상 수정할 수 없어요", "error");
+      if (isLocked) return showToast("🔒 잠김 — 근무 다음날 09시가 지나 수정할 수 없어요", "error");
       const { error } = await supabase.from("operator_assign").insert({
         work_date: targetStr,
         dia_no: String(fillDia),
@@ -17307,7 +17309,7 @@ function OperatorHome({ opName }: { opName: string }) {
       }}
     >
       {opLoaded
-        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 배정·확정 도장은 실제로 저장되며, 근무 당일 22시에 잠깁니다."
+        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 배정·확정 도장은 실제로 저장되며, 근무 다음날 오전 9시에 잠깁니다."
         : "실제 근무 데이터를 불러오는 중…"}
     </div>
   );
@@ -17402,7 +17404,7 @@ function OperatorHome({ opName }: { opName: string }) {
             {a ? (
               <button
                 onClick={async () => {
-                  if (isLocked) return showToast("🔒 22시 잠금 — 이 날짜는 더 이상 수정할 수 없어요", "error");
+                  if (isLocked) return showToast("🔒 잠김 — 근무 다음날 09시가 지나 수정할 수 없어요", "error");
                   const cur = assigned[e.dia];
                   const { error } = await supabase.from("operator_assign").insert({
                     work_date: targetStr,
@@ -17767,7 +17769,7 @@ function OperatorHome({ opName }: { opName: string }) {
           padding: "10px 12px",
         }}
       >
-        확정해도 잠기지 않습니다. 근무 당일 22시까지 고칠 수 있고, 고치면 전부 기록에 남습니다. 22시부터는 잠깁니다.
+        확정해도 잠기지 않습니다. 근무 다음날 오전 9시까지 고칠 수 있고, 고치면 전부 기록에 남습니다. 그 뒤에는 잠깁니다.
       </div>
     </div>
   );
@@ -17802,7 +17804,7 @@ function OperatorHome({ opName }: { opName: string }) {
         cursor: confirmOff ? "default" : "pointer",
       }}
     >
-      {isLocked ? "🔒 22시 잠금 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : lockDisabled ? `${nextStage} 확정 (잠금 해제 중)` : `${nextStage} 확정`}
+      {isLocked ? "🔒 잠김 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : lockDisabled ? `${nextStage} 확정 (잠금 해제 중)` : `${nextStage} 확정`}
     </button>
   );
 
@@ -46066,7 +46068,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 <br />
                 이번 달 충당·지원근무는 다음 달 급여에 반영됩니다.
                 <br />
-                근무 당일 22시까지는 내용이 바뀔 수 있어요.
+                근무 다음날 오전 9시까지는 내용이 바뀔 수 있어요.
               </div>
             )}
           </div>
@@ -46230,13 +46232,11 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     +{adjustPayEst.toLocaleString("ko-KR")}원
                   </div>
                 )}
-                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3, lineHeight: 1.5 }}>
-                  {new Date().getMonth() + 1}월 기록{adjustPayEst > 0 ? " · 수당 환산" : ""}
-                  <br />
+                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3 }}>
+                  {new Date().getMonth() + 1}월 기록 →{" "}
                   <span style={{ color: "#4F46E5", fontWeight: 700 }}>
                     {(new Date().getMonth() + 1) % 12 + 1}월 급여
                   </span>
-                  에 반영
                 </div>
                 <div
                   style={{
