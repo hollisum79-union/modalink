@@ -15190,7 +15190,6 @@ function OperatorHome({ opName }: { opName: string }) {
   }, []);
   const [opLoaded, setOpLoaded] = useState(false);
   // 결원 펼침 (뱃지 눌렀을 때 어느 시간대의 결원 목록을 보여줄지)
-  const [openVacant, setOpenVacant] = useState<string | null>(null);
   // 유고 입력 화면 상태
   const [showAbsence, setShowAbsence] = useState(false);
   const [offOpen, setOffOpen] = useState(false); // 오늘 휴가·유고 카드 접이식 (훅은 조건부 return 위에 있어야 함)
@@ -15453,25 +15452,6 @@ function OperatorHome({ opName }: { opName: string }) {
   // 대기 근무자(standby)는 휴가·유고 데이터 로드 뒤에서 계산 (usable 판정에 필요) → 아래 const standby
 
 
-  // ── 결원 대기 (뱃지 총인원·펼침용): 이름에 "결원" 들어간 사람이 걸린 대기 자리 ──
-  const standbyVacant = React.useMemo(() => {
-    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
-    const list = opMembers
-      .map((m) => {
-        if (!String(m.name).includes("결원")) return null;
-        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
-        if (!w || !isStandbyDia(w.dia)) return null;
-        if (String(w.dia).includes("~") || w.type === "비번") return null;
-        return { slot: String(w.dia), name: m.name, region: m.work_group };
-      })
-      .filter(Boolean) as any[];
-    list.sort(
-      (a, b) =>
-        Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""))
-    );
-    return list;
-  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
-
   // 대상 날짜 문자열 (로컬)
   const targetStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
 
@@ -15561,11 +15541,57 @@ function OperatorHome({ opName }: { opName: string }) {
         .eq("kind", "designated")
         .eq("status", "applied")
         .eq("work_date", targetStr);
-      setDesigApplies(data || []);
+      // 같은 사람이 두 줄이면(중복 업로드 흔적) 한 줄만 보여준다 — 배정은 어차피 사람 단위
+      const seen = new Set<string>();
+      setDesigApplies(
+        (data || []).filter((r: any) => {
+          const k = String(r.member_id || r.member_name);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+      );
     })();
   }, [targetStr]);
 
   // 그 날짜의 휴가자 (실데이터 · leave_history) → 빈 자리 계산 재료
+  // ── 임시 다이아 고정 자리 (2026-08-05) ──
+  //   회사가 교번표 밖으로 돌리는 임시 다이아. 등록하면 요일 규칙(평일/주말·공휴일/매일)에 따라
+  //   빈 자리에 매일 자동으로 나타난다. 시간·키로수는 temp_dia 카탈로그 값을 그대로 쓴다(급여 연동).
+  const [extraSlots, setExtraSlots] = useState<any[]>([]);
+  const [tempCatalog, setTempCatalog] = useState<any[]>([]);
+  const [slotReload, setSlotReload] = useState(0);
+  const [slotOpen, setSlotOpen] = useState(false);
+  const [slotPick, setSlotPick] = useState("");
+  const [slotDays, setSlotDays] = useState("평일");
+  const [slotSaving, setSlotSaving] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const [sl, td] = await Promise.all([
+        supabase.from("extra_slot").select("*").order("dia_no", { ascending: true }),
+        supabase.from("temp_dia").select("*").eq("kind", "임시").order("dia_no", { ascending: true }),
+      ]);
+      setExtraSlots(sl.data || []);
+      setTempCatalog(td.data || []);
+    })();
+  }, [slotReload]);
+  // 그날 떠야 하는 임시 자리 — 평일 = 월~금 중 공휴일 아님 / 주말·공휴일 = 토·일 + 공휴일 (미영업 판정과 같은 달력)
+  const isHolLike = (d: Date) => {
+    const w = d.getDay();
+    if (w === 0 || w === 6) return true;
+    const f = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return (opHolidays || []).includes(f);
+  };
+  const todaysExtraSlots = React.useMemo(() => {
+    const hol = isHolLike(target);
+    return (extraSlots || []).filter((sl: any) => {
+      if (!sl.active) return false;
+      if (sl.days === "매일") return true;
+      if (sl.days === "평일") return !hol;
+      return hol; // 주말·공휴일
+    });
+  }, [extraSlots, targetStr, opHolidays]);
+
   const [opLeaves, setOpLeaves] = useState<any[]>([]);
   useEffect(() => {
     (async () => {
@@ -15625,12 +15651,13 @@ function OperatorHome({ opName }: { opName: string }) {
     opAbsences.forEach((ab) => offByEmp.set(String(ab.employee_number), ab.reason || "유고"));
     const list = opMembers
       .map((m) => {
-        // 결원은 사람이 아님 → 대기에서 제외
-        if (String(m.name).includes("결원")) return null;
         const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
         if (!w || !isStandbyDia(w.dia)) return null;
         // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
         if (String(w.dia).includes("~") || w.type === "비번") return null;
+        // 결원(사람 없는 자리)도 목록에 회색으로 남긴다 — 접이식이라 안 보이던 문제 해결 (2026-08-05)
+        if (String(m.name).includes("결원"))
+          return { slot: String(w.dia), name: m.name, emp: "", usable: false, note: "결원 · 사람 없음", region: m.work_group };
         const off = offByEmp.get(String(m.employee_number)) || (isBibeon(m) ? "충당비번" : "");
         return { slot: String(w.dia), name: m.name, emp: String(m.employee_number), usable: !off, note: off, region: m.work_group };
       })
@@ -15824,9 +15851,15 @@ function OperatorHome({ opName }: { opName: string }) {
       (a, b) =>
         Number(String(a.dia).replace(/[^0-9]/g, "")) - Number(String(b.dia).replace(/[^0-9]/g, ""))
     );
+    // 임시 다이아 고정 자리 — 요일 규칙에 맞는 날마다 항상 나타난다 (충당하면 그날 완료, 다음날 다시)
+    todaysExtraSlots.forEach((sl: any) => {
+      const nm = "임시" + sl.dia_no;
+      if (list.some((x) => x.dia === nm)) return;
+      list.push({ dia: nm, name: nm, reason: "임시 자리 · " + sl.days, region: sl.region || "대공원", isExtra: true });
+    });
     (list as any).noOpDias = noOp;
     return list;
-  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills, bibeonInfo]);
+  }, [opMembers, opAllMembers, opHolidays, opRotation, opStartHist, opSwaps, opLeaves, opAbsences, targetStr, prevNightFills, bibeonInfo, todaysExtraSlots]);
 
   // 채우기 팝업 · 배정 상태 (화면 안에서만 — 아직 저장 안 됨)
   const [fillDia, setFillDia] = useState<string>("");
@@ -15889,22 +15922,25 @@ function OperatorHome({ opName }: { opName: string }) {
       const dayC: Record<string, number> = {};
       const nightC: Record<string, number> = {};
       const took = new Set<string>();
+      const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
       (base || []).forEach((r: any) => {
         if (took.has(r.name)) return; // 같은 이름은 최신 기준일 것만
         took.add(r.name);
+        baseOf.set(String(r.name), String(r.base_date));
         dayC[r.name] = Number(r.day_cnt) || 0;
         nightC[r.name] = Number(r.night_cnt) || 0;
       });
-      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
       // 기준일 이후 앱 기록 누적 (이중 카운트 방지: 기준일 이전 기록은 이미 엑셀 점수에 포함)
+      //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
       const { data: adds } = await supabase
         .from("work_adjust")
         .select("employee_number, work_shift, work_date")
-        .eq("adjust_type", "holiday_fill")
-        .gt("work_date", maxBase);
+        .eq("adjust_type", "holiday_fill");
       (adds || []).forEach((r: any) => {
         const mm = (opAllMembers || []).find((x: any) => String(x.employee_number) === String(r.employee_number));
         if (!mm || !mm.name) return;
+        const myBase = baseOf.get(String(mm.name)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+        if (!(String(r.work_date) > myBase)) return;
         if (r.work_shift === "야간") nightC[mm.name] = (nightC[mm.name] || 0) + 1;
         else dayC[mm.name] = (dayC[mm.name] || 0) + 1;
       });
@@ -16781,16 +16817,23 @@ function OperatorHome({ opName }: { opName: string }) {
         if (dup && dup.length > 0) {
           linkMsg = " · 본인 기록이 이미 있어 연동 생략(기존 우선)";
         } else {
-          const shiftKind = Number(fillDia) >= 60 ? "야간" : "주간";
+          // 임시 자리(임시12 등)면 temp_dia 카탈로그의 시간·키로수를 붙여 저장 → 급여·심야·무사고주행키로 자동 (2026-08-05)
+          const extraNo = String(fillDia).startsWith("임시") ? Number(String(fillDia).replace("임시", "")) : null;
+          const cat = extraNo != null ? tempCatalog.find((t: any) => Number(t.dia_no) === extraNo) : null;
+          const shiftKind = (extraNo != null ? extraNo : Number(fillDia)) >= 60 ? "야간" : "주간";
           const { error: waErr } = await supabase.from("work_adjust").insert([
             {
               employee_number: String(emp),
               adjust_type: adjType,
               work_date: targetStr,
               work_shift: shiftKind,
-              memo: `다이아 ${fillDia}번 (운용 배정)`,
+              memo: extraNo != null ? `임시${extraNo} 다이아 (운용 배정)` : `다이아 ${fillDia}번 (운용 배정)`,
               is_night: shiftKind === "야간",
-              is_temp_dia: false,
+              is_temp_dia: extraNo != null,
+              temp_start_time: cat ? String(cat.start_time || "").slice(0, 5) || null : null,
+              temp_work_hours: cat ? Number(cat.work_hours) || 0 : null,
+              temp_night_hours: cat ? Number(cat.night_hours) || 0 : null,
+              temp_distance_km: cat ? Number(cat.distance_km) || 0 : null,
               source: "operator",
               entered_by: opName,
             },
@@ -17336,6 +17379,11 @@ function OperatorHome({ opName }: { opName: string }) {
                 >
                   {e.region}
                 </span>
+                {e.isExtra && (
+                  <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 7px", borderRadius: 6, marginLeft: 5, background: "#FDF2F8", color: "#BE185D" }}>
+                    임시
+                  </span>
+                )}
               </div>
               <div style={meta}>
                 {a ? (
@@ -17405,6 +17453,107 @@ function OperatorHome({ opName }: { opName: string }) {
           그날 열차가 안 다니는 다이아라 채울 자리가 없습니다. 채워야 하는 자리가 여기 있으면 알려주세요.
         </div>
       )}
+
+      {/* ➕ 임시 자리 관리 — 등록하면 요일 규칙대로 빈 자리에 매일 자동 표시 */}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #F3F4F6" }}>
+        <div onClick={() => setSlotOpen(!slotOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: "#BE185D" }}>➕ 임시 자리 관리</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: "#9CA3AF" }}>
+            {extraSlots.filter((x: any) => x.active).length}개 운영 중 {slotOpen ? "▲" : "▼"}
+          </span>
+        </div>
+        {slotOpen && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 5 }}>다이아 선택 (관리자 → 임시·변형에 등록된 것)</div>
+            <select
+              value={slotPick}
+              onChange={(e) => setSlotPick(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 11, padding: "11px 12px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 8, background: "#fff" }}
+            >
+              <option value="">다이아를 고르세요</option>
+              {tempCatalog
+                .filter((t: any) => !extraSlots.some((sl: any) => sl.active && Number(sl.dia_no) === Number(t.dia_no)))
+                .map((t: any) => (
+                  <option key={t.id} value={String(t.dia_no)}>
+                    임시{t.dia_no} · {t.is_night ? "야간" : "주간"} · 인정 {Number(t.work_hours || 0).toFixed(1)}h · {Number(t.distance_km || 0)}km
+                  </option>
+                ))}
+            </select>
+            {tempCatalog.length === 0 && (
+              <div style={{ fontSize: 11.5, color: "#E11D48", fontWeight: 700, marginBottom: 8 }}>
+                등록된 임시 다이아가 없어요. 관리자 → 다이아 관리 → 임시·변형에서 시간표를 먼저 등록하세요.
+              </div>
+            )}
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 5 }}>언제 뜨나요</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {["평일", "주말·공휴일", "매일"].map((d) => (
+                <div
+                  key={d}
+                  onClick={() => setSlotDays(d)}
+                  style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, border: slotDays === d ? "1.5px solid #BE185D" : "1.5px solid #E5E7EB", background: slotDays === d ? "#FDF2F8" : "#fff", fontSize: 12, fontWeight: 800, color: slotDays === d ? "#BE185D" : "#9CA3AF", cursor: "pointer" }}
+                >
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, lineHeight: 1.7, marginBottom: 8 }}>
+              평일 = 월~금 중 공휴일 아닌 날 · 주말·공휴일 = 토·일 + 공휴일. 등록하면 그 규칙에 맞는 날마다 빈 자리에 자동으로 나타나고, 채우면 그날 완료 · 다음날 다시 나타납니다.
+            </div>
+            <button
+              onClick={async () => {
+                if (!slotPick) return showToast("다이아를 고르세요", "error");
+                setSlotSaving(true);
+                const { error } = await supabase.from("extra_slot").insert({
+                  dia_no: Number(slotPick),
+                  days: slotDays,
+                  region: "대공원",
+                  active: true,
+                  created_by: opName,
+                });
+                setSlotSaving(false);
+                if (error) return showToast("등록 실패: " + error.message, "error");
+                showToast(`임시${slotPick} 자리를 등록했어요 — ${slotDays} 빈 자리에 자동 표시됩니다`, "success");
+                setSlotPick("");
+                setSlotReload((v) => v + 1);
+              }}
+              disabled={slotSaving || !slotPick}
+              style={{ width: "100%", border: 0, borderRadius: 11, background: slotSaving || !slotPick ? "#E5E7EB" : "#BE185D", color: slotSaving || !slotPick ? "#9CA3AF" : "#fff", fontSize: 13, fontWeight: 800, padding: "12px 0", fontFamily: "inherit", cursor: "pointer", marginBottom: 10 }}
+            >
+              {slotSaving ? "등록 중…" : "등록"}
+            </button>
+            {extraSlots.filter((x: any) => x.active).map((sl: any) => {
+              const cat = tempCatalog.find((t: any) => Number(t.dia_no) === Number(sl.dia_no));
+              return (
+                <div key={sl.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderTop: "1px solid #F5F5F7" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: "#BE185D" }}>
+                      임시{sl.dia_no}
+                      <span style={{ fontSize: 10, fontWeight: 800, borderRadius: 6, padding: "2px 7px", marginLeft: 6, background: sl.days === "평일" ? "#F0FDF4" : sl.days === "매일" ? "#EEF0FF" : "#FEF3C7", color: sl.days === "평일" ? "#15803D" : sl.days === "매일" ? "#4F46E5" : "#92400E" }}>
+                        {sl.days}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500, marginTop: 2 }}>
+                      {cat ? `인정 ${Number(cat.work_hours || 0).toFixed(1)}h · 심야 ${Number(cat.night_hours || 0).toFixed(1)}h · ${Number(cat.distance_km || 0)}km` : "⚠️ 카탈로그에 시간표 없음"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm(`임시${sl.dia_no} 자리를 중지할까요?\n오늘부터 빈 자리에 안 나옵니다. 이미 배정된 날은 그대로 남습니다.`)) return;
+                      const { error } = await supabase.from("extra_slot").update({ active: false }).eq("id", sl.id);
+                      if (error) return showToast("중지 실패: " + error.message, "error");
+                      showToast(`임시${sl.dia_no} 자리를 중지했어요`);
+                      setSlotReload((v) => v + 1);
+                    }}
+                    style={{ border: 0, borderRadius: 10, background: "#F3F4F6", color: "#6B7280", fontSize: 12, fontWeight: 800, padding: "8px 13px", fontFamily: "inherit", cursor: "pointer" }}
+                  >
+                    중지
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -17419,16 +17568,13 @@ function OperatorHome({ opName }: { opName: string }) {
           Number(String(p.slot).replace(/[^0-9]/g, ""))
       );
     const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
-    const vacList = standbyVacant.filter((x) => shiftOf(x.slot) === sec);
-    const total = list.length + vacList.length;
-    const open = openVacant === sec;
+    const total = list.length; // 결원 자리도 list에 포함됨 (대기 정원의 일부)
     let ord = 0;
     return (
       <div style={card} key={sec}>
         <div style={ttl}>
           {sec} 대기{" "}
           <span
-            onClick={() => vacList.length > 0 && setOpenVacant(open ? null : sec)}
             style={{
               fontSize: 11,
               fontWeight: 700,
@@ -17436,79 +17582,12 @@ function OperatorHome({ opName }: { opName: string }) {
               color: avail > 0 ? OP_TEAL_DARK : "#991B1B",
               padding: "3px 9px",
               borderRadius: 20,
-              cursor: vacList.length > 0 ? "pointer" : "default",
               userSelect: "none",
             }}
           >
             가능 {avail}명 · 총 {total}명
-            {vacList.length > 0 && (
-              <span style={{ color: "#9CA3AF", fontWeight: 700 }}> (결원 {vacList.length})</span>
-            )}
-            {vacList.length > 0 && (
-              <span style={{ fontSize: 9, color: "#9CA3AF", marginLeft: 3 }}>{open ? "▲" : "▼"}</span>
-            )}
           </span>
         </div>
-        {open && vacList.length > 0 && (
-          <div
-            style={{
-              background: "#F9FAFB",
-              border: "1px solid #EEF0F2",
-              borderRadius: 12,
-              padding: "10px 12px",
-              marginBottom: 12,
-            }}
-          >
-            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
-              결원 자리 ({vacList.length})
-            </div>
-            {vacList.map((v) => (
-              <div
-                key={v.slot}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}
-              >
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 800,
-                    color: "#B45309",
-                    background: "#FEF9C3",
-                    borderRadius: 7,
-                    padding: "4px 8px",
-                  }}
-                >
-                  {v.slot}
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    padding: "2px 7px",
-                    borderRadius: 6,
-                    background: v.region === "도봉" ? "#FCE7F3" : "#F1F5F4",
-                    color: v.region === "도봉" ? "#BE185D" : "#4B5563",
-                  }}
-                >
-                  {v.region}
-                </span>
-                <span style={{ fontSize: 12.5, color: "#6B7280", fontWeight: 700 }}>비어 있음</span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    padding: "1px 6px",
-                    borderRadius: 5,
-                    background: "#F3F4F6",
-                    color: "#9CA3AF",
-                    marginLeft: "auto",
-                  }}
-                >
-                  {v.name}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
         {list.length === 0 ? (
           <div style={{ textAlign: "center", padding: "20px 0", color: "#C4C7CC", fontSize: 12.5 }}>
             {sec} 대기가 없습니다.
@@ -20463,6 +20542,7 @@ function OperatorRank() {
   const [excSaving, setExcSaving] = useState("");
   const [excMemo, setExcMemo] = useState<Record<string, string>>({});
   const [rankReload, setRankReload] = useState(0);
+  const [boardQ, setBoardQ] = useState(""); // 순서판 이름 검색 (주간·야간 공용) — 순위 번호는 전체 기준 유지
   const [outOpen, setOutOpen] = useState(false);
   const [nightOpen, setNightOpen] = useState(false);
   // ── 신규·전입 평균 부여 (2026-08-05) ──
@@ -20627,18 +20707,19 @@ function OperatorRank() {
     const d: Record<string, number> = {};
     const n: Record<string, number> = {};
     const took = new Set<string>();
+    const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
     base.forEach((r: any) => {
       if (took.has(r.name)) return;
       took.add(r.name);
+      baseOf.set(String(r.name), String(r.base_date));
       d[r.name] = Number(r.day_cnt) || 0;
       n[r.name] = Number(r.night_cnt) || 0;
     });
-    const maxBase = base.length ? String(base[0].base_date) : "1970-01-01";
+    //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
     const { data: adds } = await supabase
       .from("work_adjust")
-      .select("employee_number, work_shift")
-      .eq("adjust_type", adjType)
-      .gt("work_date", maxBase);
+      .select("employee_number, work_shift, work_date")
+      .eq("adjust_type", adjType);
     const nameOf = new Map<string, string>();
     mems.forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
     const memberNames = new Set(mems.map((m: any) => String(m.name)));
@@ -20647,6 +20728,8 @@ function OperatorRank() {
     (adds || []).forEach((r: any) => {
       const nm = nameOf.get(String(r.employee_number));
       if (!nm) return;
+      const myBase = baseOf.get(String(nm)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+      if (!(String(r.work_date) > myBase)) return;
       if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
       else d[nm] = (d[nm] || 0) + 1;
     });
@@ -20740,18 +20823,19 @@ function OperatorRank() {
       const d: Record<string, number> = {};
       const n: Record<string, number> = {};
       const took = new Set<string>();
+      const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
       (base || []).forEach((r: any) => {
         if (took.has(r.name)) return;
         took.add(r.name);
+        baseOf.set(String(r.name), String(r.base_date));
         d[r.name] = Number(r.day_cnt) || 0;
         n[r.name] = Number(r.night_cnt) || 0;
       });
-      const maxBase = base && base.length ? String(base[0].base_date) : "1970-01-01";
+      //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
       const { data: adds } = await supabase
         .from("work_adjust")
-        .select("employee_number, work_shift")
-        .eq("adjust_type", "holiday_fill")
-        .gt("work_date", maxBase);
+        .select("employee_number, work_shift, work_date")
+        .eq("adjust_type", "holiday_fill");
       const { data: mems } = await supabase
         .from("members")
         .select("employee_number, name, fill_excluded, fill_excluded_reason, night_fill_excluded");
@@ -20764,6 +20848,8 @@ function OperatorRank() {
       (adds || []).forEach((r: any) => {
         const nm = nameOf.get(String(r.employee_number));
         if (!nm) return;
+        const myBase = baseOf.get(String(nm)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+        if (!(String(r.work_date) > myBase)) return;
         if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
         else d[nm] = (d[nm] || 0) + 1;
       });
@@ -21353,7 +21439,11 @@ function OperatorRank() {
     .filter((nm) => !nightExc[nm])
     .map((nm) => ({ name: nm, pts: rankNight[nm] || 0, note: `합산 ${rankScoreOf(nm).toFixed(1)}점` }))
     .sort((a: any, b: any) => (Number(a.pts) - Number(b.pts)) || (rankScoreOf(a.name) - rankScoreOf(b.name)));
-  const list = board === "주간" ? dayBoard : nightBoard;
+  const fullList = board === "주간" ? dayBoard : nightBoard;
+  // 순위 번호를 먼저 매기고 → 검색으로 거른다. 걸러도 원래 순위가 그대로 보인다.
+  const list = fullList
+    .map((m: any, i: number) => ({ ...m, rank: i + 1 }))
+    .filter((m: any) => !boardQ.trim() || m.name.includes(boardQ.trim()));
   const unit = board === "주간" ? "점" : "개";
 
   return (
@@ -21397,6 +21487,17 @@ function OperatorRank() {
         ))}
       </div>
 
+      {/* 이름 검색 — 155명 중에서 한 사람 찾기. 걸러도 원래 순위 번호는 그대로 */}
+      <input
+        value={boardQ}
+        onChange={(e) => setBoardQ(e.target.value)}
+        placeholder="🔍 이름으로 찾기 (순위는 전체 기준)"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E9EDEC", borderRadius: 12, padding: "11px 13px", fontSize: 13.5, fontFamily: "inherit", marginBottom: 12, outline: "none", background: "#fff", WebkitAppearance: "none", appearance: "none" }}
+      />
+
       <div style={card}>
         <div style={ttl}>
           {board} 충당 순서
@@ -21404,15 +21505,20 @@ function OperatorRank() {
             {board === "주간" ? "점수 낮은 순" : "개수 적은 순"}
           </span>
         </div>
-        {list.map((m, i) => (
+        {list.length === 0 && (
+          <div style={{ textAlign: "center", padding: "26px 0", color: "#C4C7CC", fontSize: 12.5 }}>
+            검색 결과가 없습니다.
+          </div>
+        )}
+        {list.map((m: any, i) => (
           <div key={m.name} style={{ ...row, borderBottom: i === list.length - 1 ? 0 : row.borderBottom }}>
             <div
               style={{
                 width: 26,
                 height: 26,
                 borderRadius: 9,
-                background: i === 0 ? OP_TEAL : "#F1F5F4",
-                color: i === 0 ? "#fff" : "#4B5563",
+                background: m.rank === 1 ? OP_TEAL : "#F1F5F4",
+                color: m.rank === 1 ? "#fff" : "#4B5563",
                 display: "grid",
                 placeItems: "center",
                 fontSize: 12,
@@ -21420,7 +21526,7 @@ function OperatorRank() {
                 flex: "none",
               }}
             >
-              {i + 1}
+              {m.rank}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
@@ -37942,18 +38048,19 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       const d: Record<string, number> = {};
       const n: Record<string, number> = {};
       const took = new Set<string>();
+      const baseOf = new Map<string, string>(); // 이름 → 그 사람 기준일 (사람마다 다름)
       base.forEach((r: any) => {
         if (took.has(r.name)) return; // 같은 이름은 최신 기준일 것만
         took.add(r.name);
+        baseOf.set(String(r.name), String(r.base_date));
         d[r.name] = Number(r.day_cnt) || 0;
         n[r.name] = Number(r.night_cnt) || 0;
       });
-      const maxBase = base.length ? String(base[0].base_date) : "1970-01-01";
+      //   ★ 기준일은 사람마다 따로 본다 — 한 사람 평균부여가 전원 누적을 지우던 버그 수정 (2026-08-05)
       const { data: adds } = await supabase
         .from("work_adjust")
         .select("employee_number, work_shift, work_date")
-        .eq("adjust_type", adjType)
-        .gt("work_date", maxBase);
+        .eq("adjust_type", adjType);
       const nameOf = new Map<string, string>();
       mems.forEach((m: any) => nameOf.set(String(m.employee_number), m.name));
       // 명부에만 있고 사업소 명단에 없는 사람(전출·퇴사)은 순위에서 빼기 — 순서판과 동일
@@ -37964,6 +38071,8 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       (adds || []).forEach((r: any) => {
         const nm = nameOf.get(String(r.employee_number));
         if (!nm) return;
+        const myBase = baseOf.get(String(nm)) || "1970-01-01"; // 명부에 없으면 0에서 전부 누적
+        if (!(String(r.work_date) > myBase)) return;
         if (String(r.employee_number) === String(user.employee_number)) myAppCount += 1;
         if (r.work_shift === "야간") n[nm] = (n[nm] || 0) + 1;
         else d[nm] = (d[nm] || 0) + 1;
@@ -37998,7 +38107,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
         score: scoreOf(my),
         rank: idx >= 0 ? idx + 1 : null,
         total: sorted.length,
-        baseDate: base.length ? maxBase : "",
+        baseDate: baseOf.get(my) || "",
         appCount: myAppCount,
         outWhy: outSet.has(my) ? "제외" : "",
       });
