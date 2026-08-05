@@ -43986,6 +43986,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
 
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeTodayAdjust, setHomeTodayAdjust] = useState<any>(null);
+  const [payNoteOpen, setPayNoteOpen] = useState(false); // 급여 카드 "○월 근무분" ⓘ 설명 펼침
   const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   const [payCompare, setPayCompare] = useState<any>(null);
@@ -46047,7 +46048,27 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 다음 달부터 전월 대비 표시
               </div>
             )}
-            
+            {/* 어느 달 근무분인지 명시 — 급여는 전달 근무분을 다음 달에 받음 (2026-08-05) */}
+            <div
+              onClick={(e: any) => { e.stopPropagation(); setPayNoteOpen((v: boolean) => !v); }}
+              style={{ fontSize: 9, color: "#9CA3AF", marginTop: 6, fontWeight: 600, cursor: "pointer" }}
+            >
+              {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분 {payNoteOpen ? "▲" : "ⓘ"}
+            </div>
+            {payNoteOpen && (
+              <div
+                onClick={(e: any) => e.stopPropagation()}
+                style={{ marginTop: 6, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px", fontSize: 9.5, color: "#6B7280", lineHeight: 1.7, fontWeight: 500 }}
+              >
+                급여는 전달 근무분을 다음 달에 받습니다.
+                <br />
+                {getPayContext(new Date(), homeHolidays).payMonth + 1}월 급여 = {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분.
+                <br />
+                이번 달 충당·지원근무는 다음 달 급여에 반영됩니다.
+                <br />
+                근무 당일 22시까지는 내용이 바뀔 수 있어요.
+              </div>
+            )}
           </div>
        {(() => {
             let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays, new Date(), homeSalaryData?.swapData || [], homeSalaryData?.allMembers || [], homeSalaryData?.startHistory || []) : null;
@@ -46209,8 +46230,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     +{adjustPayEst.toLocaleString("ko-KR")}원
                   </div>
                 )}
-                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3 }}>
-                  이번 달 기록{adjustPayEst > 0 ? " · 수당 환산" : ""}
+                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3, lineHeight: 1.5 }}>
+                  {new Date().getMonth() + 1}월 기록{adjustPayEst > 0 ? " · 수당 환산" : ""}
+                  <br />
+                  <span style={{ color: "#4F46E5", fontWeight: 700 }}>
+                    {(new Date().getMonth() + 1) % 12 + 1}월 급여
+                  </span>
+                  에 반영
                 </div>
                 <div
                   style={{
