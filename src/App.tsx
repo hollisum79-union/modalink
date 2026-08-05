@@ -15190,7 +15190,6 @@ function OperatorHome({ opName }: { opName: string }) {
   }, []);
   const [opLoaded, setOpLoaded] = useState(false);
   // 결원 펼침 (뱃지 눌렀을 때 어느 시간대의 결원 목록을 보여줄지)
-  const [openVacant, setOpenVacant] = useState<string | null>(null);
   // 유고 입력 화면 상태
   const [showAbsence, setShowAbsence] = useState(false);
   const [offOpen, setOffOpen] = useState(false); // 오늘 휴가·유고 카드 접이식 (훅은 조건부 return 위에 있어야 함)
@@ -15453,25 +15452,6 @@ function OperatorHome({ opName }: { opName: string }) {
   // 대기 근무자(standby)는 휴가·유고 데이터 로드 뒤에서 계산 (usable 판정에 필요) → 아래 const standby
 
 
-  // ── 결원 대기 (뱃지 총인원·펼침용): 이름에 "결원" 들어간 사람이 걸린 대기 자리 ──
-  const standbyVacant = React.useMemo(() => {
-    if (opMembers.length === 0 || opRotation.length === 0) return [] as any[];
-    const list = opMembers
-      .map((m) => {
-        if (!String(m.name).includes("결원")) return null;
-        const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
-        if (!w || !isStandbyDia(w.dia)) return null;
-        if (String(w.dia).includes("~") || w.type === "비번") return null;
-        return { slot: String(w.dia), name: m.name, region: m.work_group };
-      })
-      .filter(Boolean) as any[];
-    list.sort(
-      (a, b) =>
-        Number(String(b.slot).replace(/[^0-9]/g, "")) - Number(String(a.slot).replace(/[^0-9]/g, ""))
-    );
-    return list;
-  }, [opMembers, opRotation, opStartHist, opSwaps, dayOffset]);
-
   // 대상 날짜 문자열 (로컬)
   const targetStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
 
@@ -15671,12 +15651,13 @@ function OperatorHome({ opName }: { opName: string }) {
     opAbsences.forEach((ab) => offByEmp.set(String(ab.employee_number), ab.reason || "유고"));
     const list = opMembers
       .map((m) => {
-        // 결원은 사람이 아님 → 대기에서 제외
-        if (String(m.name).includes("결원")) return null;
         const w = calcKyobunWork(m, target, opRotation, opSwaps, opMembers, opStartHist);
         if (!w || !isStandbyDia(w.dia)) return null;
         // 야간 비번(대기66~ 처럼 "~" 붙음 · 근무형태 비번)은 충당 대상 아님 → 제외
         if (String(w.dia).includes("~") || w.type === "비번") return null;
+        // 결원(사람 없는 자리)도 목록에 회색으로 남긴다 — 접이식이라 안 보이던 문제 해결 (2026-08-05)
+        if (String(m.name).includes("결원"))
+          return { slot: String(w.dia), name: m.name, emp: "", usable: false, note: "결원 · 사람 없음", region: m.work_group };
         const off = offByEmp.get(String(m.employee_number)) || (isBibeon(m) ? "충당비번" : "");
         return { slot: String(w.dia), name: m.name, emp: String(m.employee_number), usable: !off, note: off, region: m.work_group };
       })
@@ -17587,16 +17568,13 @@ function OperatorHome({ opName }: { opName: string }) {
           Number(String(p.slot).replace(/[^0-9]/g, ""))
       );
     const avail = list.filter((x) => x.usable && !usedNames.includes(x.name)).length;
-    const vacList = standbyVacant.filter((x) => shiftOf(x.slot) === sec);
-    const total = list.length + vacList.length;
-    const open = openVacant === sec;
+    const total = list.length; // 결원 자리도 list에 포함됨 (대기 정원의 일부)
     let ord = 0;
     return (
       <div style={card} key={sec}>
         <div style={ttl}>
           {sec} 대기{" "}
           <span
-            onClick={() => vacList.length > 0 && setOpenVacant(open ? null : sec)}
             style={{
               fontSize: 11,
               fontWeight: 700,
@@ -17604,79 +17582,12 @@ function OperatorHome({ opName }: { opName: string }) {
               color: avail > 0 ? OP_TEAL_DARK : "#991B1B",
               padding: "3px 9px",
               borderRadius: 20,
-              cursor: vacList.length > 0 ? "pointer" : "default",
               userSelect: "none",
             }}
           >
             가능 {avail}명 · 총 {total}명
-            {vacList.length > 0 && (
-              <span style={{ color: "#9CA3AF", fontWeight: 700 }}> (결원 {vacList.length})</span>
-            )}
-            {vacList.length > 0 && (
-              <span style={{ fontSize: 9, color: "#9CA3AF", marginLeft: 3 }}>{open ? "▲" : "▼"}</span>
-            )}
           </span>
         </div>
-        {open && vacList.length > 0 && (
-          <div
-            style={{
-              background: "#F9FAFB",
-              border: "1px solid #EEF0F2",
-              borderRadius: 12,
-              padding: "10px 12px",
-              marginBottom: 12,
-            }}
-          >
-            <div style={{ fontSize: 11.5, fontWeight: 800, color: "#6B7280", marginBottom: 8 }}>
-              결원 자리 ({vacList.length})
-            </div>
-            {vacList.map((v) => (
-              <div
-                key={v.slot}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}
-              >
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 800,
-                    color: "#B45309",
-                    background: "#FEF9C3",
-                    borderRadius: 7,
-                    padding: "4px 8px",
-                  }}
-                >
-                  {v.slot}
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    padding: "2px 7px",
-                    borderRadius: 6,
-                    background: v.region === "도봉" ? "#FCE7F3" : "#F1F5F4",
-                    color: v.region === "도봉" ? "#BE185D" : "#4B5563",
-                  }}
-                >
-                  {v.region}
-                </span>
-                <span style={{ fontSize: 12.5, color: "#6B7280", fontWeight: 700 }}>비어 있음</span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    padding: "1px 6px",
-                    borderRadius: 5,
-                    background: "#F3F4F6",
-                    color: "#9CA3AF",
-                    marginLeft: "auto",
-                  }}
-                >
-                  {v.name}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
         {list.length === 0 ? (
           <div style={{ textAlign: "center", padding: "20px 0", color: "#C4C7CC", fontSize: 12.5 }}>
             {sec} 대기가 없습니다.
