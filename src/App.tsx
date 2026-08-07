@@ -37382,7 +37382,7 @@ function DistanceScreen({ onBack, user }) {
         .from("work_adjust")
         .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
         .eq("employee_number", user.employee_number)
-        .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+        .in("adjust_type", ["standby", "designated", "support", "holiday_fill", "kyobun_fill"])
         .gt("work_date", bd);
       const { data: lvData } = await supabase
         .from("leave_history")
@@ -44132,7 +44132,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
             .from("work_adjust")
             .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
             .eq("employee_number", user.employee_number)
-            .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+            .in("adjust_type", ["standby", "designated", "support", "holiday_fill", "kyobun_fill"])
             .gt("work_date", bd),
           supabase
             .from("leave_history")
