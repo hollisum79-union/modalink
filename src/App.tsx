@@ -779,7 +779,11 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
   const totalDeduction = nationalPension + healthInsurance + longTermCare + employmentInsurance + incomeTax + localTax + unionFee;
 
-  return { netPay: totalGross - totalDeduction, totalGross, totalDeduction, tongsangWage };
+  return {
+    netPay: totalGross - totalDeduction, totalGross, totalDeduction, tongsangWage,
+    // 홈 급여 팝업용 구성 요소 (계산은 그대로, 보여주기만 · 2026-08-07)
+    basicSalary: basicSalary ?? 0, totalAllowance, nightPay, holidayFillPay, supportPay,
+  };
 }
 // 근무조정 기록 → 수당 환산 (computeNetPay의 휴무충당/지원/야간취급 산식과 동일하게 유지할 것)
 function estimateAdjustPay(records: any[], hourlyWage: number, diaTable: any[], holidays: string[]) {
@@ -44170,7 +44174,11 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
 
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeTodayAdjust, setHomeTodayAdjust] = useState<any>(null);
-  const [payNoteOpen, setPayNoteOpen] = useState(false); // 급여 카드 "○월 근무분" ⓘ 설명 펼침
+  const [payNoteOpen, setPayNoteOpen] = useState(false); // 급여 카드 팝업
+  const [adjNoteOpen, setAdjNoteOpen] = useState(false); // 근무조정 카드 팝업
+  const [homePayDetail, setHomePayDetail] = useState<any>(null); // 팝업용 급여 구성 (computeNetPay 결과 그대로)
+  const [homeAdjRecs, setHomeAdjRecs] = useState<any[]>([]); // 팝업용 이번 달 조정 기록
+  const [homeAdjHw, setHomeAdjHw] = useState(0); // 건별 금액 환산용 시급
   const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   const [payCompare, setPayCompare] = useState<any>(null);
@@ -44202,6 +44210,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       leaveDates: d.leaveDates || [],
     });
     if (!result) return;
+    setHomePayDetail(result); // 팝업용 구성 저장
     (async () => {
       const n2 = new Date();
       const mm2 = String(n2.getMonth() + 1).padStart(2, "0");
@@ -44225,7 +44234,9 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         .lte("used_date", ld);
       const curLvSet = new Set((curLv || []).map((r: any) => String(r.used_date)));
       const curAdjNoLeave = (curAdj || []).filter((r: any) => r.adjust_type === "holiday_fill" || !curLvSet.has(String(r.work_date)));
+      setHomeAdjRecs(curAdjNoLeave); // 팝업용 기록 저장
       const hw = result.tongsangWage > 0 ? result.tongsangWage / 209 : 0;
+      setHomeAdjHw(hw); // 팝업 건별 환산용
       setAdjustPayEst(estimateAdjustPay(curAdjNoLeave, hw, homeDia, homeHolidays));
     })();
     const now = new Date();
@@ -46232,27 +46243,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 다음 달부터 전월 대비 표시
               </div>
             )}
-            {/* 어느 달 근무분인지 명시 — 급여는 전달 근무분을 다음 달에 받음 (2026-08-05) */}
+            {/* 어느 달 근무분인지 명시 — 누르면 가운데 팝업 (2026-08-07) */}
             <div
-              onClick={(e: any) => { e.stopPropagation(); setPayNoteOpen((v: boolean) => !v); }}
+              onClick={(e: any) => { e.stopPropagation(); setPayNoteOpen(true); }}
               style={{ fontSize: 9, color: "#9CA3AF", marginTop: 6, fontWeight: 600, cursor: "pointer" }}
             >
-              {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분 {payNoteOpen ? "▲" : "ⓘ"}
+              {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분 ⓘ
             </div>
-            {payNoteOpen && (
-              <div
-                onClick={(e: any) => e.stopPropagation()}
-                style={{ marginTop: 6, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px", fontSize: 9.5, color: "#6B7280", lineHeight: 1.7, fontWeight: 500 }}
-              >
-                급여는 전달 근무분을 다음 달에 받습니다.
-                <br />
-                {getPayContext(new Date(), homeHolidays).payMonth + 1}월 급여 = {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분.
-                <br />
-                이번 달 충당·지원근무는 다음 달 급여에 반영됩니다.
-                <br />
-                근무 다음날 오전 9시까지는 내용이 바뀔 수 있어요.
-              </div>
-            )}
           </div>
        {(() => {
             let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays, new Date(), homeSalaryData?.swapData || [], homeSalaryData?.allMembers || [], homeSalaryData?.startHistory || []) : null;
@@ -46414,11 +46411,15 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     +{adjustPayEst.toLocaleString("ko-KR")}원
                   </div>
                 )}
-                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3 }}>
+                <div
+                  onClick={(e: any) => { e.stopPropagation(); setAdjNoteOpen(true); }}
+                  style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3, cursor: "pointer" }}
+                >
                   {new Date().getMonth() + 1}월 기록 →{" "}
                   <span style={{ color: "#4F46E5", fontWeight: 700 }}>
                     {(new Date().getMonth() + 1) % 12 + 1}월 급여
-                  </span>
+                  </span>{" "}
+                  ⓘ
                 </div>
                 <div
                   style={{
@@ -46436,7 +46437,103 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             )}
           </div>
         </div>
-                {/* 무사고 주행키로 카드 */}
+                {/* ── 예상 급여 팝업 (가운데 · B수준 구성 요약 · 2026-08-07) ── */}
+        {payNoteOpen && (() => {
+          const pc = getPayContext(new Date(), homeHolidays);
+          const r0 = homePayDetail;
+          const won = (n: any) => (Number(n) || 0).toLocaleString("ko-KR");
+          const allowSum = (Number(r0?.totalAllowance) || 0);
+          const extraSum = (Number(r0?.nightPay) || 0) + (Number(r0?.holidayFillPay) || 0) + (Number(r0?.supportPay) || 0);
+          const Row = ({ l, v, strong, color }: any) => (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #F3F4F6" }}>
+              <span style={{ fontSize: 12.5, color: "#6B7280", fontWeight: strong ? 800 : 600 }}>{l}</span>
+              <span style={{ fontSize: strong ? 16 : 13.5, fontWeight: 800, color: color || "#111827", fontVariantNumeric: "tabular-nums" }}>{v}</span>
+            </div>
+          );
+          return (
+            <>
+              <div onClick={() => setPayNoteOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 999 }} />
+              <div style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 1000, width: "min(88vw, 340px)", background: "#fff", borderRadius: 18, padding: "18px 18px 14px", boxShadow: "0 12px 40px rgba(0,0,0,0.22)" }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", textAlign: "center" }}>
+                  {pc.payMonth + 1}월 예상 급여
+                </div>
+                <div style={{ fontSize: 10.5, color: "#9CA3AF", textAlign: "center", margin: "3px 0 10px" }}>
+                  {pc.perfMonth + 1}월 근무분 · 실제 지급액은 회사 명세서 기준
+                </div>
+                {r0 ? (
+                  <>
+                    <Row l="기본급" v={won(r0.basicSalary) + "원"} />
+                    <Row l="수당 (승무·보전 등)" v={won(allowSum) + "원"} />
+                    <Row l="야간·충당·지원수당" v={won(extraSum) + "원"} />
+                    <Row l="세전 합계" v={won(r0.totalGross) + "원"} strong />
+                    <Row l="공제 합계" v={"−" + won(r0.totalDeduction) + "원"} color="#DC2626" />
+                    <Row l="예상 실수령" v={won(r0.netPay) + "원"} strong color="#4F46E5" />
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "14px 0" }}>계산 준비 중이에요. 잠시 후 다시 열어주세요.</div>
+                )}
+                <div style={{ fontSize: 10, color: "#9CA3AF", lineHeight: 1.7, margin: "10px 2px 0" }}>
+                  급여는 전달 근무분을 다음 달에 받아요. 이번 달 충당·지원근무는 {(new Date().getMonth() + 1) % 12 + 1}월 급여에 반영돼요.
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button onClick={() => setPayNoteOpen(false)} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: "none", background: "#F3F4F6", color: "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+                  <button onClick={() => { setPayNoteOpen(false); setScreen("salary"); }} style={{ flex: 1.4, padding: "11px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>급여 화면에서 자세히</button>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+        {/* ── 근무조정 팝업 (가운데 · 이번 달 건별 목록 · 2026-08-07) ── */}
+        {adjNoteOpen && (() => {
+          const won = (n: any) => (Number(n) || 0).toLocaleString("ko-KR");
+          const LB: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무", kyobun_fill: "교번충당" };
+          const rows = (homeAdjRecs || []).slice().sort((a: any, b: any) => String(a.work_date).localeCompare(String(b.work_date)));
+          return (
+            <>
+              <div onClick={() => setAdjNoteOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 999 }} />
+              <div style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 1000, width: "min(88vw, 340px)", maxHeight: "72vh", overflowY: "auto", background: "#fff", borderRadius: 18, padding: "18px 18px 14px", boxShadow: "0 12px 40px rgba(0,0,0,0.22)" }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", textAlign: "center" }}>
+                  {new Date().getMonth() + 1}월 근무조정 기록
+                </div>
+                <div style={{ fontSize: 10.5, color: "#9CA3AF", textAlign: "center", margin: "3px 0 10px" }}>
+                  {(new Date().getMonth() + 1) % 12 + 1}월 급여에 반영 · 근무 다음날 오전 9시까지 변경될 수 있어요
+                </div>
+                {rows.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "14px 0" }}>이번 달 기록이 아직 없어요.</div>
+                ) : (
+                  rows.map((r: any) => {
+                    const amt = homeAdjHw > 0 ? estimateAdjustPay([r], homeAdjHw, homeDia, homeHolidays) : 0;
+                    const dm = (r.memo || "").match(/다이아\s*(\d+)/);
+                    return (
+                      <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
+                            {String(r.work_date).slice(5).replace("-", "/")} {LB[r.adjust_type] || r.adjust_type}
+                            <span style={{ fontSize: 10, color: r.work_shift === "야간" ? "#7C3AED" : "#3B82F6", marginLeft: 4, fontWeight: 700 }}>{r.work_shift || ""}</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>
+                            {r.is_temp_dia ? "임시 다이아" : dm ? `다이아 ${dm[1]}` : (r.memo || "")}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: amt > 0 ? "#16A34A" : "#9CA3AF", fontVariantNumeric: "tabular-nums" }}>
+                          {amt > 0 ? "+" + won(amt) + "원" : "—"}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {rows.length > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0 2px" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: "#6B7280" }}>수당 환산 합계</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#16A34A", fontVariantNumeric: "tabular-nums" }}>+{won(adjustPayEst)}원</span>
+                  </div>
+                )}
+                <button onClick={() => setAdjNoteOpen(false)} style={{ width: "100%", marginTop: 12, padding: "11px 0", borderRadius: 10, border: "none", background: "#F3F4F6", color: "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+              </div>
+            </>
+          );
+        })()}
+        {/* 무사고 주행키로 카드 */}
         <div
           onClick={() => setScreen("distance")}
           style={{
