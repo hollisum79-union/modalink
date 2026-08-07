@@ -16017,7 +16017,8 @@ function OperatorHome({ opName }: { opName: string }) {
     { label: "1차 확정", ...stampInfo(lastStamp(targetStr, "1차")) },
     { label: "2차 확정", ...stampInfo(lastStamp(targetStr, "2차")) },
   ];
-  // ── 22시 잠금: 근무 당일 22시부터 이 날짜는 수정 불가 (야간 급휴가 대응 시간까지 열어둠) ──
+  // ── 잠금: 근무 다음날 09시부터 이 날짜는 수정 불가 (2026-08-05 변경 · 이전엔 당일 22시) ──
+  //   야간 근무가 자정을 넘겨 끝나므로, 근무가 끝난 뒤 아침에 정리할 시간을 준다.
   //   단, 도입 초기에는 운용 협조가 안 돼 지회장이 지난 날짜를 수기로 몰아 입력하는 상황이라
   //   op_settings.lock_disabled = "true" 인 동안은 잠그지 않는다 (2026-08-05 · 정착되면 끄기)
   const [lockDisabled, setLockDisabled] = useState(false);
@@ -16030,7 +16031,8 @@ function OperatorHome({ opName }: { opName: string }) {
       .then(({ data }) => setLockDisabled(String(data?.value || "") === "true"));
   }, []);
   const lockTime = new Date(target);
-  lockTime.setHours(22, 0, 0, 0);
+  lockTime.setDate(lockTime.getDate() + 1); // 근무 다음날
+  lockTime.setHours(9, 0, 0, 0);
   const isLocked = !lockDisabled && Date.now() >= lockTime.getTime();
 
   const usedNames = Object.values(assigned).map((a) => a.name);
@@ -16789,7 +16791,7 @@ function OperatorHome({ opName }: { opName: string }) {
       );
 
     const pick = async (name: string, via: string, emp?: string) => {
-      if (isLocked) return showToast("🔒 22시 잠금 — 이 날짜는 더 이상 수정할 수 없어요", "error");
+      if (isLocked) return showToast("🔒 잠김 — 근무 다음날 09시가 지나 수정할 수 없어요", "error");
       const { error } = await supabase.from("operator_assign").insert({
         work_date: targetStr,
         dia_no: String(fillDia),
@@ -17307,7 +17309,7 @@ function OperatorHome({ opName }: { opName: string }) {
       }}
     >
       {opLoaded
-        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 배정·확정 도장은 실제로 저장되며, 근무 당일 22시에 잠깁니다."
+        ? "대기 근무자·빈 자리(결원)는 실제 근무표·휴가에서 자동으로 불러왔습니다. 배정·확정 도장은 실제로 저장되며, 근무 다음날 오전 9시에 잠깁니다."
         : "실제 근무 데이터를 불러오는 중…"}
     </div>
   );
@@ -17402,7 +17404,7 @@ function OperatorHome({ opName }: { opName: string }) {
             {a ? (
               <button
                 onClick={async () => {
-                  if (isLocked) return showToast("🔒 22시 잠금 — 이 날짜는 더 이상 수정할 수 없어요", "error");
+                  if (isLocked) return showToast("🔒 잠김 — 근무 다음날 09시가 지나 수정할 수 없어요", "error");
                   const cur = assigned[e.dia];
                   const { error } = await supabase.from("operator_assign").insert({
                     work_date: targetStr,
@@ -17767,7 +17769,7 @@ function OperatorHome({ opName }: { opName: string }) {
           padding: "10px 12px",
         }}
       >
-        확정해도 잠기지 않습니다. 근무 당일 22시까지 고칠 수 있고, 고치면 전부 기록에 남습니다. 22시부터는 잠깁니다.
+        확정해도 잠기지 않습니다. 근무 다음날 오전 9시까지 고칠 수 있고, 고치면 전부 기록에 남습니다. 그 뒤에는 잠깁니다.
       </div>
     </div>
   );
@@ -17802,7 +17804,7 @@ function OperatorHome({ opName }: { opName: string }) {
         cursor: confirmOff ? "default" : "pointer",
       }}
     >
-      {isLocked ? "🔒 22시 잠금 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : lockDisabled ? `${nextStage} 확정 (잠금 해제 중)` : `${nextStage} 확정`}
+      {isLocked ? "🔒 잠김 — 수정 불가" : !nextStage ? "✓ 2차 확정 완료" : lockDisabled ? `${nextStage} 확정 (잠금 해제 중)` : `${nextStage} 확정`}
     </button>
   );
 
@@ -31032,6 +31034,13 @@ const getKyobunWork = (member: any, date: Date) => {
       );
 
     const weeks = buildCalendarGrid(currentYear, currentMonth);
+    // ── 화면 자동 맞춤: 어떤 폰이든 그 달의 줄 수(5·6줄)가 스크롤 없이 한 화면에 (2026-08-07) ──
+    //   칸 높이 = (화면 높이 − 위쪽 요소 − 하단 메뉴) ÷ 줄 수. 글자는 배율(calScale)로 따라 조절.
+    const rowCnt = weeks.length || 5;
+    const vpH = typeof window !== "undefined" ? window.innerHeight : 800;
+    const rowH = Math.max(52, Math.floor((vpH - 158) / rowCnt) - 26);
+    const calScale = Math.max(0.68, Math.min(1, rowH / 92));
+    const cf = (n: number) => Math.round(n * calScale * 10) / 10; // 글자·여백 배율 적용
     let cntDay = 0, cntNight = 0, cntRest = 0;
     for (let d = 1; d <= new Date(currentYear, currentMonth, 0).getDate(); d++) {
       const w = getKyobunWork(selectedMember, new Date(currentYear, currentMonth - 1, d));
@@ -31042,7 +31051,16 @@ const getKyobunWork = (member: any, date: Date) => {
       }
     }
         return (
-            <div style={{ height: "100%", display: "flex", flexDirection: "column" }} onTouchStart={handleKyobunTouchStart} onTouchEnd={handleKyobunTouchEnd}>
+            <div
+              ref={(el: any) => {
+                if (!el || typeof window === "undefined") return;
+                const t = el.getBoundingClientRect().top;
+                el.style.height = Math.max(320, window.innerHeight - t - 84) + "px";
+              }}
+              style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+              onTouchStart={handleKyobunTouchStart}
+              onTouchEnd={handleKyobunTouchEnd}
+            >
         <div
           style={{
             padding: "8px 16px",
@@ -31115,6 +31133,8 @@ const getKyobunWork = (member: any, date: Date) => {
             key={wi}
             style={{
               flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
               display: "grid",
               gridTemplateColumns: "repeat(7,minmax(0,1fr))",
               borderBottom: "1px solid #F3F4F6",
@@ -31157,10 +31177,11 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                     }
                   }}
                   style={{
-                                        padding: "6px 4px",
+                    padding: `${cf(5)}px 3px`,
                     background: isT ? "#FEF9C3" : "#fff",
                     borderRight: "1px solid #F3F4F6",
                     borderTop: "2px solid transparent",
+                    overflow: "hidden",
                   }}
                 >
                                    {(() => {
@@ -31173,10 +31194,10 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                       <>
                         <div
                           style={{
-                            fontSize: 15.5,
+                            fontSize: cf(15.5),
                             fontWeight: 800,
                             textAlign: "center",
-                            marginBottom: 2,
+                            marginBottom: cf(2),
                             letterSpacing: "-0.3px",
                             fontVariantNumeric: "tabular-nums",
                             color: isT ? "#92400E" : dayColor,
@@ -31185,33 +31206,33 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                           {day}
                         </div>
                        {work && (work as any).swapped && (
-                          <div style={{ textAlign: "center", fontSize: 10, color: "#4F46E5", fontWeight: 700, marginBottom: 2 }}>
+                          <div style={{ textAlign: "center", fontSize: cf(10), color: "#4F46E5", fontWeight: 700, marginBottom: cf(2) }}>
                             🔄 교체
                           </div>
                         )}
                         {work && (isRest ? (
-                          <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#9CA3AF", marginTop: 6 }}>
+                          <div style={{ textAlign: "center", fontSize: cf(17), fontWeight: 800, color: "#9CA3AF", marginTop: cf(5) }}>
                             휴
                           </div>
                         ) : isOff ? (
-                          <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#D1D5DB", marginTop: 6 }}>
+                          <div style={{ textAlign: "center", fontSize: cf(17), fontWeight: 800, color: "#D1D5DB", marginTop: cf(5) }}>
                             ~
                           </div>
                         ) : (
                           <>
-                            <div style={{ textAlign: "center", fontSize: 19, fontWeight: 800, color: "#111827", lineHeight: 1.05, marginBottom: 4, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>
+                            <div style={{ textAlign: "center", fontSize: cf(19), fontWeight: 800, color: "#111827", lineHeight: 1.05, marginBottom: cf(3), letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>
                               {work.dia}
                             </div>
                             {diaInfo && diaInfo.start_time && (
                               <div
                                 style={{
                                   textAlign: "center",
-                                  fontSize: 11.5,
+                                  fontSize: cf(11.5),
                                   fontWeight: 700,
                                   color: dayColor,
                                   background: isHoli ? "#FEE2E2" : "#F3F4F6",
                                   borderRadius: 7,
-                                  padding: "2px 6px",
+                                  padding: `${cf(2)}px ${cf(5)}px`,
                                   margin: "0 auto",
                                   display: "inline-block",
                                   letterSpacing: "-0.5px",
@@ -43898,29 +43919,37 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       const bd = me.base_distance_date || "";
       let sum = 0;
       if (bd) {
-        const { data: adj } = await supabase
-          .from("work_adjust")
-          .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
-          .eq("employee_number", user.employee_number)
-          .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
-          .gt("work_date", bd);
-       const { data: lvData } = await supabase
-          .from("leave_history")
-          .select("used_date")
-          .eq("employee_number", user.employee_number)
-          .neq("status", "취소")
-          .gt("used_date", bd);
-       const { data: swapData } = await supabase
-          .from("kyobun_swap")
-          .select("*")
-          .eq("status", "수락")
-          .or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`);
-        const { data: allMembers } = await supabase
-          .from("members")
-          .select("employee_number, work_group, start_position, schedule_total");
-        const { data: shData } = await supabase
-          .from("kyobun_start_history")
-          .select("member_id, effective_date, start_position");
+        // 다섯은 서로 무관 → 동시에 요청 (순차 5회 왕복 → 1회 · 로그인 체감속도 2026-08-05)
+        const [adjRes, lvRes2, swapRes2, memRes2, shRes2] = await Promise.all([
+          supabase
+            .from("work_adjust")
+            .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
+            .eq("employee_number", user.employee_number)
+            .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+            .gt("work_date", bd),
+          supabase
+            .from("leave_history")
+            .select("used_date")
+            .eq("employee_number", user.employee_number)
+            .neq("status", "취소")
+            .gt("used_date", bd),
+          supabase
+            .from("kyobun_swap")
+            .select("*")
+            .eq("status", "수락")
+            .or(`a_employee_number.eq.${user.employee_number},b_employee_number.eq.${user.employee_number}`),
+          supabase
+            .from("members")
+            .select("employee_number, work_group, start_position, schedule_total"),
+          supabase
+            .from("kyobun_start_history")
+            .select("member_id, effective_date, start_position"),
+        ]);
+        const adj = adjRes.data;
+        const lvData = lvRes2.data;
+        const swapData = swapRes2.data;
+        const allMembers = memRes2.data;
+        const shData = shRes2.data;
         const leaveDates = new Set((lvData || []).map((r: any) => r.used_date));
         const adjustByDate: any = {};
         const tempKmByDate: any = {};
@@ -43978,6 +44007,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
 
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeTodayAdjust, setHomeTodayAdjust] = useState<any>(null);
+  const [payNoteOpen, setPayNoteOpen] = useState(false); // 급여 카드 "○월 근무분" ⓘ 설명 펼침
   const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   const [payCompare, setPayCompare] = useState<any>(null);
@@ -44068,19 +44098,22 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
     if (screen !== "home") return;
     const loadHomeWork = async () => {
       const t0 = performance.now();
-      const { data: rot } = await supabase
-        .from("schedule_rotation")
-        .select("*")
-        .in("group_name", ["대공원 114", "도봉 41"])
-        .order("position");
+      // 셋은 서로 무관 → 동시에 요청 (순차 3회 왕복 → 1회 · 로그인 체감속도 2026-08-05)
+      const _n = new Date();
+      const _td = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}-${String(_n.getDate()).padStart(2, "0")}`;
+      const [rotRes, diaRes, taRes] = await Promise.all([
+        supabase.from("schedule_rotation").select("*").in("group_name", ["대공원 114", "도봉 41"]).order("position"),
+        supabase.from("kyobun_dia").select("*"),
+        user?.employee_number
+          ? supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated", "support"]).eq("work_date", _td)
+          : Promise.resolve({ data: null }),
+      ]);
+      const rot = rotRes.data;
+      const dia = diaRes.data;
       if (rot) setHomeRotation(rot);
-
-     const { data: dia } = await supabase.from("kyobun_dia").select("*");
       if (dia) setHomeDia(dia);
       if (user?.employee_number) {
-        const _n = new Date();
-        const _td = `${_n.getFullYear()}-${String(_n.getMonth() + 1).padStart(2, "0")}-${String(_n.getDate()).padStart(2, "0")}`;
-        const { data: _ta } = await supabase.from("work_adjust").select("*").eq("employee_number", user.employee_number).in("adjust_type", ["standby", "designated", "support"]).eq("work_date", _td);
+        const _ta: any = taRes.data;
         setHomeTodayAdjust(_ta && _ta.length > 0 ? _ta[0] : null);
       }
 
@@ -46036,7 +46069,27 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 다음 달부터 전월 대비 표시
               </div>
             )}
-            
+            {/* 어느 달 근무분인지 명시 — 급여는 전달 근무분을 다음 달에 받음 (2026-08-05) */}
+            <div
+              onClick={(e: any) => { e.stopPropagation(); setPayNoteOpen((v: boolean) => !v); }}
+              style={{ fontSize: 9, color: "#9CA3AF", marginTop: 6, fontWeight: 600, cursor: "pointer" }}
+            >
+              {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분 {payNoteOpen ? "▲" : "ⓘ"}
+            </div>
+            {payNoteOpen && (
+              <div
+                onClick={(e: any) => e.stopPropagation()}
+                style={{ marginTop: 6, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px", fontSize: 9.5, color: "#6B7280", lineHeight: 1.7, fontWeight: 500 }}
+              >
+                급여는 전달 근무분을 다음 달에 받습니다.
+                <br />
+                {getPayContext(new Date(), homeHolidays).payMonth + 1}월 급여 = {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분.
+                <br />
+                이번 달 충당·지원근무는 다음 달 급여에 반영됩니다.
+                <br />
+                근무 다음날 오전 9시까지는 내용이 바뀔 수 있어요.
+              </div>
+            )}
           </div>
        {(() => {
             let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays, new Date(), homeSalaryData?.swapData || [], homeSalaryData?.allMembers || [], homeSalaryData?.startHistory || []) : null;
@@ -46199,7 +46252,10 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   </div>
                 )}
                 <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3 }}>
-                  이번 달 기록{adjustPayEst > 0 ? " · 수당 환산" : ""}
+                  {new Date().getMonth() + 1}월 기록 →{" "}
+                  <span style={{ color: "#4F46E5", fontWeight: 700 }}>
+                    {(new Date().getMonth() + 1) % 12 + 1}월 급여
+                  </span>
                 </div>
                 <div
                   style={{
