@@ -36276,6 +36276,69 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
     petition: 0,
   });
 
+  // ── 개인 추가 휴가 (personal_leave · 공사 휴가 사전에서 선택 · 2026-08-07) ──
+  //   기본 7종에 없는 휴가(보상·병가·돌봄 등)를 각자 자기 화면에 추가.
+  //   사용 기록은 기존 leave_history로 들어가 근무표·빈자리·유고 연동이 자동으로 따라옴.
+  const [personalLeaves, setPersonalLeaves] = React.useState<any[]>([]);
+  const loadPersonal = async () => {
+    if (!user?.employee_number) return;
+    const { data } = await supabase
+      .from("personal_leave")
+      .select("*")
+      .eq("employee_number", user.employee_number)
+      .eq("hidden", false)
+      .order("id");
+    setPersonalLeaves(data || []);
+  };
+  React.useEffect(() => { loadPersonal(); }, [user]);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addPick, setAddPick] = React.useState<any>(null);
+  const [addDays, setAddDays] = React.useState("");
+  // 공사 휴가 사전 — 기본 7종(연차·가연차·촉진연차·대체·학습·장기재직·청원)과 겹치는 항목은 제외
+  const LEAVE_DICT: { group: string; items: { name: string; def?: number }[] }[] = [
+    { group: "일반휴가", items: [
+      { name: "보상휴가" }, { name: "사상병가" }, { name: "공상병가" }, { name: "만근휴가" },
+    ]},
+    { group: "특수휴가", items: [
+      { name: "난임치료동행휴가" }, { name: "임신검진동행휴가" }, { name: "공가" }, { name: "유결" },
+      { name: "난임치료휴가" }, { name: "배우자유산휴가" }, { name: "가족돌봄휴가(자녀유급)" },
+      { name: "가족돌봄휴가(무급)" }, { name: "자녀입영휴가" }, { name: "재해구호휴가" },
+      { name: "특별휴가" }, { name: "심리안정휴가" }, { name: "배우자출산휴가" }, { name: "대체휴식" },
+    ]},
+    { group: "장기재직휴가 (연차별)", items: [
+      { name: "장기재직휴가(5년)", def: 5 }, { name: "장기재직휴가(10년)", def: 10 },
+      { name: "장기재직휴가(20년)", def: 20 }, { name: "장기재직휴가(30년)", def: 20 },
+    ]},
+  ];
+  const addPersonal = async () => {
+    if (!addPick || !user?.employee_number) return;
+    const num = parseFloat(addDays) || 0;
+    if (num < 0) { showToast("0 이상의 숫자를 입력해주세요."); return; }
+    const { error } = await supabase.from("personal_leave").insert({
+      employee_number: user.employee_number,
+      leave_name: addPick.name,
+      remaining: num,
+    });
+    if (error) { showToast("추가 실패: " + error.message, "error"); return; }
+    setAddOpen(false); setAddPick(null); setAddDays("");
+    showToast(`${addPick.name} 카드가 추가됐어요.`);
+    loadPersonal();
+  };
+  const savePersonalRemaining = async (row: any, value: any) => {
+    const num = parseFloat(value) || 0;
+    if (num < 0) { showToast("0 이상의 숫자를 입력해주세요."); return; }
+    const { error } = await supabase.from("personal_leave").update({ remaining: num }).eq("id", row.id);
+    if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+    setPersonalLeaves((ls: any[]) => ls.map((l: any) => (l.id === row.id ? { ...l, remaining: num } : l)));
+    setEditingId(null); setEditValue("");
+  };
+  const hidePersonal = async (row: any) => {
+    if (!window.confirm(`${row.leave_name} 카드를 숨길까요?\n사용 기록은 그대로 남습니다.`)) return;
+    const { error } = await supabase.from("personal_leave").update({ hidden: true }).eq("id", row.id);
+    if (error) { showToast("숨김 실패: " + error.message, "error"); return; }
+    loadPersonal();
+  };
+
   // 편집 모드 (지금 어떤 휴가를 편집 중인지)
   const [editingId, setEditingId] = React.useState(null);
   const [editValue, setEditValue] = React.useState("");
@@ -36322,8 +36385,14 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("취소 실패: " + error.message, "error");
       return;
     }
-    const cur = (remaining as any)[h.leave_type] || 0;
-    await saveRemaining(h.leave_type, cur + Number(h.days));
+    const pl = personalLeaves.find((l: any) => l.leave_name === h.leave_type);
+    if (pl) {
+      await supabase.from("personal_leave").update({ remaining: Number(pl.remaining) + Number(h.days) }).eq("id", pl.id);
+      loadPersonal();
+    } else {
+      const cur = (remaining as any)[h.leave_type] || 0;
+      await saveRemaining(h.leave_type, cur + Number(h.days));
+    }
     loadHistory();
   };
     // 사용내역 팝업에서 삭제 (잔여일수 복구)
@@ -36337,8 +36406,14 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("삭제 실패: " + error.message, "error");
       return;
     }
-    const cur = (remaining as any)[h.leave_type] || 0;
-    await saveRemaining(h.leave_type, cur + Number(h.days));
+    const pl2 = personalLeaves.find((l: any) => l.leave_name === h.leave_type);
+    if (pl2) {
+      await supabase.from("personal_leave").update({ remaining: Number(pl2.remaining) + Number(h.days) }).eq("id", pl2.id);
+      loadPersonal();
+    } else {
+      const cur = (remaining as any)[h.leave_type] || 0;
+      await saveRemaining(h.leave_type, cur + Number(h.days));
+    }
     loadHistory();
     setHistoryRows((rows) => rows.filter((r) => r.id !== h.id));
   };
@@ -36390,8 +36465,11 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("이력 저장 실패: " + histError.message, "error");
       return;
     }
-    // 2. 잔여일수 차감
-    if (item.id !== "petition") {
+    // 2. 잔여일수 차감 — 개인 추가 휴가는 personal_leave에서
+    if ((item as any).personal) {
+      await supabase.from("personal_leave").update({ remaining: Math.max(0, item.days - days) }).eq("id", (item as any).personal.id);
+      loadPersonal();
+    } else if (item.id !== "petition") {
       const newRemaining = item.days - days;
       await saveRemaining(item.id, newRemaining);
     }
@@ -36424,7 +36502,8 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       petition: "petition_remaining",
 
     };
-    // DB에 저장
+    // DB에 저장 (기본 7종이 아니면 members를 건드리지 않음 — 개인 휴가는 별도 저장)
+    if (!(columnMap as any)[id]) { setEditingId(null); setEditValue(""); return; }
     if (user?.employee_number) {
       const { error } = await supabase
         .from("members")
@@ -36590,7 +36669,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
             총 잔여
           </div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#4F46E5" }}>
-            {leaveItems.reduce((s, x) => s + x.days, 0)}일
+            {leaveItems.reduce((s, x) => s + x.days, 0) + personalLeaves.reduce((s: number, x: any) => s + (Number(x.remaining) || 0), 0)}일
           </div>
         </div>
         <div style={{ width: 1, background: "#eee" }} />
@@ -36599,7 +36678,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
             휴가 종류
           </div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>
-            {leaveItems.length}개
+            {leaveItems.length + personalLeaves.length}개
           </div>
         </div>
       </div>
@@ -36786,7 +36865,91 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
             )}
           </div>
         ))}
+        {/* ── 개인 추가 휴가 카드 (기본 카드와 동일 동작 + 숨김) ── */}
+        {personalLeaves.map((row: any) => {
+          const pid = "p" + row.id;
+          const item: any = { id: row.leave_name, label: row.leave_name, days: Number(row.remaining) || 0, color: "#DB2777", bg: "#FDF2F8", icon: "🗂️", personal: row };
+          return (
+            <div key={pid} style={{ background: "#fff", border: editingId === pid ? "2px solid #DB2777" : "1.5px solid #FBCFE8", borderRadius: 14, padding: "16px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", gap: 10, minHeight: 110 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{item.icon}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div onClick={() => setHistoryModal(item)} style={{ padding: "4px 7px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280", fontSize: 9, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>내역</div>
+                  <div onClick={() => hidePersonal(row)} style={{ padding: "4px 7px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", fontSize: 9, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>숨김</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1F2937", lineHeight: 1.35, wordBreak: "keep-all" }}>{row.leave_name}</div>
+              {editingId === pid ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="number" step="0.5" value={editValue} onChange={(e: any) => setEditValue(e.target.value)} style={{ width: 62, padding: "6px 8px", border: "1.5px solid #FBCFE8", borderRadius: 8, fontSize: 14, fontWeight: 700, textAlign: "center", fontFamily: "inherit" }} />
+                  <button onClick={() => savePersonalRemaining(row, editValue)} style={{ padding: "6px 10px", fontSize: 11, fontWeight: 700, background: "#DB2777", color: "#fff", border: "none", borderRadius: 7, cursor: "pointer" }}>저장</button>
+                  <button onClick={() => { setEditingId(null); setEditValue(""); }} style={{ padding: "6px 10px", fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer" }}>취소</button>
+                </div>
+              ) : (
+                <div onClick={() => { setEditingId(pid as any); setEditValue(String(item.days)); }} style={{ fontSize: 20, fontWeight: 800, color: item.color, cursor: "pointer" }}>
+                  {item.days}일 <span style={{ fontSize: 10, fontWeight: 600, color: "#D1D5DB" }}>✎</span>
+                </div>
+              )}
+              {editingId !== pid && item.days > 0 && (
+                <button onClick={() => setUseModal(item)} style={{ marginTop: 4, padding: "6px 0", fontSize: 11, fontWeight: 600, background: item.bg, color: item.color, border: "none", borderRadius: 6, cursor: "pointer" }}>휴가 사용</button>
+              )}
+            </div>
+          );
+        })}
+        {/* ── 휴가 추가 버튼 ── */}
+        <div onClick={() => { setAddOpen(true); setAddPick(null); setAddDays(""); }} style={{ gridColumn: "1 / -1", border: "2px dashed #C7D2FE", borderRadius: 14, padding: "14px 0", textAlign: "center", color: "#4F46E5", fontSize: 13.5, fontWeight: 700, background: "#F5F6FF", cursor: "pointer" }}>
+          ＋ 휴가 추가
+        </div>
       </div>
+      {/* ── 휴가 추가 시트 (공사 휴가 사전에서 선택) ── */}
+      {addOpen && (
+        <>
+          <div onClick={() => setAddOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 999 }} />
+          <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 1000, background: "#fff", borderRadius: "18px 18px 0 0", padding: "16px 14px 22px", maxHeight: "78vh", overflowY: "auto", boxShadow: "0 -4px 20px rgba(0,0,0,0.15)" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", textAlign: "center" }}>휴가 추가</div>
+            <div style={{ fontSize: 10.5, color: "#9CA3AF", textAlign: "center", margin: "4px 0 8px" }}>
+              공사 휴가 목록에서 골라요 — 이름이 통일돼 기록·계산이 정확해져요
+            </div>
+            {LEAVE_DICT.map((g) => (
+              <div key={g.group}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", margin: "10px 2px 5px" }}>{g.group}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {g.items.map((it) => {
+                    const mine = personalLeaves.some((l: any) => l.leave_name === it.name);
+                    const on = addPick && addPick.name === it.name;
+                    return (
+                      <div
+                        key={it.name}
+                        onClick={() => {
+                          if (mine) return;
+                          setAddPick(it);
+                          setAddDays(it.def != null ? String(it.def) : "");
+                        }}
+                        style={{ fontSize: 11.5, padding: "7px 11px", borderRadius: 999, fontWeight: 600, cursor: mine ? "default" : "pointer", background: mine ? "#E5E7EB" : on ? "#4F46E5" : "#F3F4F6", color: mine ? "#B0B5BD" : on ? "#fff" : "#374151", textDecoration: mine ? "line-through" : "none" }}
+                      >
+                        {it.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {addPick && (
+              <div style={{ marginTop: 12, background: "#EEF0FF", borderRadius: 12, padding: "11px 13px" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3730A3", marginBottom: 7 }}>{addPick.name} 추가</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#374151" }}>
+                  잔여일수
+                  <input type="number" step="0.5" value={addDays} onChange={(e: any) => setAddDays(e.target.value)} style={{ width: 62, padding: "6px 8px", border: "1px solid #C7D2FE", borderRadius: 8, textAlign: "center", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }} />
+                  일부터 시작
+                </div>
+              </div>
+            )}
+            <button onClick={addPersonal} disabled={!addPick} style={{ marginTop: 10, width: "100%", background: addPick ? "#4F46E5" : "#E5E7EB", color: addPick ? "#fff" : "#9CA3AF", textAlign: "center", padding: "13px 0", borderRadius: 11, fontSize: 13.5, fontWeight: 700, border: "none", cursor: addPick ? "pointer" : "default", fontFamily: "inherit" }}>
+              내 휴가에 추가
+            </button>
+          </div>
+        </>
+      )}
 {/* 휴가 사용 내역 */}
       <div style={{ marginTop: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
