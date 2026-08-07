@@ -42,6 +42,29 @@ function todayLocalStr(): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
 }
 
+// ── 목록용 시간 표시 (2026-08-07) ──
+//   오늘 → "14:32" · 어제 → "어제" · 올해 → "8/5" · 작년 이전 → "2025.12.28"
+//   시간은 오늘 글에만 정보값이 있다. 게시판·공지·문의 목록 공용.
+function fmtWhen(ts: any): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts).slice(0, 10);
+  const now = new Date();
+  const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, now)) return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const yd = new Date(now); yd.setDate(yd.getDate() - 1);
+  if (sameDay(d, yd)) return "어제";
+  if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1}/${d.getDate()}`;
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+// 상세 화면용 — 항상 전체: "2026-08-06 14:32"
+function fmtWhenFull(ts: any): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts).slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 function showToast(message: string, type: "success" | "error" = "success") {
   try {
     window.dispatchEvent(
@@ -2352,7 +2375,7 @@ const handleDeleteComment = async (c: any) => {
             <div style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>
               {post.author}
             </div>
-            <div style={{ fontSize: 11, color: "#9CA3AF" }}>{post.date}</div>
+            <div style={{ fontSize: 11, color: "#9CA3AF" }}>{fmtWhenFull(post.created_at) || post.date}</div>
           </div>
           <div
             style={{
@@ -2452,7 +2475,7 @@ const handleDeleteComment = async (c: any) => {
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>{m.author}</span>
-                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>{m.created_at?.slice(0, 10)}</span>
+                      <span style={{ fontSize: 11, color: "#9CA3AF" }}>{fmtWhen(m.created_at)}</span>
                     </div>
                     <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0 }}>
                       {m.reply_to && <span style={{ color: "#4F46E5", fontWeight: 700 }}>@{m.reply_to} </span>}
@@ -2821,7 +2844,7 @@ function BoardList({ onBack, onSelect, onWrite, user, initialFilter = "전체" }
                 </span>
                 <span style={{ fontSize: 12, color: "#D1D5DB" }}>·</span>
                 <span style={{ fontSize: 12, color: "#9CA3AF" }}>
-                  {post.created_at?.slice(0, 10)}
+                  {fmtWhen(post.created_at)}
                 </span>
                 <div
                   style={{
@@ -4974,7 +4997,7 @@ function InquiryList({ onBack, onSelect, onWrite, user }) {
               </span>
               <span style={{ fontSize: 12, color: "#D1D5DB" }}>·</span>
               <span style={{ fontSize: 12, color: "#9CA3AF" }}>
-                {inq.created_at?.slice(0, 10)}
+                {fmtWhen(inq.created_at)}
               </span>
             </div>
           </div>
@@ -45060,7 +45083,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
       tag: n.tag,
       tagColor: n.tag === "긴급" ? "#EF4444" : "#4F46E5",
       tagBg: n.tag === "긴급" ? "#FEE2E2" : "#EEF0FF",
-      date: n.created_at?.slice(0, 10),
+      date: fmtWhen(n.created_at),
     }))
     // 숨김 공지(is_active === false)는 목록 아래쪽으로 보냄
     .sort((a, b) => {
@@ -45194,7 +45217,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             </h2>
             {(selectedNotice as any)?.created_at && (
               <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
-                {(selectedNotice as any).created_at.slice(0, 10)}
+                {fmtWhenFull((selectedNotice as any).created_at)}
                 {typeof (selectedNotice as any)?.views === "number" ? ` · 조회 ${(selectedNotice as any).views}` : ""}
               </div>
             )}
