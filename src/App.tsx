@@ -761,6 +761,20 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   dutyRecords.forEach((rec: any) => {
     if (rec.adjust_type !== "kyobun_fill") return;
     if (leaveSet.has(String(rec.work_date))) return; // 휴가우선
+    if (rec.is_temp_dia) {
+      // 임시·변사업: 입력한 시각으로 정규창 밖 초과분 (끝시각 없으면 시작+근무시간)
+      const toHrT = (t: any) => { const p2 = String(t).split(":"); return (Number(p2[0]) || 0) + (Number(p2[1]) || 0) / 60; };
+      let ts = toHrT(rec.temp_start_time);
+      let te = rec.temp_end_time ? toHrT(rec.temp_end_time) : ts + (Number(rec.temp_work_hours) || 0);
+      if (te <= ts) te += 24;
+      const TS = rec.work_shift === "야간" ? 18.0 : 8 + 50 / 60;
+      const TE = rec.work_shift === "야간" ? 24 + 9 + 10 / 60 : 18.5;
+      let tot = 0;
+      if (ts < TS) tot += TS - ts;
+      if (te > TE) tot += te - TE;
+      supportOtHours += tot;
+      return;
+    }
     const km = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!km) return;
     supportOtHours += calcKyobunFillOvertimeHours(km[1], rec.work_shift, rec.work_date, diaTable, holidays);
@@ -779,7 +793,11 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   const unionFee = Math.round((basicSalary ?? 0) * (r.union_fee ?? 0.012));
   const totalDeduction = nationalPension + healthInsurance + longTermCare + employmentInsurance + incomeTax + localTax + unionFee;
 
-  return { netPay: totalGross - totalDeduction, totalGross, totalDeduction, tongsangWage };
+  return {
+    netPay: totalGross - totalDeduction, totalGross, totalDeduction, tongsangWage,
+    // 홈 급여 팝업용 구성 요소 (계산은 그대로, 보여주기만 · 2026-08-07)
+    basicSalary: basicSalary ?? 0, totalAllowance, nightPay, holidayFillPay, supportPay,
+  };
 }
 // 근무조정 기록 → 수당 환산 (computeNetPay의 휴무충당/지원/야간취급 산식과 동일하게 유지할 것)
 function estimateAdjustPay(records: any[], hourlyWage: number, diaTable: any[], holidays: string[]) {
@@ -824,6 +842,19 @@ function estimateAdjustPay(records: any[], hourlyWage: number, diaTable: any[], 
     }
     if (rec.adjust_type === "kyobun_fill") {
       // 교번충당(교대): 정규 밖 초과분만 ×1.5 — 심야는 교대 본인 야간수당이라 여기서 안 더함
+      if (rec.is_temp_dia) {
+        const toHrK = (t: any) => { const p2 = String(t).split(":"); return (Number(p2[0]) || 0) + (Number(p2[1]) || 0) / 60; };
+        let ks = toHrK(rec.temp_start_time);
+        let ke = rec.temp_end_time ? toHrK(rec.temp_end_time) : ks + (Number(rec.temp_work_hours) || 0);
+        if (ke <= ks) ke += 24;
+        const KS = rec.work_shift === "야간" ? 18.0 : 8 + 50 / 60;
+        const KE = rec.work_shift === "야간" ? 24 + 9 + 10 / 60 : 18.5;
+        let kot = 0;
+        if (ks < KS) kot += KS - ks;
+        if (ke > KE) kot += ke - KE;
+        supportOtHours += kot;
+        return;
+      }
       const kmm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!kmm) return;
       supportOtHours += calcKyobunFillOvertimeHours(kmm[1], rec.work_shift, rec.work_date, diaTable, holidays);
@@ -29448,7 +29479,7 @@ const getKyobunWork = (member: any, date: Date) => {
     const adjAttMsg = popAdj
       ? (() => {
           const a = ADJ_ATT[popAdj.adjust_type] || { ko: popAdj.adjust_type, verb: "잡혔어요" };
-          const dn = popWork?.temp ? "임시 다이아" : (popWork?.dia ? `다이아 ${popWork.dia}번` : "");
+          const dn = popWork?.temp ? "임시·변사업" : (popWork?.dia ? `다이아 ${popWork.dia}번` : "");
           const sh = popAdj.work_shift ? ` (${popAdj.work_shift})` : "";
           return dn
             ? `${dn}에 ${a.ko} ${a.verb}${sh}. 아래에서 행로·시간을 확인하세요.`
@@ -34943,6 +34974,21 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   dutyRecords.forEach((rec: any) => {
     if (rec.adjust_type !== "kyobun_fill") return;
     if (leaveSet.has(String(rec.work_date))) return; // 휴가우선
+    if (rec.is_temp_dia) {
+      const toHrM = (t: any) => { const p2 = String(t).split(":"); return (Number(p2[0]) || 0) + (Number(p2[1]) || 0) / 60; };
+      let ms = toHrM(rec.temp_start_time);
+      let me = rec.temp_end_time ? toHrM(rec.temp_end_time) : ms + (Number(rec.temp_work_hours) || 0);
+      if (me <= ms) me += 24;
+      const MS = rec.work_shift === "야간" ? 18.0 : 8 + 50 / 60;
+      const ME = rec.work_shift === "야간" ? 24 + 9 + 10 / 60 : 18.5;
+      let mot = 0;
+      if (ms < MS) mot += MS - ms;
+      if (me > ME) mot += me - ME;
+      supportOtHours += mot;
+      const md2 = new Date(rec.work_date);
+      supportList.push({ dateLabel: `${md2.getMonth() + 1}/${md2.getDate()}`, diaLabel: "교번충당 · 임시·변사업", ot: mot });
+      return;
+    }
     const km = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!km) return;
     const otH = calcKyobunFillOvertimeHours(km[1], rec.work_shift, rec.work_date, diaTable, holidays);
@@ -36276,6 +36322,69 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
     petition: 0,
   });
 
+  // ── 개인 추가 휴가 (personal_leave · 공사 휴가 사전에서 선택 · 2026-08-07) ──
+  //   기본 7종에 없는 휴가(보상·병가·돌봄 등)를 각자 자기 화면에 추가.
+  //   사용 기록은 기존 leave_history로 들어가 근무표·빈자리·유고 연동이 자동으로 따라옴.
+  const [personalLeaves, setPersonalLeaves] = React.useState<any[]>([]);
+  const loadPersonal = async () => {
+    if (!user?.employee_number) return;
+    const { data } = await supabase
+      .from("personal_leave")
+      .select("*")
+      .eq("employee_number", user.employee_number)
+      .eq("hidden", false)
+      .order("id");
+    setPersonalLeaves(data || []);
+  };
+  React.useEffect(() => { loadPersonal(); }, [user]);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addPick, setAddPick] = React.useState<any>(null);
+  const [addDays, setAddDays] = React.useState("");
+  // 공사 휴가 사전 — 기본 7종(연차·가연차·촉진연차·대체·학습·장기재직·청원)과 겹치는 항목은 제외
+  const LEAVE_DICT: { group: string; items: { name: string; def?: number }[] }[] = [
+    { group: "일반휴가", items: [
+      { name: "보상휴가" }, { name: "사상병가" }, { name: "공상병가" }, { name: "만근휴가" },
+    ]},
+    { group: "특수휴가", items: [
+      { name: "난임치료동행휴가" }, { name: "임신검진동행휴가" }, { name: "공가" }, { name: "유결" },
+      { name: "난임치료휴가" }, { name: "배우자유산휴가" }, { name: "가족돌봄휴가(자녀유급)" },
+      { name: "가족돌봄휴가(무급)" }, { name: "자녀입영휴가" }, { name: "재해구호휴가" },
+      { name: "특별휴가" }, { name: "심리안정휴가" }, { name: "배우자출산휴가" }, { name: "대체휴식" },
+    ]},
+    { group: "장기재직휴가 (연차별)", items: [
+      { name: "장기재직휴가(5년)", def: 5 }, { name: "장기재직휴가(10년)", def: 10 },
+      { name: "장기재직휴가(20년)", def: 20 }, { name: "장기재직휴가(30년)", def: 20 },
+    ]},
+  ];
+  const addPersonal = async () => {
+    if (!addPick || !user?.employee_number) return;
+    const num = parseFloat(addDays) || 0;
+    if (num < 0) { showToast("0 이상의 숫자를 입력해주세요."); return; }
+    const { error } = await supabase.from("personal_leave").insert({
+      employee_number: user.employee_number,
+      leave_name: addPick.name,
+      remaining: num,
+    });
+    if (error) { showToast("추가 실패: " + error.message, "error"); return; }
+    setAddOpen(false); setAddPick(null); setAddDays("");
+    showToast(`${addPick.name} 카드가 추가됐어요.`);
+    loadPersonal();
+  };
+  const savePersonalRemaining = async (row: any, value: any) => {
+    const num = parseFloat(value) || 0;
+    if (num < 0) { showToast("0 이상의 숫자를 입력해주세요."); return; }
+    const { error } = await supabase.from("personal_leave").update({ remaining: num }).eq("id", row.id);
+    if (error) { showToast("저장 실패: " + error.message, "error"); return; }
+    setPersonalLeaves((ls: any[]) => ls.map((l: any) => (l.id === row.id ? { ...l, remaining: num } : l)));
+    setEditingId(null); setEditValue("");
+  };
+  const hidePersonal = async (row: any) => {
+    if (!window.confirm(`${row.leave_name} 카드를 숨길까요?\n사용 기록은 그대로 남습니다.`)) return;
+    const { error } = await supabase.from("personal_leave").update({ hidden: true }).eq("id", row.id);
+    if (error) { showToast("숨김 실패: " + error.message, "error"); return; }
+    loadPersonal();
+  };
+
   // 편집 모드 (지금 어떤 휴가를 편집 중인지)
   const [editingId, setEditingId] = React.useState(null);
   const [editValue, setEditValue] = React.useState("");
@@ -36322,8 +36431,14 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("취소 실패: " + error.message, "error");
       return;
     }
-    const cur = (remaining as any)[h.leave_type] || 0;
-    await saveRemaining(h.leave_type, cur + Number(h.days));
+    const pl = personalLeaves.find((l: any) => l.leave_name === h.leave_type);
+    if (pl) {
+      await supabase.from("personal_leave").update({ remaining: Number(pl.remaining) + Number(h.days) }).eq("id", pl.id);
+      loadPersonal();
+    } else {
+      const cur = (remaining as any)[h.leave_type] || 0;
+      await saveRemaining(h.leave_type, cur + Number(h.days));
+    }
     loadHistory();
   };
     // 사용내역 팝업에서 삭제 (잔여일수 복구)
@@ -36337,8 +36452,14 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("삭제 실패: " + error.message, "error");
       return;
     }
-    const cur = (remaining as any)[h.leave_type] || 0;
-    await saveRemaining(h.leave_type, cur + Number(h.days));
+    const pl2 = personalLeaves.find((l: any) => l.leave_name === h.leave_type);
+    if (pl2) {
+      await supabase.from("personal_leave").update({ remaining: Number(pl2.remaining) + Number(h.days) }).eq("id", pl2.id);
+      loadPersonal();
+    } else {
+      const cur = (remaining as any)[h.leave_type] || 0;
+      await saveRemaining(h.leave_type, cur + Number(h.days));
+    }
     loadHistory();
     setHistoryRows((rows) => rows.filter((r) => r.id !== h.id));
   };
@@ -36390,8 +36511,11 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       showToast("이력 저장 실패: " + histError.message, "error");
       return;
     }
-    // 2. 잔여일수 차감
-    if (item.id !== "petition") {
+    // 2. 잔여일수 차감 — 개인 추가 휴가는 personal_leave에서
+    if ((item as any).personal) {
+      await supabase.from("personal_leave").update({ remaining: Math.max(0, item.days - days) }).eq("id", (item as any).personal.id);
+      loadPersonal();
+    } else if (item.id !== "petition") {
       const newRemaining = item.days - days;
       await saveRemaining(item.id, newRemaining);
     }
@@ -36424,7 +36548,8 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
       petition: "petition_remaining",
 
     };
-    // DB에 저장
+    // DB에 저장 (기본 7종이 아니면 members를 건드리지 않음 — 개인 휴가는 별도 저장)
+    if (!(columnMap as any)[id]) { setEditingId(null); setEditValue(""); return; }
     if (user?.employee_number) {
       const { error } = await supabase
         .from("members")
@@ -36590,7 +36715,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
             총 잔여
           </div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#4F46E5" }}>
-            {leaveItems.reduce((s, x) => s + x.days, 0)}일
+            {leaveItems.reduce((s, x) => s + x.days, 0) + personalLeaves.reduce((s: number, x: any) => s + (Number(x.remaining) || 0), 0)}일
           </div>
         </div>
         <div style={{ width: 1, background: "#eee" }} />
@@ -36599,7 +36724,7 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
             휴가 종류
           </div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#111" }}>
-            {leaveItems.length}개
+            {leaveItems.length + personalLeaves.length}개
           </div>
         </div>
       </div>
@@ -36786,7 +36911,91 @@ function LeaveScreen({ onBack, user, initialDate }: { onBack: any; user: any; in
             )}
           </div>
         ))}
+        {/* ── 개인 추가 휴가 카드 (기본 카드와 동일 동작 + 숨김) ── */}
+        {personalLeaves.map((row: any) => {
+          const pid = "p" + row.id;
+          const item: any = { id: row.leave_name, label: row.leave_name, days: Number(row.remaining) || 0, color: "#DB2777", bg: "#FDF2F8", icon: "🗂️", personal: row };
+          return (
+            <div key={pid} style={{ background: "#fff", border: editingId === pid ? "2px solid #DB2777" : "1.5px solid #FBCFE8", borderRadius: 14, padding: "16px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", gap: 10, minHeight: 110 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: item.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{item.icon}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div onClick={() => setHistoryModal(item)} style={{ padding: "4px 7px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280", fontSize: 9, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>내역</div>
+                  <div onClick={() => hidePersonal(row)} style={{ padding: "4px 7px", borderRadius: 999, background: "#FEF2F2", color: "#B91C1C", fontSize: 9, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>숨김</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1F2937", lineHeight: 1.35, wordBreak: "keep-all" }}>{row.leave_name}</div>
+              {editingId === pid ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="number" step="0.5" value={editValue} onChange={(e: any) => setEditValue(e.target.value)} style={{ width: 62, padding: "6px 8px", border: "1.5px solid #FBCFE8", borderRadius: 8, fontSize: 14, fontWeight: 700, textAlign: "center", fontFamily: "inherit" }} />
+                  <button onClick={() => savePersonalRemaining(row, editValue)} style={{ padding: "6px 10px", fontSize: 11, fontWeight: 700, background: "#DB2777", color: "#fff", border: "none", borderRadius: 7, cursor: "pointer" }}>저장</button>
+                  <button onClick={() => { setEditingId(null); setEditValue(""); }} style={{ padding: "6px 10px", fontSize: 11, fontWeight: 700, background: "#F3F4F6", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer" }}>취소</button>
+                </div>
+              ) : (
+                <div onClick={() => { setEditingId(pid as any); setEditValue(String(item.days)); }} style={{ fontSize: 20, fontWeight: 800, color: item.color, cursor: "pointer" }}>
+                  {item.days}일 <span style={{ fontSize: 10, fontWeight: 600, color: "#D1D5DB" }}>✎</span>
+                </div>
+              )}
+              {editingId !== pid && item.days > 0 && (
+                <button onClick={() => setUseModal(item)} style={{ marginTop: 4, padding: "6px 0", fontSize: 11, fontWeight: 600, background: item.bg, color: item.color, border: "none", borderRadius: 6, cursor: "pointer" }}>휴가 사용</button>
+              )}
+            </div>
+          );
+        })}
+        {/* ── 휴가 추가 버튼 ── */}
+        <div onClick={() => { setAddOpen(true); setAddPick(null); setAddDays(""); }} style={{ gridColumn: "1 / -1", border: "2px dashed #C7D2FE", borderRadius: 14, padding: "14px 0", textAlign: "center", color: "#4F46E5", fontSize: 13.5, fontWeight: 700, background: "#F5F6FF", cursor: "pointer" }}>
+          ＋ 휴가 추가
+        </div>
       </div>
+      {/* ── 휴가 추가 시트 (공사 휴가 사전에서 선택) ── */}
+      {addOpen && (
+        <>
+          <div onClick={() => setAddOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 999 }} />
+          <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 1000, background: "#fff", borderRadius: "18px 18px 0 0", padding: "16px 14px 22px", maxHeight: "78vh", overflowY: "auto", boxShadow: "0 -4px 20px rgba(0,0,0,0.15)" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", textAlign: "center" }}>휴가 추가</div>
+            <div style={{ fontSize: 10.5, color: "#9CA3AF", textAlign: "center", margin: "4px 0 8px" }}>
+              공사 휴가 목록에서 골라요 — 이름이 통일돼 기록·계산이 정확해져요
+            </div>
+            {LEAVE_DICT.map((g) => (
+              <div key={g.group}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", margin: "10px 2px 5px" }}>{g.group}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {g.items.map((it) => {
+                    const mine = personalLeaves.some((l: any) => l.leave_name === it.name);
+                    const on = addPick && addPick.name === it.name;
+                    return (
+                      <div
+                        key={it.name}
+                        onClick={() => {
+                          if (mine) return;
+                          setAddPick(it);
+                          setAddDays(it.def != null ? String(it.def) : "");
+                        }}
+                        style={{ fontSize: 11.5, padding: "7px 11px", borderRadius: 999, fontWeight: 600, cursor: mine ? "default" : "pointer", background: mine ? "#E5E7EB" : on ? "#4F46E5" : "#F3F4F6", color: mine ? "#B0B5BD" : on ? "#fff" : "#374151", textDecoration: mine ? "line-through" : "none" }}
+                      >
+                        {it.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {addPick && (
+              <div style={{ marginTop: 12, background: "#EEF0FF", borderRadius: 12, padding: "11px 13px" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3730A3", marginBottom: 7 }}>{addPick.name} 추가</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#374151" }}>
+                  잔여일수
+                  <input type="number" step="0.5" value={addDays} onChange={(e: any) => setAddDays(e.target.value)} style={{ width: 62, padding: "6px 8px", border: "1px solid #C7D2FE", borderRadius: 8, textAlign: "center", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }} />
+                  일부터 시작
+                </div>
+              </div>
+            )}
+            <button onClick={addPersonal} disabled={!addPick} style={{ marginTop: 10, width: "100%", background: addPick ? "#4F46E5" : "#E5E7EB", color: addPick ? "#fff" : "#9CA3AF", textAlign: "center", padding: "13px 0", borderRadius: 11, fontSize: 13.5, fontWeight: 700, border: "none", cursor: addPick ? "pointer" : "default", fontFamily: "inherit" }}>
+              내 휴가에 추가
+            </button>
+          </div>
+        </>
+      )}
 {/* 휴가 사용 내역 */}
       <div style={{ marginTop: 24 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -37173,7 +37382,7 @@ function DistanceScreen({ onBack, user }) {
         .from("work_adjust")
         .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
         .eq("employee_number", user.employee_number)
-        .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+        .in("adjust_type", ["standby", "designated", "support", "holiday_fill", "kyobun_fill"])
         .gt("work_date", bd);
       const { data: lvData } = await supabase
         .from("leave_history")
@@ -37216,7 +37425,7 @@ function DistanceScreen({ onBack, user }) {
         if (leaveDates.has(ds)) continue;
         if (tempKmByDate[ds] != null) {
           const km = tempKmByDate[ds];
-          if (km > 0) { sum += km; rec.push({ date: ds, dia: "임시", km }); }
+          if (km > 0) { sum += km; rec.push({ date: ds, dia: "임시·변사업", km }); }
           continue;
         }
         let diaNo = null;
@@ -38312,7 +38521,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       }
     }
     if (formIsTemp && !pickedDia && (!tempStart || !tempEnd || (!tempHour && !tempMin))) {
-      showToast("임시 다이아 시간을 입력해주세요.");
+      showToast("임시·변사업 시간을 입력해주세요.");
       return;
     }
 
@@ -39735,7 +39944,7 @@ appearance: "none",
                   >
                     <span>다이아 번호</span>
                     <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500 }}>
-                      {formIsTemp ? "임시 다이아" : `${formShift} 범위: ${diaRange}번`}
+                      {formIsTemp ? "임시·변사업" : `${formShift} 범위: ${diaRange}번`}
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -39779,7 +39988,6 @@ appearance: "none",
                         }}
                       />
                     )}
-                    {activeTab !== "교번충당" && (
                     <button
                       onClick={() => {
                         if (formIsTemp) {
@@ -39804,9 +40012,8 @@ appearance: "none",
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {formIsTemp ? "취소" : "임시"}
+                      {formIsTemp ? "취소" : "임시·변사업"}
                     </button>
-                    )}
                   </div>
                   {!formIsTemp && formDiaNum && !diaNumValid && (
                     <div style={{ fontSize: 11, color: "#EF4444", marginTop: 5 }}>
@@ -39850,7 +40057,7 @@ appearance: "none",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>임시 다이아 입력</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>임시·변사업 입력</div>
                       <div onClick={() => setShowTempModal(false)} style={{ fontSize: 20, color: "#9CA3AF", cursor: "pointer" }}>✕</div>
                     </div>
                     {tempDiaList.length > 0 ? (
@@ -43925,7 +44132,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
             .from("work_adjust")
             .select("work_date, memo, adjust_type, is_temp_dia, temp_distance_km")
             .eq("employee_number", user.employee_number)
-            .in("adjust_type", ["standby", "designated", "support", "holiday_fill"])
+            .in("adjust_type", ["standby", "designated", "support", "holiday_fill", "kyobun_fill"])
             .gt("work_date", bd),
           supabase
             .from("leave_history")
@@ -44007,7 +44214,11 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
 
   const [homeHolidays, setHomeHolidays] = useState<string[]>([]);
   const [homeTodayAdjust, setHomeTodayAdjust] = useState<any>(null);
-  const [payNoteOpen, setPayNoteOpen] = useState(false); // 급여 카드 "○월 근무분" ⓘ 설명 펼침
+  const [payNoteOpen, setPayNoteOpen] = useState(false); // 급여 카드 팝업
+  const [adjNoteOpen, setAdjNoteOpen] = useState(false); // 근무조정 카드 팝업
+  const [homePayDetail, setHomePayDetail] = useState<any>(null); // 팝업용 급여 구성 (computeNetPay 결과 그대로)
+  const [homeAdjRecs, setHomeAdjRecs] = useState<any[]>([]); // 팝업용 이번 달 조정 기록
+  const [homeAdjHw, setHomeAdjHw] = useState(0); // 건별 금액 환산용 시급
   const [homeShiftBase, setHomeShiftBase] = useState<any>(null);
   const [homeSalaryData, setHomeSalaryData] = useState<any>(null);
   const [payCompare, setPayCompare] = useState<any>(null);
@@ -44039,6 +44250,7 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
       leaveDates: d.leaveDates || [],
     });
     if (!result) return;
+    setHomePayDetail(result); // 팝업용 구성 저장
     (async () => {
       const n2 = new Date();
       const mm2 = String(n2.getMonth() + 1).padStart(2, "0");
@@ -44062,7 +44274,9 @@ const [autoLoginChecked, setAutoLoginChecked] = useState(false);
         .lte("used_date", ld);
       const curLvSet = new Set((curLv || []).map((r: any) => String(r.used_date)));
       const curAdjNoLeave = (curAdj || []).filter((r: any) => r.adjust_type === "holiday_fill" || !curLvSet.has(String(r.work_date)));
+      setHomeAdjRecs(curAdjNoLeave); // 팝업용 기록 저장
       const hw = result.tongsangWage > 0 ? result.tongsangWage / 209 : 0;
+      setHomeAdjHw(hw); // 팝업 건별 환산용
       setAdjustPayEst(estimateAdjustPay(curAdjNoLeave, hw, homeDia, homeHolidays));
     })();
     const now = new Date();
@@ -46069,27 +46283,13 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                 다음 달부터 전월 대비 표시
               </div>
             )}
-            {/* 어느 달 근무분인지 명시 — 급여는 전달 근무분을 다음 달에 받음 (2026-08-05) */}
+            {/* 어느 달 근무분인지 명시 — 누르면 가운데 팝업 (2026-08-07) */}
             <div
-              onClick={(e: any) => { e.stopPropagation(); setPayNoteOpen((v: boolean) => !v); }}
+              onClick={(e: any) => { e.stopPropagation(); setPayNoteOpen(true); }}
               style={{ fontSize: 9, color: "#9CA3AF", marginTop: 6, fontWeight: 600, cursor: "pointer" }}
             >
-              {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분 {payNoteOpen ? "▲" : "ⓘ"}
+              {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분 ⓘ
             </div>
-            {payNoteOpen && (
-              <div
-                onClick={(e: any) => e.stopPropagation()}
-                style={{ marginTop: 6, background: "#F9FAFB", borderRadius: 8, padding: "8px 10px", fontSize: 9.5, color: "#6B7280", lineHeight: 1.7, fontWeight: 500 }}
-              >
-                급여는 전달 근무분을 다음 달에 받습니다.
-                <br />
-                {getPayContext(new Date(), homeHolidays).payMonth + 1}월 급여 = {getPayContext(new Date(), homeHolidays).perfMonth + 1}월 근무분.
-                <br />
-                이번 달 충당·지원근무는 다음 달 급여에 반영됩니다.
-                <br />
-                근무 다음날 오전 9시까지는 내용이 바뀔 수 있어요.
-              </div>
-            )}
           </div>
        {(() => {
             let info = user ? getTodayWorkInfo(user, homeRotation, homeDia, homeHolidays, new Date(), homeSalaryData?.swapData || [], homeSalaryData?.allMembers || [], homeSalaryData?.startHistory || []) : null;
@@ -46251,11 +46451,15 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                     +{adjustPayEst.toLocaleString("ko-KR")}원
                   </div>
                 )}
-                <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3 }}>
+                <div
+                  onClick={(e: any) => { e.stopPropagation(); setAdjNoteOpen(true); }}
+                  style={{ fontSize: 10, color: "#9CA3AF", marginTop: 3, cursor: "pointer" }}
+                >
                   {new Date().getMonth() + 1}월 기록 →{" "}
                   <span style={{ color: "#4F46E5", fontWeight: 700 }}>
                     {(new Date().getMonth() + 1) % 12 + 1}월 급여
-                  </span>
+                  </span>{" "}
+                  ⓘ
                 </div>
                 <div
                   style={{
@@ -46273,7 +46477,103 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
             )}
           </div>
         </div>
-                {/* 무사고 주행키로 카드 */}
+                {/* ── 예상 급여 팝업 (가운데 · B수준 구성 요약 · 2026-08-07) ── */}
+        {payNoteOpen && (() => {
+          const pc = getPayContext(new Date(), homeHolidays);
+          const r0 = homePayDetail;
+          const won = (n: any) => (Number(n) || 0).toLocaleString("ko-KR");
+          const allowSum = (Number(r0?.totalAllowance) || 0);
+          const extraSum = (Number(r0?.nightPay) || 0) + (Number(r0?.holidayFillPay) || 0) + (Number(r0?.supportPay) || 0);
+          const Row = ({ l, v, strong, color }: any) => (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #F3F4F6" }}>
+              <span style={{ fontSize: 12.5, color: "#6B7280", fontWeight: strong ? 800 : 600 }}>{l}</span>
+              <span style={{ fontSize: strong ? 16 : 13.5, fontWeight: 800, color: color || "#111827", fontVariantNumeric: "tabular-nums" }}>{v}</span>
+            </div>
+          );
+          return (
+            <>
+              <div onClick={() => setPayNoteOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 999 }} />
+              <div style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 1000, width: "min(88vw, 340px)", background: "#fff", borderRadius: 18, padding: "18px 18px 14px", boxShadow: "0 12px 40px rgba(0,0,0,0.22)" }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", textAlign: "center" }}>
+                  {pc.payMonth + 1}월 예상 급여
+                </div>
+                <div style={{ fontSize: 10.5, color: "#9CA3AF", textAlign: "center", margin: "3px 0 10px" }}>
+                  {pc.perfMonth + 1}월 근무분 · 실제 지급액은 회사 명세서 기준
+                </div>
+                {r0 ? (
+                  <>
+                    <Row l="기본급" v={won(r0.basicSalary) + "원"} />
+                    <Row l="수당 (승무·보전 등)" v={won(allowSum) + "원"} />
+                    <Row l="야간·충당·지원수당" v={won(extraSum) + "원"} />
+                    <Row l="세전 합계" v={won(r0.totalGross) + "원"} strong />
+                    <Row l="공제 합계" v={"−" + won(r0.totalDeduction) + "원"} color="#DC2626" />
+                    <Row l="예상 실수령" v={won(r0.netPay) + "원"} strong color="#4F46E5" />
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "14px 0" }}>계산 준비 중이에요. 잠시 후 다시 열어주세요.</div>
+                )}
+                <div style={{ fontSize: 10, color: "#9CA3AF", lineHeight: 1.7, margin: "10px 2px 0" }}>
+                  급여는 전달 근무분을 다음 달에 받아요. 이번 달 충당·지원근무는 {(new Date().getMonth() + 1) % 12 + 1}월 급여에 반영돼요.
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button onClick={() => setPayNoteOpen(false)} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: "none", background: "#F3F4F6", color: "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+                  <button onClick={() => { setPayNoteOpen(false); setScreen("salary"); }} style={{ flex: 1.4, padding: "11px 0", borderRadius: 10, border: "none", background: "#4F46E5", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>급여 화면에서 자세히</button>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+        {/* ── 근무조정 팝업 (가운데 · 이번 달 건별 목록 · 2026-08-07) ── */}
+        {adjNoteOpen && (() => {
+          const won = (n: any) => (Number(n) || 0).toLocaleString("ko-KR");
+          const LB: Record<string, string> = { standby: "대기충당", holiday_fill: "휴무충당", designated: "지정근무", support: "지원근무", kyobun_fill: "교번충당" };
+          const rows = (homeAdjRecs || []).slice().sort((a: any, b: any) => String(a.work_date).localeCompare(String(b.work_date)));
+          return (
+            <>
+              <div onClick={() => setAdjNoteOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", zIndex: 999 }} />
+              <div style={{ position: "fixed", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 1000, width: "min(88vw, 340px)", maxHeight: "72vh", overflowY: "auto", background: "#fff", borderRadius: 18, padding: "18px 18px 14px", boxShadow: "0 12px 40px rgba(0,0,0,0.22)" }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#111827", textAlign: "center" }}>
+                  {new Date().getMonth() + 1}월 근무조정 기록
+                </div>
+                <div style={{ fontSize: 10.5, color: "#9CA3AF", textAlign: "center", margin: "3px 0 10px" }}>
+                  {(new Date().getMonth() + 1) % 12 + 1}월 급여에 반영 · 근무 다음날 오전 9시까지 변경될 수 있어요
+                </div>
+                {rows.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", padding: "14px 0" }}>이번 달 기록이 아직 없어요.</div>
+                ) : (
+                  rows.map((r: any) => {
+                    const amt = homeAdjHw > 0 ? estimateAdjustPay([r], homeAdjHw, homeDia, homeHolidays) : 0;
+                    const dm = (r.memo || "").match(/다이아\s*(\d+)/);
+                    return (
+                      <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
+                            {String(r.work_date).slice(5).replace("-", "/")} {LB[r.adjust_type] || r.adjust_type}
+                            <span style={{ fontSize: 10, color: r.work_shift === "야간" ? "#7C3AED" : "#3B82F6", marginLeft: 4, fontWeight: 700 }}>{r.work_shift || ""}</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>
+                            {r.is_temp_dia ? "임시·변사업" : dm ? `다이아 ${dm[1]}` : (r.memo || "")}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: amt > 0 ? "#16A34A" : "#9CA3AF", fontVariantNumeric: "tabular-nums" }}>
+                          {amt > 0 ? "+" + won(amt) + "원" : "—"}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {rows.length > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0 2px" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: "#6B7280" }}>수당 환산 합계</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "#16A34A", fontVariantNumeric: "tabular-nums" }}>+{won(adjustPayEst)}원</span>
+                  </div>
+                )}
+                <button onClick={() => setAdjNoteOpen(false)} style={{ width: "100%", marginTop: 12, padding: "11px 0", borderRadius: 10, border: "none", background: "#F3F4F6", color: "#6B7280", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+              </div>
+            </>
+          );
+        })()}
+        {/* 무사고 주행키로 카드 */}
         <div
           onClick={() => setScreen("distance")}
           style={{
