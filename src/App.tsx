@@ -14759,7 +14759,6 @@ function TempDiaAdmin() {
     setSaving(true);
     const { error } = await supabase.from("temp_dia").insert({
       dia_no: n, name: autoName, kind: kind, is_night: isNight,
-      visible: true, // 만들자마자 조합원 선택 목록에 보이게 (숨김으로 시작하던 함정 제거 · 2026-08-07)
       distance_km: parseFloat(fields.distance_km) || 0,
       start_time: String(fields.start_time || ""),
       work_hours: toDecimalHours(fields.work_hours),
