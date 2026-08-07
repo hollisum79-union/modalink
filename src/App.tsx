@@ -761,6 +761,20 @@ const hourlyWage = tongsangWage > 0 ? tongsangWage / 209 : 0;
   dutyRecords.forEach((rec: any) => {
     if (rec.adjust_type !== "kyobun_fill") return;
     if (leaveSet.has(String(rec.work_date))) return; // 휴가우선
+    if (rec.is_temp_dia) {
+      // 임시·변사업: 입력한 시각으로 정규창 밖 초과분 (끝시각 없으면 시작+근무시간)
+      const toHrT = (t: any) => { const p2 = String(t).split(":"); return (Number(p2[0]) || 0) + (Number(p2[1]) || 0) / 60; };
+      let ts = toHrT(rec.temp_start_time);
+      let te = rec.temp_end_time ? toHrT(rec.temp_end_time) : ts + (Number(rec.temp_work_hours) || 0);
+      if (te <= ts) te += 24;
+      const TS = rec.work_shift === "야간" ? 18.0 : 8 + 50 / 60;
+      const TE = rec.work_shift === "야간" ? 24 + 9 + 10 / 60 : 18.5;
+      let tot = 0;
+      if (ts < TS) tot += TS - ts;
+      if (te > TE) tot += te - TE;
+      supportOtHours += tot;
+      return;
+    }
     const km = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!km) return;
     supportOtHours += calcKyobunFillOvertimeHours(km[1], rec.work_shift, rec.work_date, diaTable, holidays);
@@ -828,6 +842,19 @@ function estimateAdjustPay(records: any[], hourlyWage: number, diaTable: any[], 
     }
     if (rec.adjust_type === "kyobun_fill") {
       // 교번충당(교대): 정규 밖 초과분만 ×1.5 — 심야는 교대 본인 야간수당이라 여기서 안 더함
+      if (rec.is_temp_dia) {
+        const toHrK = (t: any) => { const p2 = String(t).split(":"); return (Number(p2[0]) || 0) + (Number(p2[1]) || 0) / 60; };
+        let ks = toHrK(rec.temp_start_time);
+        let ke = rec.temp_end_time ? toHrK(rec.temp_end_time) : ks + (Number(rec.temp_work_hours) || 0);
+        if (ke <= ks) ke += 24;
+        const KS = rec.work_shift === "야간" ? 18.0 : 8 + 50 / 60;
+        const KE = rec.work_shift === "야간" ? 24 + 9 + 10 / 60 : 18.5;
+        let kot = 0;
+        if (ks < KS) kot += KS - ks;
+        if (ke > KE) kot += ke - KE;
+        supportOtHours += kot;
+        return;
+      }
       const kmm = (rec.memo || "").match(/다이아\s*(\d+)/);
       if (!kmm) return;
       supportOtHours += calcKyobunFillOvertimeHours(kmm[1], rec.work_shift, rec.work_date, diaTable, holidays);
@@ -29452,7 +29479,7 @@ const getKyobunWork = (member: any, date: Date) => {
     const adjAttMsg = popAdj
       ? (() => {
           const a = ADJ_ATT[popAdj.adjust_type] || { ko: popAdj.adjust_type, verb: "잡혔어요" };
-          const dn = popWork?.temp ? "임시 다이아" : (popWork?.dia ? `다이아 ${popWork.dia}번` : "");
+          const dn = popWork?.temp ? "임시·변사업" : (popWork?.dia ? `다이아 ${popWork.dia}번` : "");
           const sh = popAdj.work_shift ? ` (${popAdj.work_shift})` : "";
           return dn
             ? `${dn}에 ${a.ko} ${a.verb}${sh}. 아래에서 행로·시간을 확인하세요.`
@@ -34947,6 +34974,21 @@ function SalaryScreen({ onBack, user }: { onBack: () => void; user: any }) {
   dutyRecords.forEach((rec: any) => {
     if (rec.adjust_type !== "kyobun_fill") return;
     if (leaveSet.has(String(rec.work_date))) return; // 휴가우선
+    if (rec.is_temp_dia) {
+      const toHrM = (t: any) => { const p2 = String(t).split(":"); return (Number(p2[0]) || 0) + (Number(p2[1]) || 0) / 60; };
+      let ms = toHrM(rec.temp_start_time);
+      let me = rec.temp_end_time ? toHrM(rec.temp_end_time) : ms + (Number(rec.temp_work_hours) || 0);
+      if (me <= ms) me += 24;
+      const MS = rec.work_shift === "야간" ? 18.0 : 8 + 50 / 60;
+      const ME = rec.work_shift === "야간" ? 24 + 9 + 10 / 60 : 18.5;
+      let mot = 0;
+      if (ms < MS) mot += MS - ms;
+      if (me > ME) mot += me - ME;
+      supportOtHours += mot;
+      const md2 = new Date(rec.work_date);
+      supportList.push({ dateLabel: `${md2.getMonth() + 1}/${md2.getDate()}`, diaLabel: "교번충당 · 임시·변사업", ot: mot });
+      return;
+    }
     const km = (rec.memo || "").match(/다이아\s*(\d+)/);
     if (!km) return;
     const otH = calcKyobunFillOvertimeHours(km[1], rec.work_shift, rec.work_date, diaTable, holidays);
@@ -37383,7 +37425,7 @@ function DistanceScreen({ onBack, user }) {
         if (leaveDates.has(ds)) continue;
         if (tempKmByDate[ds] != null) {
           const km = tempKmByDate[ds];
-          if (km > 0) { sum += km; rec.push({ date: ds, dia: "임시", km }); }
+          if (km > 0) { sum += km; rec.push({ date: ds, dia: "임시·변사업", km }); }
           continue;
         }
         let diaNo = null;
@@ -38479,7 +38521,7 @@ function WorkAdjustScreen({ onBack, user, initialDate, initialTab }: { onBack: a
       }
     }
     if (formIsTemp && !pickedDia && (!tempStart || !tempEnd || (!tempHour && !tempMin))) {
-      showToast("임시 다이아 시간을 입력해주세요.");
+      showToast("임시·변사업 시간을 입력해주세요.");
       return;
     }
 
@@ -39902,7 +39944,7 @@ appearance: "none",
                   >
                     <span>다이아 번호</span>
                     <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500 }}>
-                      {formIsTemp ? "임시 다이아" : `${formShift} 범위: ${diaRange}번`}
+                      {formIsTemp ? "임시·변사업" : `${formShift} 범위: ${diaRange}번`}
                     </span>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
@@ -39946,7 +39988,6 @@ appearance: "none",
                         }}
                       />
                     )}
-                    {activeTab !== "교번충당" && (
                     <button
                       onClick={() => {
                         if (formIsTemp) {
@@ -39971,9 +40012,8 @@ appearance: "none",
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {formIsTemp ? "취소" : "임시"}
+                      {formIsTemp ? "취소" : "임시·변사업"}
                     </button>
-                    )}
                   </div>
                   {!formIsTemp && formDiaNum && !diaNumValid && (
                     <div style={{ fontSize: 11, color: "#EF4444", marginTop: 5 }}>
@@ -40017,7 +40057,7 @@ appearance: "none",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>임시 다이아 입력</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#1F2937" }}>임시·변사업 입력</div>
                       <div onClick={() => setShowTempModal(false)} style={{ fontSize: 20, color: "#9CA3AF", cursor: "pointer" }}>✕</div>
                     </div>
                     {tempDiaList.length > 0 ? (
@@ -46512,7 +46552,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                             <span style={{ fontSize: 10, color: r.work_shift === "야간" ? "#7C3AED" : "#3B82F6", marginLeft: 4, fontWeight: 700 }}>{r.work_shift || ""}</span>
                           </div>
                           <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>
-                            {r.is_temp_dia ? "임시 다이아" : dm ? `다이아 ${dm[1]}` : (r.memo || "")}
+                            {r.is_temp_dia ? "임시·변사업" : dm ? `다이아 ${dm[1]}` : (r.memo || "")}
                           </div>
                         </div>
                         <div style={{ fontSize: 12.5, fontWeight: 800, color: amt > 0 ? "#16A34A" : "#9CA3AF", fontVariantNumeric: "tabular-nums" }}>
