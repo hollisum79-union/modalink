@@ -31034,6 +31034,13 @@ const getKyobunWork = (member: any, date: Date) => {
       );
 
     const weeks = buildCalendarGrid(currentYear, currentMonth);
+    // ── 화면 자동 맞춤: 어떤 폰이든 그 달의 줄 수(5·6줄)가 스크롤 없이 한 화면에 (2026-08-07) ──
+    //   칸 높이 = (화면 높이 − 위쪽 요소 − 하단 메뉴) ÷ 줄 수. 글자는 배율(calScale)로 따라 조절.
+    const rowCnt = weeks.length || 5;
+    const vpH = typeof window !== "undefined" ? window.innerHeight : 800;
+    const rowH = Math.max(52, Math.floor((vpH - 158) / rowCnt) - 26);
+    const calScale = Math.max(0.68, Math.min(1, rowH / 92));
+    const cf = (n: number) => Math.round(n * calScale * 10) / 10; // 글자·여백 배율 적용
     let cntDay = 0, cntNight = 0, cntRest = 0;
     for (let d = 1; d <= new Date(currentYear, currentMonth, 0).getDate(); d++) {
       const w = getKyobunWork(selectedMember, new Date(currentYear, currentMonth - 1, d));
@@ -31044,7 +31051,16 @@ const getKyobunWork = (member: any, date: Date) => {
       }
     }
         return (
-            <div style={{ height: "100%", display: "flex", flexDirection: "column" }} onTouchStart={handleKyobunTouchStart} onTouchEnd={handleKyobunTouchEnd}>
+            <div
+              ref={(el: any) => {
+                if (!el || typeof window === "undefined") return;
+                const t = el.getBoundingClientRect().top;
+                el.style.height = Math.max(320, window.innerHeight - t - 84) + "px";
+              }}
+              style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+              onTouchStart={handleKyobunTouchStart}
+              onTouchEnd={handleKyobunTouchEnd}
+            >
         <div
           style={{
             padding: "8px 16px",
@@ -31117,6 +31133,8 @@ const getKyobunWork = (member: any, date: Date) => {
             key={wi}
             style={{
               flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
               display: "grid",
               gridTemplateColumns: "repeat(7,minmax(0,1fr))",
               borderBottom: "1px solid #F3F4F6",
@@ -31159,10 +31177,11 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                     }
                   }}
                   style={{
-                                        padding: "6px 4px",
+                    padding: `${cf(5)}px 3px`,
                     background: isT ? "#FEF9C3" : "#fff",
                     borderRight: "1px solid #F3F4F6",
                     borderTop: "2px solid transparent",
+                    overflow: "hidden",
                   }}
                 >
                                    {(() => {
@@ -31175,10 +31194,10 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                       <>
                         <div
                           style={{
-                            fontSize: 15.5,
+                            fontSize: cf(15.5),
                             fontWeight: 800,
                             textAlign: "center",
-                            marginBottom: 2,
+                            marginBottom: cf(2),
                             letterSpacing: "-0.3px",
                             fontVariantNumeric: "tabular-nums",
                             color: isT ? "#92400E" : dayColor,
@@ -31187,33 +31206,33 @@ const dayMemos = (selectedMember && user && String(selectedMember.employee_numbe
                           {day}
                         </div>
                        {work && (work as any).swapped && (
-                          <div style={{ textAlign: "center", fontSize: 10, color: "#4F46E5", fontWeight: 700, marginBottom: 2 }}>
+                          <div style={{ textAlign: "center", fontSize: cf(10), color: "#4F46E5", fontWeight: 700, marginBottom: cf(2) }}>
                             🔄 교체
                           </div>
                         )}
                         {work && (isRest ? (
-                          <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#9CA3AF", marginTop: 6 }}>
+                          <div style={{ textAlign: "center", fontSize: cf(17), fontWeight: 800, color: "#9CA3AF", marginTop: cf(5) }}>
                             휴
                           </div>
                         ) : isOff ? (
-                          <div style={{ textAlign: "center", fontSize: 17, fontWeight: 800, color: "#D1D5DB", marginTop: 6 }}>
+                          <div style={{ textAlign: "center", fontSize: cf(17), fontWeight: 800, color: "#D1D5DB", marginTop: cf(5) }}>
                             ~
                           </div>
                         ) : (
                           <>
-                            <div style={{ textAlign: "center", fontSize: 19, fontWeight: 800, color: "#111827", lineHeight: 1.05, marginBottom: 4, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>
+                            <div style={{ textAlign: "center", fontSize: cf(19), fontWeight: 800, color: "#111827", lineHeight: 1.05, marginBottom: cf(3), letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" }}>
                               {work.dia}
                             </div>
                             {diaInfo && diaInfo.start_time && (
                               <div
                                 style={{
                                   textAlign: "center",
-                                  fontSize: 11.5,
+                                  fontSize: cf(11.5),
                                   fontWeight: 700,
                                   color: dayColor,
                                   background: isHoli ? "#FEE2E2" : "#F3F4F6",
                                   borderRadius: 7,
-                                  padding: "2px 6px",
+                                  padding: `${cf(2)}px ${cf(5)}px`,
                                   margin: "0 auto",
                                   display: "inline-block",
                                   letterSpacing: "-0.5px",
