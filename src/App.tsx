@@ -46573,6 +46573,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                   rows.map((r: any) => {
                     const amt = homeAdjHw > 0 ? estimateAdjustPay([r], homeAdjHw, homeDia, homeHolidays) : 0;
                     const dm = (r.memo || "").match(/다이아\s*(\d+)/);
+                    const tm = r.is_temp_dia ? String(r.memo || "").match(/임시\s*(\d+)/) : null;
                     return (
                       <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
                         <div>
@@ -46581,7 +46582,7 @@ const [unreadReportCount, setUnreadReportCount] = useState(0);
                             <span style={{ fontSize: 10, color: r.work_shift === "야간" ? "#7C3AED" : "#3B82F6", marginLeft: 4, fontWeight: 700 }}>{r.work_shift || ""}</span>
                           </div>
                           <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>
-                            {r.is_temp_dia ? "임시·변사업" : dm ? `다이아 ${dm[1]}` : (r.memo || "")}
+                            {r.is_temp_dia ? (tm ? `임시${tm[1]}` : "임시·변사업") : dm ? `다이아 ${dm[1]}` : (r.memo || "")}
                           </div>
                         </div>
                         <div style={{ fontSize: 12.5, fontWeight: 800, color: amt > 0 ? "#16A34A" : "#9CA3AF", fontVariantNumeric: "tabular-nums" }}>
