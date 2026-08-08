@@ -4633,7 +4633,7 @@ function InquiryDetail({ inquiry, onBack, user }) {
           <span style={{ fontSize: 13, fontWeight: 600, color: "#1F2937" }}>
             {inquiry.author}
           </span>
-          <span style={{ fontSize: 12, color: "#9CA3AF" }}>{inquiry.date}</span>
+          <span style={{ fontSize: 12, color: "#9CA3AF" }}>{fmtWhenFull(inquiry.created_at)}</span>
         </div>
         <div style={{ height: 1, background: "#F3F4F6", marginBottom: 16 }} />
         <p style={{ fontSize: 15, color: "#374151", lineHeight: 1.8 }}>
@@ -4713,7 +4713,7 @@ function InquiryDetail({ inquiry, onBack, user }) {
                 >
                   {a.author} {a.author === "관리자" && "⚙️"}
                 </span>
-                <span style={{ fontSize: 11, color: "#9CA3AF" }}>{a.date}</span>
+                <span style={{ fontSize: 11, color: "#9CA3AF" }}>{fmtWhenFull(a.created_at)}</span>
               </div>
               <p
                 style={{
