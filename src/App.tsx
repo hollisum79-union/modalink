@@ -45,9 +45,15 @@ function todayLocalStr(): string {
 // ── 목록용 시간 표시 (2026-08-07) ──
 //   오늘 → "14:32" · 어제 → "어제" · 올해 → "8/5" · 작년 이전 → "2025.12.28"
 //   시간은 오늘 글에만 정보값이 있다. 게시판·공지·문의 목록 공용.
+function toKstDate(ts: any): Date {
+  let s = String(ts);
+  if (s.includes(" ") && !s.includes("T")) s = s.replace(" ", "T");
+  if (!/[Zz]|[+-]\d\d:?\d\d$/.test(s)) s += "Z";
+  return new Date(s);
+}
 function fmtWhen(ts: any): string {
   if (!ts) return "";
-  const d = new Date(ts);
+  const d = toKstDate(ts);
   if (isNaN(d.getTime())) return String(ts).slice(0, 10);
   const now = new Date();
   const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -60,7 +66,7 @@ function fmtWhen(ts: any): string {
 // 상세 화면용 — 항상 전체: "2026-08-06 14:32"
 function fmtWhenFull(ts: any): string {
   if (!ts) return "";
-  const d = new Date(ts);
+  const d = toKstDate(ts);
   if (isNaN(d.getTime())) return String(ts).slice(0, 10);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
